@@ -94,7 +94,7 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
                 if btn:
                     _SetDlgItemTextW(hwnd, IDOK, button_text)
 
-                    # Ask the button for its ideal size with the new text
+                    # Resize only the button (not the dialog) to fit new text
                     ideal = _SIZE()
                     _SendMessageW(btn, BCM_GETIDEALSIZE, 0, ctypes.addressof(ideal))
                     if ideal.cx > 0:
@@ -102,25 +102,13 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
                         _GetWindowRect(btn, ctypes.byref(btn_rect))
                         old_w = btn_rect.right - btn_rect.left
                         if ideal.cx > old_w:
-                            grow = ideal.cx - old_w
-                            # Widen the dialog
-                            dlg_rect = wt.RECT()
-                            _GetWindowRect(hwnd, ctypes.byref(dlg_rect))
-                            _SetWindowPos(
-                                hwnd, None,
-                                dlg_rect.left - grow // 2, dlg_rect.top,
-                                dlg_rect.right - dlg_rect.left + grow,
-                                dlg_rect.bottom - dlg_rect.top,
-                                SWP_NOZORDER,
-                            )
-                            # Re-center button in the wider dialog
                             pt = wt.POINT(btn_rect.left, btn_rect.top)
                             _MapWindowPoints(None, hwnd, ctypes.byref(pt), 1)
-                            new_left = pt.x - grow // 2
+                            old_center = pt.x + old_w // 2
                             _SetWindowPos(
                                 btn, None,
-                                new_left, pt.y, ideal.cx,
-                                btn_rect.bottom - btn_rect.top,
+                                old_center - ideal.cx // 2, pt.y,
+                                ideal.cx, btn_rect.bottom - btn_rect.top,
                                 SWP_NOZORDER,
                             )
                 _UnhookWindowsHookEx(hook_ref[0])
