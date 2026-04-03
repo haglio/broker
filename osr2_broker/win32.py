@@ -1,129 +1,87 @@
-"""Win32 API wrappers for notifications and shutdown blocking.
-
-This module uses ctypes to call Win32 APIs directly — no external
-dependencies needed.
-"""
+"""Win32 API wrappers for notifications and shutdown blocking."""
 
 from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes as wt
-import threading
-
-# --- MessageBox ---
-
-MB_OK = 0x00000000
-MB_ICONWARNING = 0x00000030
-MB_SETFOREGROUND = 0x00010000
-MB_SYSTEMMODAL = 0x00001000
-
-_MessageBoxW = ctypes.windll.user32.MessageBoxW
-_MessageBoxW.argtypes = [wt.HWND, wt.LPCWSTR, wt.LPCWSTR, wt.UINT]
-_MessageBoxW.restype = ctypes.c_int
 
 
-# --- CBT hook for custom MessageBox button text ---
-
-WH_CBT = 5
-HCBT_ACTIVATE = 5
-IDOK = 1
-WM_GETFONT = 0x0031
-SWP_NOZORDER = 0x0004
-BCM_GETIDEALSIZE = 0x1601
-
-HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wt.WPARAM, wt.LPARAM)
-
-_SetWindowsHookExW = ctypes.windll.user32.SetWindowsHookExW
-_SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wt.HINSTANCE, wt.DWORD]
-_SetWindowsHookExW.restype = ctypes.c_void_p
-
-_UnhookWindowsHookEx = ctypes.windll.user32.UnhookWindowsHookEx
-_UnhookWindowsHookEx.argtypes = [ctypes.c_void_p]
-_UnhookWindowsHookEx.restype = wt.BOOL
-
-_CallNextHookEx = ctypes.windll.user32.CallNextHookEx
-_CallNextHookEx.argtypes = [ctypes.c_void_p, ctypes.c_int, wt.WPARAM, wt.LPARAM]
-_CallNextHookEx.restype = ctypes.c_long
-
-_SetDlgItemTextW = ctypes.windll.user32.SetDlgItemTextW
-_SetDlgItemTextW.argtypes = [wt.HWND, ctypes.c_int, wt.LPCWSTR]
-_SetDlgItemTextW.restype = wt.BOOL
-
-_GetDlgItem = ctypes.windll.user32.GetDlgItem
-_GetDlgItem.argtypes = [wt.HWND, ctypes.c_int]
-_GetDlgItem.restype = wt.HWND
-
-_GetCurrentThreadId = ctypes.windll.kernel32.GetCurrentThreadId
-_GetCurrentThreadId.argtypes = []
-_GetCurrentThreadId.restype = wt.DWORD
-
-_GetWindowRect = ctypes.windll.user32.GetWindowRect
-_GetWindowRect.argtypes = [wt.HWND, ctypes.POINTER(wt.RECT)]
-_GetWindowRect.restype = wt.BOOL
-
-_SetWindowPos = ctypes.windll.user32.SetWindowPos
-_SetWindowPos.argtypes = [
-    wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int,
-    ctypes.c_int, ctypes.c_int, wt.UINT,
-]
-_SetWindowPos.restype = wt.BOOL
-
-_SendMessageW = ctypes.windll.user32.SendMessageW
-_SendMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
-_SendMessageW.restype = ctypes.c_long
-
-_MapWindowPoints = ctypes.windll.user32.MapWindowPoints
-_MapWindowPoints.argtypes = [wt.HWND, wt.HWND, ctypes.c_void_p, wt.UINT]
-_MapWindowPoints.restype = ctypes.c_int
-
-
-class _SIZE(ctypes.Structure):
-    _fields_ = [("cx", ctypes.c_long), ("cy", ctypes.c_long)]
-
+# --- Warning dialog (PyQt6, dark-themed via shared_ui) ---
 
 def show_warning(title: str, message: str, button_text: str = "OK") -> None:
-    """Show a foreground warning dialog. Blocks until dismissed."""
-    if button_text != "OK":
-        hook_ref = [None]
-
-        @HOOKPROC
-        def _cbt_hook(code, wparam, lparam):
-            if code == HCBT_ACTIVATE:
-                hwnd = wt.HWND(wparam)
-                btn = _GetDlgItem(hwnd, IDOK)
-                if btn:
-                    _SetDlgItemTextW(hwnd, IDOK, button_text)
-
-                    # Resize only the button (not the dialog) to fit new text
-                    ideal = _SIZE()
-                    _SendMessageW(btn, BCM_GETIDEALSIZE, 0, ctypes.addressof(ideal))
-                    if ideal.cx > 0:
-                        btn_rect = wt.RECT()
-                        _GetWindowRect(btn, ctypes.byref(btn_rect))
-                        old_w = btn_rect.right - btn_rect.left
-                        if ideal.cx > old_w:
-                            pt = wt.POINT(btn_rect.left, btn_rect.top)
-                            _MapWindowPoints(None, hwnd, ctypes.byref(pt), 1)
-                            old_center = pt.x + old_w // 2
-                            _SetWindowPos(
-                                btn, None,
-                                old_center - ideal.cx // 2, pt.y,
-                                ideal.cx, btn_rect.bottom - btn_rect.top,
-                                SWP_NOZORDER,
-                            )
-                _UnhookWindowsHookEx(hook_ref[0])
-            return _CallNextHookEx(hook_ref[0], code, wparam, lparam)
-
-        hook_ref[0] = _SetWindowsHookExW(
-            WH_CBT, _cbt_hook, None, _GetCurrentThreadId(),
-        )
-
-    _MessageBoxW(
-        None,
-        message,
-        title,
-        MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_SYSTEMMODAL,
+    """Show a dark-themed foreground warning dialog. Blocks until dismissed."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import (
+        QApplication, QDialog, QHBoxLayout, QLabel,
+        QPushButton, QStyle, QVBoxLayout,
     )
+
+    from shared_ui.colors import (
+        BG_BUTTON, BG_KEYCAP, BG_TERTIARY, BORDER_SUBTLE,
+        TEXT_PRIMARY, TEXT_SECONDARY,
+    )
+    from shared_ui.fonts import SIZE_BODY, make_font
+    from shared_ui.spacing import GAP_MEDIUM, MARGIN_STANDARD
+
+    app = QApplication.instance() or QApplication([])
+
+    dlg = QDialog()
+    dlg.setWindowTitle(title)
+    dlg.setWindowFlags(
+        Qt.WindowType.Dialog
+        | Qt.WindowType.WindowTitleHint
+        | Qt.WindowType.WindowCloseButtonHint
+        | Qt.WindowType.WindowStaysOnTopHint
+        | Qt.WindowType.MSWindowsFixedSizeDialogHint
+    )
+
+    dlg.setStyleSheet(f"""
+        QDialog {{ background: {BG_TERTIARY.name()}; }}
+        QLabel {{ color: {TEXT_SECONDARY.name()}; }}
+        QPushButton {{
+            color: {TEXT_PRIMARY.name()};
+            background: {BG_BUTTON.name()};
+            border: 1px solid {BORDER_SUBTLE.name()};
+            padding: 4px 10px;
+            border-radius: 3px;
+        }}
+        QPushButton:hover {{ background: {BG_KEYCAP.name()}; }}
+        QPushButton:pressed {{ background: {BG_TERTIARY.name()}; }}
+    """)
+
+    body = QHBoxLayout()
+    body.setSpacing(GAP_MEDIUM * 2)
+
+    icon_lbl = QLabel()
+    icon_lbl.setPixmap(
+        dlg.style()
+        .standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+        .pixmap(32, 32)
+    )
+    icon_lbl.setAlignment(Qt.AlignmentFlag.AlignTop)
+    body.addWidget(icon_lbl)
+
+    msg_lbl = QLabel(message)
+    msg_lbl.setFont(make_font(size=SIZE_BODY))
+    msg_lbl.setWordWrap(True)
+    body.addWidget(msg_lbl, stretch=1)
+
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+    btn = QPushButton(button_text)
+    btn.setFont(make_font(size=SIZE_BODY))
+    btn.setDefault(True)
+    btn.clicked.connect(dlg.accept)
+    btn_row.addWidget(btn)
+
+    outer = QVBoxLayout(dlg)
+    m = MARGIN_STANDARD * 2
+    outer.setContentsMargins(m, m, m, m)
+    outer.setSpacing(GAP_MEDIUM * 2)
+    outer.addLayout(body)
+    outer.addLayout(btn_row)
+
+    dlg.exec()
 
 
 # --- Shutdown blocking via hidden window ---
