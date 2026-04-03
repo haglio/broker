@@ -10,15 +10,21 @@ class Action(Enum):
     IDLE_ALERT = auto()
 
 
+REARM_SECONDS = 60.0
+
+
 class MonitorState:
-    def __init__(self, idle_threshold: float = 900.0, rx_stale_threshold: float = 30.0):
+    def __init__(self, idle_threshold: float = 900.0, rx_stale_threshold: float = 30.0,
+                 rearm_seconds: float = REARM_SECONDS):
         self._idle_threshold = idle_threshold
         self._rx_stale_threshold = rx_stale_threshold
+        self._rearm_seconds = rearm_seconds
         self._device_on = False
         self._device_on_since: float | None = None
         self._idle_since: float | None = None
         self._alerted = False
         self._warning_pending = False
+        self._in_use_since: float | None = None
 
     @property
     def device_on(self) -> bool:
@@ -41,7 +47,7 @@ class MonitorState:
         if not self._device_on:
             self._device_on_since = None
             self._idle_since = None
-            self._alerted = False
+            self._in_use_since = None
             return None
 
         if not was_on:
@@ -49,8 +55,13 @@ class MonitorState:
 
         if in_use:
             self._idle_since = None
-            self._alerted = False
+            if self._in_use_since is None:
+                self._in_use_since = now
+            if not self._alerted or (now - self._in_use_since) >= self._rearm_seconds:
+                self._alerted = False
             return None
+        else:
+            self._in_use_since = None
 
         # Device on but not in use
         if self._idle_since is None:

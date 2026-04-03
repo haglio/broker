@@ -48,13 +48,17 @@ class TestIdleAlert:
         action = state.update(now=2050.0, last_rx=2045.0, last_tx=998.0, auto_mode=False)
         assert action is None
 
-    def test_new_activity_resets_alert(self):
+    def test_sustained_activity_resets_alert(self):
+        """Sustained TX (>60s) after acknowledged alert re-arms idle detection."""
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
         state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
         state.acknowledge()
-        state.update(now=2000.0, last_rx=1995.0, last_tx=1999.0, auto_mode=False)
-        action = state.update(now=3000.0, last_rx=2995.0, last_tx=1999.0, auto_mode=False)
+        # Sustained TX activity for 70 seconds (polls every 10s)
+        for t in range(2000, 2080, 10):
+            state.update(now=float(t), last_rx=float(t - 5), last_tx=float(t - 1), auto_mode=False)
+        # Activity stops, device idle again
+        action = state.update(now=3100.0, last_rx=3095.0, last_tx=2079.0, auto_mode=False)
         assert action == Action.IDLE_ALERT
 
     def test_backdate_to_last_tx_when_recent(self):
@@ -88,6 +92,38 @@ class TestIdleAlert:
         assert action == Action.IDLE_ALERT
         state.update(now=2000.0, last_rx=1995.0, last_tx=1999.0, auto_mode=False)
         action = state.update(now=3000.0, last_rx=2995.0, last_tx=1999.0, auto_mode=False)
+        assert action is None
+
+    def test_no_re_alert_after_brief_tx(self):
+        """Brief TX (e.g. MFP keepalive) after acknowledged alert must not re-arm."""
+        state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
+        state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
+        action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
+        assert action == Action.IDLE_ALERT
+        state.acknowledge()
+        # Brief TX blip (single poll with in_use=True)
+        state.update(now=2000.0, last_rx=1995.0, last_tx=1999.0, auto_mode=False)
+        # TX fades, device idle again
+        state.update(now=2040.0, last_rx=2035.0, last_tx=1999.0, auto_mode=False)
+        # 15+ min later — should NOT fire a second alert
+        action = state.update(now=3000.0, last_rx=2995.0, last_tx=1999.0, auto_mode=False)
+        assert action is None
+
+    def test_no_re_alert_after_rx_gap(self):
+        """Brief RX gap (device appears off momentarily) must not re-arm alert."""
+        state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
+        state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
+        action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
+        assert action == Action.IDLE_ALERT
+        state.acknowledge()
+        # RX goes stale — device appears off
+        state.update(now=2040.0, last_rx=2000.0, last_tx=998.0, auto_mode=False)
+        assert not state.device_on
+        # RX resumes — device back on
+        state.update(now=2045.0, last_rx=2042.0, last_tx=998.0, auto_mode=False)
+        assert state.device_on
+        # 15+ min idle — should NOT fire a second alert
+        action = state.update(now=3045.0, last_rx=3040.0, last_tx=998.0, auto_mode=False)
         assert action is None
 
     def test_no_false_alert_when_last_tx_none_on_long_running_device(self):
