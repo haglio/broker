@@ -21,6 +21,7 @@ class BrokerConfig:
     auto_stale_timeout: float
     idle_minutes: float
     mfp_config_path: Path
+    tcode_udp_port: int
 
     @property
     def genau_mode_file(self) -> Path:
@@ -81,4 +82,5 @@ def load_config(config_path: str | Path | None = None) -> BrokerConfig:
         auto_stale_timeout=float(raw["auto_stale_timeout"]),
         idle_minutes=float(raw.get("idle_minutes", 15.0)),
         mfp_config_path=_resolve_path(project_dir, raw.get("mfp_config_path", "")),
+        tcode_udp_port=int(raw.get("tcode_udp_port", 50557)),
     )

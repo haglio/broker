@@ -34,6 +34,7 @@ def build_parser(config) -> argparse.ArgumentParser:
     ap.add_argument("--udp-host", default=config.udp_host)
     ap.add_argument("--udp-port", type=int, default=config.udp_port)
     ap.add_argument("--auto-stale-timeout", type=float, default=config.auto_stale_timeout)
+    ap.add_argument("--tcode-udp-port", type=int, default=config.tcode_udp_port)
     ap.add_argument("--serial-retry-delay", type=float, default=SERIAL_RETRY_DELAY_SECONDS, help=argparse.SUPPRESS)
     ap.add_argument("--state-file", default=str(config.genau_mode_file))
     ap.add_argument("--genau-enabled-file", default=str(config.genau_enabled_file))
@@ -152,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         is_retryable_error=is_retryable_serial_error,
         activity_rx_file=config.osr2_serial_rx_file,
         activity_tx_file=config.osr2_serial_tx_file,
+        tcode_udp_port=args.tcode_udp_port,
     )
 
     write_mode(state_file, "0", logger)
@@ -171,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.info("Starting broker: %s <-> %s", args.virtual_port, args.real_port)
     logger.info("Genau UDP target: %s:%s", args.udp_host, args.udp_port)
+    logger.info("T-Code UDP listener: 127.0.0.1:%s", args.tcode_udp_port)
 
     try:
         while not stop_event.is_set():

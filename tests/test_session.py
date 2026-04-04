@@ -31,7 +31,8 @@ class FakeAutoMode:
 
 
 def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
-                    activity_rx_file=None, activity_tx_file=None):
+                    activity_rx_file=None, activity_tx_file=None,
+                    tcode_udp_port: int = 0):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = MagicMock()
     session = BrokerSerialSession(
@@ -52,6 +53,7 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         monotonic=monotonic,
         activity_rx_file=activity_rx_file,
         activity_tx_file=activity_tx_file,
+        tcode_udp_port=tcode_udp_port,
     )
     return session, auto_mode, logger
 
@@ -376,3 +378,171 @@ def test_activity_file_not_written_when_path_is_none():
 
     session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
     assert session.last_real_rx_time == 12.5
+
+
+def test_forward_udp_tcode_to_real_writes_to_serial():
+    import socket as _socket
+
+    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+    lock = threading.Lock()
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+        def write(self, data: bytes):
+            self.writes.append(data)
+            session_stop.set()
+
+    real = FakeReal()
+
+    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+
+    def send_after_bind():
+        time.sleep(0.05)
+        sender.sendto(b"L05000I33", ("127.0.0.1", port))
+
+    threading.Thread(target=send_after_bind, daemon=True).start()
+
+    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
+
+    sender.close()
+    assert real.writes == [b"L05000I33\n"]
+
+
+def test_forward_udp_tcode_to_real_splits_multi_line_datagram():
+    import socket as _socket
+
+    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+    lock = threading.Lock()
+
+    received = []
+
+    class FakeReal:
+        def write(self, data: bytes):
+            received.append(data)
+            if len(received) >= 2:
+                session_stop.set()
+
+    real = FakeReal()
+    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+
+    def send_after_bind():
+        time.sleep(0.05)
+        sender.sendto(b"L05000I33\nL09999I33", ("127.0.0.1", port))
+
+    threading.Thread(target=send_after_bind, daemon=True).start()
+
+    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
+
+    sender.close()
+    assert received == [b"L05000I33\n", b"L09999I33\n"]
+
+
+def test_forward_udp_tcode_to_real_ignores_empty_lines():
+    import socket as _socket
+
+    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+    lock = threading.Lock()
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    real = FakeReal()
+    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+
+    def send_and_stop():
+        time.sleep(0.05)
+        sender.sendto(b"\n\n", ("127.0.0.1", port))
+        time.sleep(0.05)
+        session_stop.set()
+
+    threading.Thread(target=send_and_stop, daemon=True).start()
+
+    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
+
+    sender.close()
+    assert real.writes == []
+
+
+def test_forward_udp_tcode_to_real_writes_activity_tx(tmp_path):
+    import socket as _socket
+
+    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    tx_file = tmp_path / "osr2_serial_tx.txt"
+    wall = [1711900000.0]
+    session, _auto_mode, _logger = _build_session(
+        tcode_udp_port=port, activity_tx_file=tx_file,
+    )
+    session._wall_clock = lambda: wall[0]
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+    lock = threading.Lock()
+
+    class FakeReal:
+        def write(self, data: bytes):
+            session_stop.set()
+
+    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+
+    def send_after_bind():
+        time.sleep(0.05)
+        sender.sendto(b"L05000I33", ("127.0.0.1", port))
+
+    threading.Thread(target=send_after_bind, daemon=True).start()
+
+    session.forward_udp_tcode_to_real(FakeReal(), session_stop, retry_state, lock)
+
+    sender.close()
+    assert tx_file.exists()
+    assert float(tx_file.read_text()) == 1711900000.0
+
+
+def test_forward_virtual_to_real_uses_serial_write_lock():
+    session, _auto_mode, _logger = _build_session()
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+    lock = threading.Lock()
+    lock_held_during_write = [False]
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+        def read(self, _size):
+            session_stop.set()
+            return b"L0500\n"
+
+    class FakeReal:
+        def write(self, data):
+            lock_held_during_write[0] = lock.locked()
+
+    session.forward_virtual_to_real(FakeVirt(), FakeReal(), session_stop, retry_state, lock)
+
+    assert lock_held_during_write[0] is True
