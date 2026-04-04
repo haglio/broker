@@ -65,6 +65,7 @@ class BrokerSerialSession:
         self._last_tx_write: float = 0.0
         self._wall_clock: Callable[[], float] = time.time
         self.tcode_udp_port = tcode_udp_port
+        self._last_tcode_udp_time: float = 0.0
 
     @staticmethod
     def _peer_connected(port) -> bool:
@@ -141,6 +142,7 @@ class BrokerSerialSession:
         return peer_disconnected or retry_state.value
 
     _ACTIVITY_WRITE_INTERVAL = 5.0
+    _TCODE_UDP_SUPPRESS_SECONDS = 0.5
 
     def _write_activity(self, path: Path | None, last_attr: str) -> None:
         if path is None:
@@ -190,7 +192,11 @@ class BrokerSerialSession:
                 data = virt.read(queued or 1)
                 if not data:
                     continue
-                if not self.auto_mode.is_active:
+                tcode_suppressed = (
+                    self._last_tcode_udp_time > 0.0
+                    and (self.monotonic() - self._last_tcode_udp_time) < self._TCODE_UDP_SUPPRESS_SECONDS
+                )
+                if not self.auto_mode.is_active and not tcode_suppressed:
                     if serial_write_lock is not None:
                         with serial_write_lock:
                             real.write(data)
@@ -219,6 +225,7 @@ class BrokerSerialSession:
                     line = line.strip()
                     if not line:
                         continue
+                    self._last_tcode_udp_time = self.monotonic()
                     with serial_write_lock:
                         real.write((line + "\n").encode("ascii"))
                     self._write_activity(self._activity_tx_file, "_last_tx_write")

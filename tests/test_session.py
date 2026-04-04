@@ -179,6 +179,56 @@ def test_forward_virtual_to_real_skips_writes_while_auto_is_active():
     assert retry_state.value is False
 
 
+def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: 10.0)
+    session._last_tcode_udp_time = 9.9  # 0.1s ago — within suppression window
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+        def read(self, _size):
+            session_stop.set()
+            return b"L05000\n"
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    real = FakeReal()
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+
+    assert real.writes == []
+
+
+def test_forward_virtual_to_real_allows_writes_when_tcode_udp_idle():
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: 10.0)
+    session._last_tcode_udp_time = 9.0  # 1.0s ago — outside suppression window
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+        def read(self, _size):
+            session_stop.set()
+            return b"L05000\n"
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    real = FakeReal()
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+
+    assert real.writes == [b"L05000\n"]
+
+
 def test_session_stops_when_peer_disconnects():
     session, _auto_mode, _logger = _build_session()
 
