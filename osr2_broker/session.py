@@ -67,6 +67,7 @@ class BrokerSerialSession:
         self.tcode_udp_port = tcode_udp_port
         self._last_tcode_udp_time: float = 0.0
         self._pending_park_time: float | None = None
+        self._park_mfp_suppressed: bool = False
 
     @staticmethod
     def _peer_connected(port) -> bool:
@@ -199,7 +200,7 @@ class BrokerSerialSession:
                     self._last_tcode_udp_time > 0.0
                     and (self.monotonic() - self._last_tcode_udp_time) < self._TCODE_UDP_SUPPRESS_SECONDS
                 )
-                if not self.auto_mode.is_active and not tcode_suppressed:
+                if not self.auto_mode.is_active and not tcode_suppressed and not self._park_mfp_suppressed:
                     if serial_write_lock is not None:
                         with serial_write_lock:
                             real.write(data)
@@ -244,11 +245,10 @@ class BrokerSerialSession:
     def tick_command_and_stale_timeout(self, udp_sock, *,
                                        real_port=None, serial_write_lock=None) -> None:
         cmd = self.consume_command(self.broker_cmd_file)
-        was_auto = self.auto_mode.is_active
         self.handle_broker_command(cmd, udp_sock)
         self.sync_genau_enabled(udp_sock)
         self.maybe_disable_stale_auto(udp_sock)
-        if was_auto and not self.auto_mode.is_active:
+        if self.auto_mode.consume_deactivation():
             self._pending_park_time = self.monotonic() + self._PARK_DELAY_SECONDS
             self.logger.info("Auto mode deactivated: park scheduled")
         self._maybe_fire_park(real_port, serial_write_lock)
@@ -262,9 +262,11 @@ class BrokerSerialSession:
         elif cmd == "RESUME":
             self.broker_paused.clear()
             self._pending_park_time = None
+            self._park_mfp_suppressed = False
             self.logger.info("OmniPause: broker resumed")
         elif cmd == "PARK":
             self._pending_park_time = self.monotonic() + self._PARK_DELAY_SECONDS
+            self._park_mfp_suppressed = True
             self.logger.info("OmniPause: park scheduled")
         elif cmd == "ROBOT_HAND_DISABLE":
             self.auto_mode.set_enabled(udp_sock, False)

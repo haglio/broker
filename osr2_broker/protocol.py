@@ -43,6 +43,7 @@ class BrokerAutoController:
         self._lock = threading.Lock()
         self._auto_active = False
         self._enabled = enabled
+        self._deactivated = False
 
     @property
     def is_active(self) -> bool:
@@ -66,11 +67,20 @@ class BrokerAutoController:
         with self._lock:
             changed = self._auto_active != value
             self._auto_active = value
+            if changed and not value:
+                self._deactivated = True
 
         self.publish_effective_state(sock, mode_value=mode_value)
 
         if changed:
             self.logger.info("AUTO %s", "ON" if value else "OFF")
+
+    def consume_deactivation(self) -> bool:
+        with self._lock:
+            if self._deactivated:
+                self._deactivated = False
+                return True
+            return False
 
     def set_enabled(self, sock: socket.socket, value: bool) -> None:
         with self._lock:

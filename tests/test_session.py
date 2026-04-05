@@ -14,6 +14,7 @@ class FakeAutoMode:
         self.handle_line_calls: list[str] = []
         self.set_auto_calls: list[tuple[object, bool, str | None]] = []
         self.set_enabled_calls: list[tuple[object, bool]] = []
+        self._deactivated = False
 
     @property
     def is_active(self) -> bool:
@@ -24,10 +25,19 @@ class FakeAutoMode:
 
     def set_auto(self, sock, value: bool, mode_value: str | None = None) -> None:
         self.set_auto_calls.append((sock, value, mode_value))
+        was_active = self.active
         self.active = value
+        if was_active and not value:
+            self._deactivated = True
 
     def set_enabled(self, sock, value: bool) -> None:
         self.set_enabled_calls.append((sock, value))
+
+    def consume_deactivation(self) -> bool:
+        if self._deactivated:
+            self._deactivated = False
+            return True
+        return False
 
 
 def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
@@ -132,6 +142,35 @@ def test_auto_mode_deactivation_schedules_park():
     clock[0] = 12.0
     session._maybe_fire_park(real_port, lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
+
+
+def test_park_suppresses_virtual_to_real_forwarding():
+    session, _auto_mode, _logger = _build_session()
+    session.handle_broker_command("PARK", object())
+    assert session._park_mfp_suppressed is True
+
+
+def test_resume_clears_mfp_suppression():
+    session, _auto_mode, _logger = _build_session()
+    session.handle_broker_command("PARK", object())
+    session.handle_broker_command("RESUME", object())
+    assert session._park_mfp_suppressed is False
+
+
+def test_auto_mode_deactivation_between_ticks_schedules_park():
+    """Auto mode going inactive on the real thread (between ticks) must still be detected."""
+    clock = [10.0]
+    session, auto_mode, _logger = _build_session(auto_active=True, monotonic=lambda: clock[0])
+    real_port = MagicMock()
+    lock = threading.Lock()
+    sock = object()
+
+    # Simulate auto mode going inactive on the real-serial thread
+    auto_mode.set_auto(sock, False)
+
+    # Next tick should detect the deactivation via the flag
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    assert session._pending_park_time is not None
 
 
 def test_handle_broker_command_toggles_genau_enablement():
