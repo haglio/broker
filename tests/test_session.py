@@ -78,8 +78,8 @@ def test_handle_broker_command_park_writes_tcode_to_serial():
 
     session.handle_broker_command("PARK", object(), real_port=real_port, serial_write_lock=lock)
 
-    real_port.write.assert_called_once_with(b"L09999I500\n")
-    logger.info.assert_called_once_with("OmniPause: parking OSR2 at position 100")
+    real_port.write.assert_called_once_with(b"L00000I500\n")
+    logger.info.assert_called_once_with("OmniPause: parking OSR2 at position 0")
 
 
 def test_handle_broker_command_park_without_serial_port_logs_warning():

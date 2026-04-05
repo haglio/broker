@@ -246,7 +246,7 @@ class BrokerSerialSession:
         self.sync_genau_enabled(udp_sock)
         self.maybe_disable_stale_auto(udp_sock)
 
-    _PARK_TCODE = b"L09999I500\n"
+    _PARK_TCODE = b"L00000I500\n"
 
     def handle_broker_command(self, cmd: str | None, udp_sock, *,
                               real_port=None, serial_write_lock=None) -> None:
@@ -260,7 +260,7 @@ class BrokerSerialSession:
             if real_port is not None and serial_write_lock is not None:
                 with serial_write_lock:
                     real_port.write(self._PARK_TCODE)
-                self.logger.info("OmniPause: parking OSR2 at position 100")
+                self.logger.info("OmniPause: parking OSR2 at position 0")
             else:
                 self.logger.warning("PARK command received but serial port not available")
         elif cmd == "ROBOT_HAND_DISABLE":
