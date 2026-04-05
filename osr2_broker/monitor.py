@@ -86,10 +86,3 @@ def read_timestamp(path: Path) -> float | None:
         return float(path.read_text().strip())
     except (OSError, ValueError):
         return None
-
-
-def read_auto_mode(path: Path) -> bool:
-    try:
-        return path.read_text().strip() == "1"
-    except OSError:
-        return False

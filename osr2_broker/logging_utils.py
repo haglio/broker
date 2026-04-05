@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import faulthandler
 import logging
 import logging.handlers
 import sys
@@ -53,10 +52,3 @@ def install_exception_logging(logger: logging.Logger) -> None:
 
     sys.excepthook = _sys_excepthook
     threading.excepthook = _thread_excepthook
-
-
-def enable_faulthandler(log_file: Path):
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    fp = log_file.open("a", encoding="utf-8", buffering=1)
-    faulthandler.enable(fp, all_threads=True)
-    return fp

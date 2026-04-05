@@ -10,7 +10,7 @@ from pathlib import Path
 import serial
 
 from .ports import resolve_virtual_port, ensure_mfp_serial_port
-from .protocol import BrokerAutoController, parse_auto_transition
+from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
 from .config import load_config
 from .logging_utils import configure_logging, install_exception_logging

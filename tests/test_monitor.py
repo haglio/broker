@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from osr2_broker.monitor import Action, MonitorState, read_timestamp, read_auto_mode
+from osr2_broker.monitor import Action, MonitorState, read_timestamp
 
 
 class TestDeviceOff:
@@ -148,15 +148,3 @@ class TestFileReaders:
         f.write_text("not a number")
         assert read_timestamp(f) is None
 
-    def test_read_auto_mode_active(self, tmp_path):
-        f = tmp_path / "mode.txt"
-        f.write_text("1")
-        assert read_auto_mode(f) is True
-
-    def test_read_auto_mode_inactive(self, tmp_path):
-        f = tmp_path / "mode.txt"
-        f.write_text("0")
-        assert read_auto_mode(f) is False
-
-    def test_read_auto_mode_missing(self, tmp_path):
-        assert read_auto_mode(tmp_path / "nonexistent.txt") is False

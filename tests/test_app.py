@@ -22,20 +22,6 @@ def broker_app_module():
     return module
 
 
-class TestParseAutoTransition:
-    def test_detects_freemode_on(self, broker_app_module):
-        assert broker_app_module.parse_auto_transition("freeMode is on!") is True
-
-    def test_detects_auto_mode_on(self, broker_app_module):
-        assert broker_app_module.parse_auto_transition("Auto mode is on!") is True
-
-    def test_detects_auto_mode_off(self, broker_app_module):
-        assert broker_app_module.parse_auto_transition("Auto mode is off!") is False
-
-    def test_ignores_unrelated_lines(self, broker_app_module):
-        assert broker_app_module.parse_auto_transition("StrokeName: Demo, PatternDuration: 2.0") is None
-
-
 class TestMainReconnect:
     def test_retries_after_retryable_serial_open_failure(self, broker_app_module, cfg_path):
         open_ports: list[str] = []
