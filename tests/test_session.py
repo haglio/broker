@@ -71,6 +71,25 @@ def test_handle_broker_command_sets_pause_and_resume():
     logger.info.assert_called_once_with("OmniPause: broker resumed")
 
 
+def test_handle_broker_command_park_writes_tcode_to_serial():
+    session, _auto_mode, logger = _build_session()
+    real_port = MagicMock()
+    lock = threading.Lock()
+
+    session.handle_broker_command("PARK", object(), real_port=real_port, serial_write_lock=lock)
+
+    real_port.write.assert_called_once_with(b"L09999I500\n")
+    logger.info.assert_called_once_with("OmniPause: parking OSR2 at position 100")
+
+
+def test_handle_broker_command_park_without_serial_port_logs_warning():
+    session, _auto_mode, logger = _build_session()
+
+    session.handle_broker_command("PARK", object())
+
+    logger.warning.assert_called_once()
+
+
 def test_handle_broker_command_toggles_genau_enablement():
     session, auto_mode, logger = _build_session()
     sock = object()

@@ -121,7 +121,9 @@ class BrokerSerialSession:
                             self.logger.warning("Virtual port peer disconnected (DSR low), ending session")
                             peer_disconnected = True
                             break
-                        self.tick_command_and_stale_timeout(udp_sock)
+                        self.tick_command_and_stale_timeout(
+                            udp_sock, real_port=real, serial_write_lock=serial_write_lock,
+                        )
                 finally:
                     session_stop.set()
                     if thread_real is not None:
@@ -236,19 +238,31 @@ class BrokerSerialSession:
         finally:
             udp_sock.close()
 
-    def tick_command_and_stale_timeout(self, udp_sock) -> None:
+    def tick_command_and_stale_timeout(self, udp_sock, *,
+                                       real_port=None, serial_write_lock=None) -> None:
         cmd = self.consume_command(self.broker_cmd_file)
-        self.handle_broker_command(cmd, udp_sock)
+        self.handle_broker_command(cmd, udp_sock, real_port=real_port,
+                                   serial_write_lock=serial_write_lock)
         self.sync_genau_enabled(udp_sock)
         self.maybe_disable_stale_auto(udp_sock)
 
-    def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
+    _PARK_TCODE = b"L09999I500\n"
+
+    def handle_broker_command(self, cmd: str | None, udp_sock, *,
+                              real_port=None, serial_write_lock=None) -> None:
         if cmd == "PAUSE":
             self.broker_paused.set()
             self.logger.info("OmniPause: broker paused")
         elif cmd == "RESUME":
             self.broker_paused.clear()
             self.logger.info("OmniPause: broker resumed")
+        elif cmd == "PARK":
+            if real_port is not None and serial_write_lock is not None:
+                with serial_write_lock:
+                    real_port.write(self._PARK_TCODE)
+                self.logger.info("OmniPause: parking OSR2 at position 100")
+            else:
+                self.logger.warning("PARK command received but serial port not available")
         elif cmd == "ROBOT_HAND_DISABLE":
             self.auto_mode.set_enabled(udp_sock, False)
         elif cmd == "ROBOT_HAND_ENABLE":
