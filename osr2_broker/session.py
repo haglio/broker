@@ -66,6 +66,7 @@ class BrokerSerialSession:
         self._wall_clock: Callable[[], float] = time.time
         self.tcode_udp_port = tcode_udp_port
         self._last_tcode_udp_time: float = 0.0
+        self._pending_park_time: float | None = None
 
     @staticmethod
     def _peer_connected(port) -> bool:
@@ -238,35 +239,51 @@ class BrokerSerialSession:
         finally:
             udp_sock.close()
 
+    _PARK_DELAY_SECONDS = 1.0
+
     def tick_command_and_stale_timeout(self, udp_sock, *,
                                        real_port=None, serial_write_lock=None) -> None:
         cmd = self.consume_command(self.broker_cmd_file)
-        self.handle_broker_command(cmd, udp_sock, real_port=real_port,
-                                   serial_write_lock=serial_write_lock)
+        was_auto = self.auto_mode.is_active
+        self.handle_broker_command(cmd, udp_sock)
         self.sync_genau_enabled(udp_sock)
         self.maybe_disable_stale_auto(udp_sock)
+        if was_auto and not self.auto_mode.is_active:
+            self._pending_park_time = self.monotonic() + self._PARK_DELAY_SECONDS
+            self.logger.info("Auto mode deactivated: park scheduled")
+        self._maybe_fire_park(real_port, serial_write_lock)
 
     _PARK_TCODE = b"L00000I500\n"
 
-    def handle_broker_command(self, cmd: str | None, udp_sock, *,
-                              real_port=None, serial_write_lock=None) -> None:
+    def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
         if cmd == "PAUSE":
             self.broker_paused.set()
             self.logger.info("OmniPause: broker paused")
         elif cmd == "RESUME":
             self.broker_paused.clear()
+            self._pending_park_time = None
             self.logger.info("OmniPause: broker resumed")
         elif cmd == "PARK":
-            if real_port is not None and serial_write_lock is not None:
-                with serial_write_lock:
-                    real_port.write(self._PARK_TCODE)
-                self.logger.info("OmniPause: parking OSR2 at position 0")
-            else:
-                self.logger.warning("PARK command received but serial port not available")
+            self._pending_park_time = self.monotonic() + self._PARK_DELAY_SECONDS
+            self.logger.info("OmniPause: park scheduled")
         elif cmd == "ROBOT_HAND_DISABLE":
             self.auto_mode.set_enabled(udp_sock, False)
         elif cmd == "ROBOT_HAND_ENABLE":
             self.auto_mode.set_enabled(udp_sock, True)
+
+    def _maybe_fire_park(self, real_port, serial_write_lock) -> None:
+        if self._pending_park_time is None:
+            return
+        if self.monotonic() < self._pending_park_time:
+            return
+        self._pending_park_time = None
+        if real_port is not None and serial_write_lock is not None:
+            with serial_write_lock:
+                real_port.write(self._PARK_TCODE)
+            self._last_tcode_udp_time = self.monotonic()
+            self.logger.info("OmniPause: parking OSR2 at position 0")
+        else:
+            self.logger.warning("Park fired but serial port not available")
 
     def sync_genau_enabled(self, udp_sock) -> None:
         enabled = self.read_genau_enabled(self.genau_enabled_file)

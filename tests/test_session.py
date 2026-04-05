@@ -71,23 +71,67 @@ def test_handle_broker_command_sets_pause_and_resume():
     logger.info.assert_called_once_with("OmniPause: broker resumed")
 
 
-def test_handle_broker_command_park_writes_tcode_to_serial():
-    session, _auto_mode, logger = _build_session()
+def test_park_schedules_delayed_write():
+    clock = [10.0]
+    session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
 
-    session.handle_broker_command("PARK", object(), real_port=real_port, serial_write_lock=lock)
+    session.handle_broker_command("PARK", object())
+    # Not written yet — still pending
+    session._maybe_fire_park(real_port, lock)
+    real_port.write.assert_not_called()
 
+    # Advance past the delay
+    clock[0] = 12.0
+    session._maybe_fire_park(real_port, lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
-    logger.info.assert_called_once_with("OmniPause: parking OSR2 at position 0")
 
 
-def test_handle_broker_command_park_without_serial_port_logs_warning():
-    session, _auto_mode, logger = _build_session()
+def test_park_suppresses_mfp_forwarding():
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    real_port = MagicMock()
+    lock = threading.Lock()
 
     session.handle_broker_command("PARK", object())
+    clock[0] = 12.0
+    session._maybe_fire_park(real_port, lock)
+    assert session._last_tcode_udp_time == 12.0
 
-    logger.warning.assert_called_once()
+
+def test_resume_cancels_pending_park():
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    real_port = MagicMock()
+    lock = threading.Lock()
+
+    session.handle_broker_command("PARK", object())
+    session.handle_broker_command("RESUME", object())
+    clock[0] = 12.0
+    session._maybe_fire_park(real_port, lock)
+    real_port.write.assert_not_called()
+
+
+def test_auto_mode_deactivation_schedules_park():
+    clock = [10.0]
+    session, auto_mode, _logger = _build_session(auto_active=True, monotonic=lambda: clock[0])
+    real_port = MagicMock()
+    lock = threading.Lock()
+    sock = object()
+
+    # Deactivate auto mode via stale timeout
+    session.last_real_rx_time = 7.0
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+
+    # Park should be pending now (auto went inactive)
+    assert session._pending_park_time is not None
+    real_port.write.assert_not_called()
+
+    # Advance past delay
+    clock[0] = 12.0
+    session._maybe_fire_park(real_port, lock)
+    real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
 def test_handle_broker_command_toggles_genau_enablement():
