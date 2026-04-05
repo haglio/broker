@@ -88,7 +88,6 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
 
 WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
-WM_CLOSE = 0x0010
 WM_DESTROY = 0x0002
 
 WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_long, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
@@ -145,10 +144,6 @@ _DispatchMessageW = ctypes.windll.user32.DispatchMessageW
 _DispatchMessageW.argtypes = [ctypes.POINTER(wt.MSG)]
 _DispatchMessageW.restype = ctypes.c_long
 
-_PostMessageW = ctypes.windll.user32.PostMessageW
-_PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
-_PostMessageW.restype = wt.BOOL
-
 _ShutdownBlockReasonCreate = ctypes.windll.user32.ShutdownBlockReasonCreate
 _ShutdownBlockReasonCreate.argtypes = [wt.HWND, wt.LPCWSTR]
 _ShutdownBlockReasonCreate.restype = wt.BOOL
@@ -166,14 +161,13 @@ _SetTimer.argtypes = [wt.HWND, ctypes.POINTER(wt.UINT), wt.UINT, wt.LPVOID]
 _SetTimer.restype = ctypes.POINTER(wt.UINT)
 
 WM_TIMER = 0x0113
-WM_USER_POLL = 0x0400 + 1
 
 
 class ShutdownGuard:
     """Creates a hidden window that can block Windows shutdown.
 
-    The message pump runs on the calling thread. Call ``run()`` to start
-    the pump; call ``request_stop()`` from any thread to exit.
+    The message pump runs on the calling thread.  Call ``run()`` to start
+    the pump (blocks until ``WM_DESTROY``).
 
     ``should_block_fn``: called on WM_QUERYENDSESSION. If it returns True,
     shutdown is blocked with ``ShutdownBlockReasonCreate``.
@@ -242,7 +236,3 @@ class ShutdownGuard:
         while _GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             _TranslateMessage(ctypes.byref(msg))
             _DispatchMessageW(ctypes.byref(msg))
-
-    def request_stop(self) -> None:
-        if self._hwnd:
-            _PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
