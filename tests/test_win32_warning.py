@@ -56,6 +56,36 @@ def test_button_has_custom_text(qapp):
     assert any(b.text() == "I don't know, did you?" for b in btns)
 
 
+def test_show_warning_sets_broker_window_icon(qapp):
+    created = {}
+    original_init = QDialog.__init__
+
+    def spy_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        created["dlg"] = self
+
+    with (
+        patch.object(QDialog, "exec", return_value=QDialog.DialogCode.Accepted),
+        patch.object(QDialog, "__init__", spy_init),
+    ):
+        from osr2_broker.win32 import show_warning
+        show_warning("Title", "Msg")
+
+    assert not created["dlg"].windowIcon().isNull()
+
+
+def test_show_warning_sets_explicit_app_user_model_id(qapp):
+    from osr2_broker import win32
+
+    with (
+        patch.object(QDialog, "exec", return_value=QDialog.DialogCode.Accepted),
+        patch.object(win32, "_SetCurrentProcessExplicitAppUserModelID") as mock_set,
+    ):
+        win32.show_warning("Title", "Msg")
+
+    mock_set.assert_called_once_with(win32.APP_USER_MODEL_ID)
+
+
 def test_stylesheet_uses_dark_theme_colors(qapp):
     created = {}
     original_init = QDialog.__init__

@@ -5,12 +5,33 @@ from __future__ import annotations
 import ctypes
 import ctypes.wintypes as wt
 
+from .config import PROJECT_DIR
+
+ICON_PATH = PROJECT_DIR / "broker_icon.ico"
+
+# A distinct taskbar identity for this process. Without it, the warning
+# dialog's taskbar button inherits the icon of the Python host process
+# (pythonw.exe); with it, Windows uses the window's own broker icon.
+APP_USER_MODEL_ID = "OSR2Broker"
+
+_SetCurrentProcessExplicitAppUserModelID = (
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
+)
+_SetCurrentProcessExplicitAppUserModelID.argtypes = [wt.LPCWSTR]
+_SetCurrentProcessExplicitAppUserModelID.restype = ctypes.c_long  # HRESULT
+
+
+def _set_app_user_model_id() -> None:
+    """Claim a stable taskbar identity so windows show the broker icon."""
+    _SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+
 
 # --- Warning dialog (PyQt6, dark-themed via shared_ui) ---
 
 def show_warning(title: str, message: str, button_text: str = "OK") -> None:
     """Show a dark-themed foreground warning dialog. Blocks until dismissed."""
     from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import (
         QApplication, QDialog, QHBoxLayout, QLabel,
         QPushButton, QStyle, QVBoxLayout,
@@ -23,10 +44,12 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
     from shared_ui.fonts import SIZE_BODY, make_font
     from shared_ui.spacing import GAP_MEDIUM, MARGIN_STANDARD
 
+    _set_app_user_model_id()
     app = QApplication.instance() or QApplication([])
 
     dlg = QDialog()
     dlg.setWindowTitle(title)
+    dlg.setWindowIcon(QIcon(str(ICON_PATH)))
     dlg.setWindowFlags(
         Qt.WindowType.Dialog
         | Qt.WindowType.WindowTitleHint
