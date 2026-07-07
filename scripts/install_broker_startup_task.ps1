@@ -1,6 +1,17 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Registering a scheduled task needs elevation. Re-launch self elevated (UAC)
+# so this can be run from an ordinary shell.
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host 'Elevation required — accept the UAC prompt to install the task...'
+    Start-Process powershell.exe -Verb RunAs -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath
+    )
+    exit
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $trayLauncherPath = Join-Path $projectRoot 'launch_broker_tray.vbs'
 $taskName = 'OSR2 Broker'
