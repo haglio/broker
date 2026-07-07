@@ -47,6 +47,10 @@ class BrokerConfig:
     def osr2_serial_tx_file(self) -> Path:
         return self.state_dir / "osr2_serial_tx.txt"
 
+    @property
+    def osr2_idle_state_file(self) -> Path:
+        return self.state_dir / "osr2_idle_state.txt"
+
     def log_file(self, name: str) -> Path:
         return self.state_dir / f"{name}.log"
 

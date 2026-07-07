@@ -201,39 +201,47 @@ MONITOR_POLL_INTERVAL_MS = 10_000
 
 
 def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
-    from .monitor import Action, MonitorState, read_timestamp
+    from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
     from .win32 import ShutdownGuard, show_warning
 
     idle_threshold = config.idle_minutes * 60.0
     rx_file = config.osr2_serial_rx_file
     tx_file = config.osr2_serial_tx_file
+    idle_state_file = config.osr2_idle_state_file
 
+    idle_since, alerted = load_idle_state(idle_state_file)
     state = MonitorState(
         idle_threshold=idle_threshold,
         rx_stale_threshold=RX_STALE_THRESHOLD,
+        idle_since=idle_since,
+        alerted=alerted,
     )
 
+    def _show_idle_alert():
+        logger.info("OSR2 idle for %.0f minutes — showing alert", idle_threshold / 60)
+
+        def _show_and_acknowledge():
+            show_warning(
+                "OSR2 Broker",
+                f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"
+                "Did you forget to turn it off?",
+                button_text="I don't know, did you?",
+            )
+            state.acknowledge()
+
+        import threading as _threading
+        _threading.Thread(target=_show_and_acknowledge, daemon=True).start()
+
     def poll():
-        now = time.time()
-        last_rx = read_timestamp(rx_file)
-        last_tx = read_timestamp(tx_file)
-        is_auto = auto_mode.is_active
-        action = state.update(now, last_rx, last_tx, is_auto)
-
-        if action == Action.IDLE_ALERT:
-            logger.info("OSR2 idle for %.0f minutes — showing alert", idle_threshold / 60)
-
-            def _show_and_acknowledge():
-                show_warning(
-                    "OSR2 Broker",
-                    f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"
-                    "Did you forget to turn it off?",
-                    button_text="I don't know, did you?",
-                )
-                state.acknowledge()
-
-            import threading as _threading
-            _threading.Thread(target=_show_and_acknowledge, daemon=True).start()
+        run_monitor_poll(
+            state,
+            now=time.time(),
+            last_rx=read_timestamp(rx_file),
+            last_tx=read_timestamp(tx_file),
+            auto_active=auto_mode.is_active,
+            idle_state_file=idle_state_file,
+            on_alert=_show_idle_alert,
+        )
 
     def should_block_shutdown():
         now = time.time()
