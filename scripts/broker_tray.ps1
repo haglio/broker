@@ -32,6 +32,16 @@ $brokerLog = Join-Path $stateDir 'broker.log'
 $modeFile = Join-Path $stateDir 'genau_mode.txt'
 $runnerScript = Join-Path $PSScriptRoot 'run_broker_service.ps1'
 $trayIconPath = Join-Path $projectRoot 'broker_icon.ico'
+$trayLog = Join-Path $stateDir 'broker_tray.log'
+
+# The tray is the broker's watchdog: nothing restarts the broker if the tray
+# dies. Log tray lifecycle and never let an unhandled error tear it down.
+function Write-TrayLog {
+    param([string]$Message)
+    try {
+        "$(Get-Date -Format s) $Message" | Add-Content -Path $script:trayLog -Encoding UTF8
+    } catch {}
+}
 
 function Get-BrokerProcess {
     Get-CimInstance Win32_Process | Where-Object {
@@ -44,6 +54,7 @@ function Start-BrokerProcess {
         return
     }
 
+    Write-TrayLog 'broker not running; launching run_broker_service.ps1'
     Start-Process -FilePath 'powershell.exe' `
         -WindowStyle Hidden `
         -ArgumentList @(
@@ -193,10 +204,17 @@ $notifyIcon.add_DoubleClick({
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 5000
 $timer.add_Tick({
-    if (-not $script:brokerPaused) {
-        Start-BrokerProcess
+    # A transient WMI hiccup in here must not crash the watchdog. Under
+    # StrictMode + ErrorActionPreference=Stop any unhandled error would end the
+    # message loop and silently kill the broker's only supervisor.
+    try {
+        if (-not $script:brokerPaused) {
+            Start-BrokerProcess
+        }
+        Update-NotifyIcon
+    } catch {
+        Write-TrayLog "ERROR in watchdog tick: $($_.Exception.Message)"
     }
-    Update-NotifyIcon
 })
 
 $script:notifyIcon = $notifyIcon
@@ -207,7 +225,12 @@ $script:pauseItem = $pauseItem
 $script:trayIcon = $trayIcon
 $script:brokerPaused = $false
 
+Write-TrayLog "tray started (pid $PID)"
 Start-BrokerProcess
 Update-NotifyIcon
 $timer.Start()
-[System.Windows.Forms.Application]::Run()
+try {
+    [System.Windows.Forms.Application]::Run()
+} finally {
+    Write-TrayLog "tray exiting (pid $PID)"
+}
