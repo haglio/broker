@@ -67,7 +67,7 @@ class BrokerSerialSession:
         self.tcode_udp_port = tcode_udp_port
         self._last_tcode_udp_time: float = 0.0
         self._pending_park_time: float | None = None
-        self._park_mfp_suppressed: bool = False
+        self._park_suppressed_since: float | None = None
 
     @staticmethod
     def _peer_connected(port) -> bool:
@@ -188,6 +188,25 @@ class BrokerSerialSession:
                 session_stop.set()
                 return
 
+    def _park_suppresses_mfp(self) -> bool:
+        """Whether a PARK is currently muting MFP->OSR2 forwarding.
+
+        The mute is a grace window that swallows the in-flight script tail so it
+        can't immediately un-park the device. It normally ends on RESUME, but a
+        lost RESUME must not mute forever: once the window elapses, the presence
+        of live MFP data (the caller only asks while forwarding a packet) means
+        the user wants motion, so the latch self-heals rather than waiting on a
+        RESUME that may never arrive.
+        """
+        since = self._park_suppressed_since
+        if since is None:
+            return False
+        if self.monotonic() - since < self._PARK_SUPPRESS_GRACE_SECONDS:
+            return True
+        self._park_suppressed_since = None
+        self.logger.info("MFP active after park grace; resuming forwarding")
+        return False
+
     def forward_virtual_to_real(self, virt, real, session_stop, retry_state: SessionRetryState,
                                serial_write_lock: threading.Lock | None = None) -> None:
         while not self.stop_event.is_set() and not session_stop.is_set():
@@ -200,7 +219,7 @@ class BrokerSerialSession:
                     self._last_tcode_udp_time > 0.0
                     and (self.monotonic() - self._last_tcode_udp_time) < self._TCODE_UDP_SUPPRESS_SECONDS
                 )
-                if not self.auto_mode.is_active and not tcode_suppressed and not self._park_mfp_suppressed:
+                if not self.auto_mode.is_active and not tcode_suppressed and not self._park_suppresses_mfp():
                     if serial_write_lock is not None:
                         with serial_write_lock:
                             real.write(data)
@@ -241,6 +260,10 @@ class BrokerSerialSession:
             udp_sock.close()
 
     _PARK_DELAY_SECONDS = 1.0
+    # After a PARK, MFP forwarding is muted for this long to swallow the in-flight
+    # script tail. Past it, live MFP data self-heals the mute so a lost RESUME
+    # can't leave the device muted indefinitely.
+    _PARK_SUPPRESS_GRACE_SECONDS = 5.0
 
     def tick_command_and_stale_timeout(self, udp_sock, *,
                                        real_port=None, serial_write_lock=None) -> None:
@@ -262,11 +285,11 @@ class BrokerSerialSession:
         elif cmd == "RESUME":
             self.broker_paused.clear()
             self._pending_park_time = None
-            self._park_mfp_suppressed = False
+            self._park_suppressed_since = None
             self.logger.info("OmniPause: broker resumed")
         elif cmd == "PARK":
             self._pending_park_time = self.monotonic() + self._PARK_DELAY_SECONDS
-            self._park_mfp_suppressed = True
+            self._park_suppressed_since = self.monotonic()
             self.logger.info("OmniPause: park scheduled")
         elif cmd == "ROBOT_HAND_DISABLE":
             self.auto_mode.set_enabled(udp_sock, False)

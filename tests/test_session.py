@@ -147,14 +147,14 @@ def test_auto_mode_deactivation_schedules_park():
 def test_park_suppresses_virtual_to_real_forwarding():
     session, _auto_mode, _logger = _build_session()
     session.handle_broker_command("PARK", object())
-    assert session._park_mfp_suppressed is True
+    assert session._park_suppressed_since is not None
 
 
 def test_resume_clears_mfp_suppression():
     session, _auto_mode, _logger = _build_session()
     session.handle_broker_command("PARK", object())
     session.handle_broker_command("RESUME", object())
-    assert session._park_mfp_suppressed is False
+    assert session._park_suppressed_since is None
 
 
 def test_auto_mode_deactivation_between_ticks_schedules_park():
@@ -329,6 +329,71 @@ def test_forward_virtual_to_real_allows_writes_when_tcode_udp_idle():
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
 
     assert real.writes == [b"L05000\n"]
+
+
+def test_park_suppression_heals_when_mfp_active_after_grace():
+    """A lost RESUME must not mute MFP forever. Within the grace window after a
+    PARK, MFP is swallowed (so it can't immediately un-park the device); once the
+    window elapses, sustained MFP data clears the latch and forwarding resumes."""
+    clock = [100.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    session.handle_broker_command("PARK", object())  # suppressed at t=100
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"L05000\n"
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    clock[0] = 100.0 + session._PARK_SUPPRESS_GRACE_SECONDS + 0.1  # past grace
+    real = FakeReal()
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+
+    assert real.writes == [b"L05000\n"]
+    assert session._park_suppressed_since is None
+
+
+def test_park_suppression_holds_within_grace_window():
+    """The tail of an in-flight script right after PARK is still swallowed, so the
+    park write is not immediately undone by MFP's continuing stream."""
+    clock = [100.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    session.handle_broker_command("PARK", object())
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"L05000\n"
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    clock[0] = 100.0 + 1.0  # still within grace
+    real = FakeReal()
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+
+    assert real.writes == []
+    assert session._park_suppressed_since is not None
 
 
 def test_session_stops_when_peer_disconnects():
