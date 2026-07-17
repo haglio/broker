@@ -360,7 +360,7 @@ class TestBrokerCommands:
         s.writes.clear()
         s.udp_messages.clear()
 
-        s.session.handle_broker_command("ROBOT_HAND_DISABLE", sock)
+        s.session.handle_broker_command("GENAU_DISABLE", sock)
 
         assert s.state_file.read_text(encoding="utf-8") == "0"
         assert "HIDE" in s.udp_messages

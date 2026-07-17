@@ -291,9 +291,9 @@ class BrokerSerialSession:
             self._pending_park_time = self.monotonic() + self._PARK_DELAY_SECONDS
             self._park_suppressed_since = self.monotonic()
             self.logger.info("OmniPause: park scheduled")
-        elif cmd == "ROBOT_HAND_DISABLE":
+        elif cmd == "GENAU_DISABLE":
             self.auto_mode.set_enabled(udp_sock, False)
-        elif cmd == "ROBOT_HAND_ENABLE":
+        elif cmd == "GENAU_ENABLE":
             self.auto_mode.set_enabled(udp_sock, True)
 
     def _maybe_fire_park(self, real_port, serial_write_lock) -> None:

@@ -177,8 +177,8 @@ def test_handle_broker_command_toggles_genau_enablement():
     session, auto_mode, logger = _build_session()
     sock = object()
 
-    session.handle_broker_command("ROBOT_HAND_DISABLE", sock)
-    session.handle_broker_command("ROBOT_HAND_ENABLE", sock)
+    session.handle_broker_command("GENAU_DISABLE", sock)
+    session.handle_broker_command("GENAU_ENABLE", sock)
 
     assert auto_mode.set_enabled_calls == [(sock, False), (sock, True)]
     logger.info.assert_not_called()
