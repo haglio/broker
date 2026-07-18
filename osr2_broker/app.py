@@ -9,14 +9,15 @@ from pathlib import Path
 
 import serial
 
+from app_support.cli import preparse_config_path
+from app_support.logging_utils import configure_logging, install_exception_logging
+from app_support.threading_utils import start_daemon_thread
+
 from .ports import resolve_virtual_port, ensure_mfp_serial_port
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
 from .config import load_config
-from .logging_utils import configure_logging, install_exception_logging
-from .runtime_support import consume_command_file as _consume_command_file
-from .runtime_support import preparse_config_path
-from .threading_utils import start_daemon_thread
+from .command_file import consume_command_file as _consume_command_file
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
 
