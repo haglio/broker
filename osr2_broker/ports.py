@@ -16,13 +16,32 @@ def iter_serial_ports():
     return list(list_ports.comports())
 
 
-def _read_mfp_config_payload(mfp_config_path: Path) -> dict:
+def _read_mfp_config_payload(mfp_config_path: Path) -> dict | None:
+    """Parsed MFP config; ``{}`` when there is no file, ``None`` when unreadable.
+
+    ``None`` means "hands off". The file is there but we could not understand
+    it -- most likely we caught MFP mid-write -- so anything we rewrite from
+    what we parsed would drop every setting we failed to read.
+    """
     if not mfp_config_path.exists():
         return {}
     try:
-        return json.loads(mfp_config_path.read_text(encoding="utf-8"))
+        payload = json.loads(mfp_config_path.read_text(encoding="utf-8"))
     except Exception:
-        return {}
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _iter_output_target_items(payload: dict):
+    output_target = payload.get("OutputTarget")
+    if not isinstance(output_target, dict):
+        return
+    items = output_target.get("Items")
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if isinstance(item, dict):
+            yield item
 
 
 def _write_mfp_config_payload(mfp_config_path: Path, payload: dict) -> None:
@@ -30,31 +49,52 @@ def _write_mfp_config_payload(mfp_config_path: Path, payload: dict) -> None:
 
 
 def read_mfp_selected_serial_port(mfp_config_path: Path) -> str | None:
-    try:
-        if not mfp_config_path.exists():
-            return None
-        text = mfp_config_path.read_text(encoding="utf-8")
-    except Exception:
-        return None
+    """The port MFP is configured to use, as a real string.
 
-    match = re.search(r'"SelectedSerialPort"\s*:\s*"([^"]+)"', text)
-    if not match:
-        return None
-    return match.group(1)
+    Read through the JSON parser, never off the raw text: on disk MFP escapes
+    the backslashes in ``COM0COM\\PORT\\CNCA1``, and a raw-text read hands back
+    the doubled form, which matches no live port and makes every start declare
+    a perfectly good config stale.
+    """
+    for item in _iter_output_target_items(_read_mfp_config_payload(mfp_config_path) or {}):
+        selected = item.get("SelectedSerialPort")
+        if isinstance(selected, str) and selected:
+            return selected
+    return None
 
 
-def write_mfp_selected_serial_port(mfp_config_path: Path, selected_port: str) -> None:
+def _serial_output_target(payload: dict) -> dict:
+    """The config entry holding the serial port, created if there is none.
+
+    MFP keeps one entry per output target, so this has to pick the same entry
+    ``read_mfp_selected_serial_port`` reads back -- otherwise the two disagree
+    forever and every broker start rewrites the file.
+    """
+    for item in _iter_output_target_items(payload):
+        if "SelectedSerialPort" in item:
+            return item
+
+    output_target = payload.get("OutputTarget")
+    if not isinstance(output_target, dict):
+        output_target = {}
+        payload["OutputTarget"] = output_target
+    items = output_target.get("Items")
+    if not isinstance(items, list):
+        items = []
+        output_target["Items"] = items
+    if not items or not isinstance(items[0], dict):
+        items.insert(0, {})
+    return items[0]
+
+
+def write_mfp_selected_serial_port(mfp_config_path: Path, selected_port: str) -> bool:
+    """Point MFP at ``selected_port``; False if the config was left untouched."""
     payload = _read_mfp_config_payload(mfp_config_path)
-    output_target = payload.setdefault("OutputTarget", {})
-    items = output_target.setdefault("Items", [])
-    if not items:
-        items.append({})
-    first_item = items[0]
-    if not isinstance(first_item, dict):
-        first_item = {}
-        items[0] = first_item
-    first_item["SelectedSerialPort"] = selected_port
+    if payload is None:
+        return False
+    _serial_output_target(payload)["SelectedSerialPort"] = selected_port
     _write_mfp_config_payload(mfp_config_path, payload)
+    return True
 
 
 def collect_com0com_ports() -> dict[str, tuple[str, str]]:
@@ -171,6 +211,8 @@ def ensure_mfp_serial_port(mfp_config_path: Path, virtual_port: str, logger) -> 
     current = read_mfp_selected_serial_port(mfp_config_path)
     if current == resolved:
         return current
-    write_mfp_selected_serial_port(mfp_config_path, resolved)
+    if not write_mfp_selected_serial_port(mfp_config_path, resolved):
+        logger.warning("Left MFP config alone; could not read %s", mfp_config_path)
+        return current
     logger.info("Updated MFP selected serial port to %s", resolved)
     return resolved

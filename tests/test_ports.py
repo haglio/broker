@@ -90,6 +90,88 @@ class TestResolveMfpSerialPort:
 
         assert result == "COM0COM\\PORT\\CNCA1"
 
+    def test_ensure_leaves_config_alone_when_selection_already_correct(self, tmp_path):
+        # MFP stores the port with JSON-escaped backslashes. A config that already
+        # names the right port must be recognised as such and left untouched --
+        # otherwise every broker start rewrites MultiFunPlayer.config.json.
+        mfp_config = tmp_path / "MultiFunPlayer.config.json"
+        logger = logging.getLogger("test.broker")
+        mfp_config.write_text(
+            json.dumps({
+                "OutputTarget": {
+                    "Items": [{"SelectedSerialPort": "COM0COM\\PORT\\CNCA1"}]
+                }
+            }),
+            encoding="utf-8",
+        )
+        before = mfp_config.read_text(encoding="utf-8")
+
+        with patch(
+            "osr2_broker.ports.collect_com0com_ports",
+            return_value={
+                "COM7": ("com0com - serial port emulator CNCA1", "COM0COM\\PORT\\CNCA1"),
+                "COM8": ("com0com - serial port emulator CNCB1", "COM0COM\\PORT\\CNCB1"),
+            },
+        ):
+            result = ensure_mfp_serial_port(mfp_config, "COM8", logger)
+
+        assert result == "COM0COM\\PORT\\CNCA1"
+        assert mfp_config.read_text(encoding="utf-8") == before
+
+    def test_ensure_does_not_clobber_a_config_it_cannot_parse(self, tmp_path):
+        # Catching MFP mid-write yields half a file. Rewriting from the empty
+        # payload that results would replace every MFP setting with a stub.
+        mfp_config = tmp_path / "MultiFunPlayer.config.json"
+        logger = logging.getLogger("test.broker")
+        mfp_config.write_text('{"OutputTarget": {"Items": [{"Selec', encoding="utf-8")
+        before = mfp_config.read_text(encoding="utf-8")
+
+        with patch(
+            "osr2_broker.ports.collect_com0com_ports",
+            return_value={
+                "COM7": ("com0com - serial port emulator CNCA1", "COM0COM\\PORT\\CNCA1"),
+                "COM8": ("com0com - serial port emulator CNCB1", "COM0COM\\PORT\\CNCB1"),
+            },
+        ):
+            ensure_mfp_serial_port(mfp_config, "COM8", logger)
+
+        assert mfp_config.read_text(encoding="utf-8") == before
+
+    def test_ensure_updates_the_serial_target_not_merely_the_first_item(self, tmp_path):
+        # MFP keeps one entry per output target. Writing the port onto whichever
+        # entry happens to be first both misses the serial target and leaves the
+        # read/write pair disagreeing, so every start would rewrite the file.
+        mfp_config = tmp_path / "MultiFunPlayer.config.json"
+        logger = logging.getLogger("test.broker")
+        mfp_config.write_text(
+            json.dumps({
+                "OutputTarget": {
+                    "Items": [
+                        {"$type": "MultiFunPlayer.OutputTarget.ViewModels.NetworkOutputTarget"},
+                        {
+                            "$type": "MultiFunPlayer.OutputTarget.ViewModels.SerialOutputTarget",
+                            "SelectedSerialPort": "COM0COM\\PORT\\CNCA2",
+                        },
+                    ]
+                }
+            }),
+            encoding="utf-8",
+        )
+
+        ports = {
+            "COM7": ("com0com - serial port emulator CNCA1", "COM0COM\\PORT\\CNCA1"),
+            "COM8": ("com0com - serial port emulator CNCB1", "COM0COM\\PORT\\CNCB1"),
+        }
+        with patch("osr2_broker.ports.collect_com0com_ports", return_value=ports):
+            ensure_mfp_serial_port(mfp_config, "COM8", logger)
+            settled = mfp_config.read_text(encoding="utf-8")
+            ensure_mfp_serial_port(mfp_config, "COM8", logger)
+
+        items = json.loads(settled)["OutputTarget"]["Items"]
+        assert items[1]["SelectedSerialPort"] == "COM0COM\\PORT\\CNCA1"
+        assert "SelectedSerialPort" not in items[0]
+        assert mfp_config.read_text(encoding="utf-8") == settled
+
     def test_ensure_mfp_serial_port_updates_config_when_stale(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
@@ -178,10 +260,11 @@ class TestMfpConfigEdgeCases:
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         assert _read_mfp_config_payload(mfp_config) == {}
 
-    def test_read_mfp_config_returns_empty_for_invalid_json(self, tmp_path):
+    def test_read_mfp_config_returns_none_for_invalid_json(self, tmp_path):
+        # None, not {} -- {} reads as "no settings" and invites a clobbering rewrite.
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         mfp_config.write_text("NOT JSON", encoding="utf-8")
-        assert _read_mfp_config_payload(mfp_config) == {}
+        assert _read_mfp_config_payload(mfp_config) is None
 
     def test_read_mfp_selected_serial_port_returns_none_when_missing(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
