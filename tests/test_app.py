@@ -10,6 +10,43 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+class FakeSocket:
+    def sendto(self, _data, _addr):
+        return None
+
+    def close(self):
+        return None
+
+
+def make_fake_serial(open_ports: list[str], fail_once_on: tuple[str, type[Exception]] | None = None):
+    """A serial.Serial stand-in that records every port it is asked to open."""
+
+    class FakeSerial:
+        def __init__(self, port, _baud, timeout=0.02):
+            open_ports.append(port)
+            if fail_once_on is not None:
+                failing_port, error = fail_once_on
+                if port == failing_port and open_ports.count(port) == 1:
+                    raise error("Access is denied")
+            self.port = port
+            self.timeout = timeout
+            self.in_waiting = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self, _size):
+            return b""
+
+        def write(self, _data):
+            return None
+
+    return FakeSerial
+
+
 @pytest.fixture()
 def broker_app_module():
     fake_serial = types.SimpleNamespace(
@@ -56,34 +93,9 @@ def test_start_monitor_seeds_state_from_persisted_idle_file(broker_app_module, c
 class TestMainReconnect:
     def test_retries_after_retryable_serial_open_failure(self, broker_app_module, cfg_path):
         open_ports: list[str] = []
-
-        class FakeSocket:
-            def sendto(self, _data, _addr):
-                return None
-
-            def close(self):
-                return None
-
-        class FakeSerial:
-            def __init__(self, port, _baud, timeout=0.02):
-                open_ports.append(port)
-                if port == "COM4" and open_ports.count("COM4") == 1:
-                    raise broker_app_module.serial.SerialException("Access is denied")
-                self.port = port
-                self.timeout = timeout
-                self.in_waiting = 0
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self, _size):
-                return b""
-
-            def write(self, _data):
-                return None
+        FakeSerial = make_fake_serial(
+            open_ports, fail_once_on=("COM4", broker_app_module.serial.SerialException),
+        )
 
         sleep_calls = {"count": 0}
 
@@ -109,6 +121,37 @@ class TestMainReconnect:
         assert result == 0
         assert open_ports.count("COM4") >= 2
         assert open_ports.count("COM15") >= 2
+
+
+class TestMainSurvivesMfpConfigTrouble:
+    def test_starts_brokering_when_mfp_config_cannot_be_written(self, broker_app_module, cfg_path):
+        """MFP's config sits under Program Files and MFP may hold it open. Being
+        refused there must not stop the broker from bridging MFP to the OSR2."""
+        open_ports: list[str] = []
+        FakeSerial = make_fake_serial(open_ports)
+
+        def fake_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        with patch.object(broker_app_module, "configure_logging", return_value=logging.getLogger("test.broker")), \
+             patch.object(broker_app_module, "install_exception_logging"), \
+             patch("osr2_broker.single_instance.try_acquire_mutex", return_value=42), \
+             patch.object(broker_app_module, "resolve_virtual_port", side_effect=lambda _c, port, _l: port), \
+             patch.object(
+                 broker_app_module, "ensure_mfp_serial_port",
+                 side_effect=PermissionError(13, "Access is denied"),
+             ), \
+             patch.object(broker_app_module.serial, "Serial", side_effect=FakeSerial), \
+             patch.object(broker_app_module, "socket") as mock_socket_mod, \
+             patch.object(broker_app_module, "_start_monitor"), \
+             patch.object(broker_app_module.time, "sleep", side_effect=fake_sleep):
+            mock_socket_mod.socket.return_value = FakeSocket()
+            mock_socket_mod.AF_INET = 2
+            mock_socket_mod.SOCK_DGRAM = 2
+            result = broker_app_module.main(["--config", str(cfg_path)])
+
+        assert result == 0
+        assert "COM4" in open_ports
 
 
 class TestBrokerSingleInstance:
