@@ -63,36 +63,27 @@ def read_mfp_selected_serial_port(mfp_config_path: Path) -> str | None:
     return None
 
 
-def _serial_output_target(payload: dict) -> dict:
-    """The config entry holding the serial port, created if there is none.
+def _serial_output_target(payload: dict) -> dict | None:
+    """The config entry holding the serial port, or None if there is none.
 
     MFP keeps one entry per output target, so this has to pick the same entry
     ``read_mfp_selected_serial_port`` reads back -- otherwise the two disagree
     forever and every broker start rewrites the file.
     """
-    for item in _iter_output_target_items(payload):
+    items = list(_iter_output_target_items(payload))
+    for item in items:
         if "SelectedSerialPort" in item:
             return item
-
-    output_target = payload.get("OutputTarget")
-    if not isinstance(output_target, dict):
-        output_target = {}
-        payload["OutputTarget"] = output_target
-    items = output_target.get("Items")
-    if not isinstance(items, list):
-        items = []
-        output_target["Items"] = items
-    if not items or not isinstance(items[0], dict):
-        items.insert(0, {})
-    return items[0]
+    return items[0] if items else None
 
 
 def write_mfp_selected_serial_port(mfp_config_path: Path, selected_port: str) -> bool:
     """Point MFP at ``selected_port``; False if the config was left untouched."""
     payload = _read_mfp_config_payload(mfp_config_path)
-    if payload is None:
+    target = _serial_output_target(payload) if payload is not None else None
+    if target is None:
         return False
-    _serial_output_target(payload)["SelectedSerialPort"] = selected_port
+    target["SelectedSerialPort"] = selected_port
     _write_mfp_config_payload(mfp_config_path, payload)
     return True
 
@@ -212,7 +203,7 @@ def ensure_mfp_serial_port(mfp_config_path: Path, virtual_port: str, logger) -> 
     if current == resolved:
         return current
     if not write_mfp_selected_serial_port(mfp_config_path, resolved):
-        logger.warning("Left MFP config alone; could not read %s", mfp_config_path)
+        logger.warning("Could not point MFP at %s; left %s alone", resolved, mfp_config_path)
         return current
     logger.info("Updated MFP selected serial port to %s", resolved)
     return resolved

@@ -172,6 +172,25 @@ class TestResolveMfpSerialPort:
         assert "SelectedSerialPort" not in items[0]
         assert mfp_config.read_text(encoding="utf-8") == settled
 
+    def test_ensure_does_not_invent_an_output_target_that_mfp_never_had(self, tmp_path):
+        # Nothing to update is not an invitation to fabricate one. A config with
+        # no output targets belongs to MFP to populate, not to us.
+        mfp_config = tmp_path / "MultiFunPlayer.config.json"
+        logger = logging.getLogger("test.broker")
+        mfp_config.write_text(json.dumps({"SomeOtherSetting": 1}), encoding="utf-8")
+        before = mfp_config.read_text(encoding="utf-8")
+
+        with patch(
+            "osr2_broker.ports.collect_com0com_ports",
+            return_value={
+                "COM7": ("com0com - serial port emulator CNCA1", "COM0COM\\PORT\\CNCA1"),
+                "COM8": ("com0com - serial port emulator CNCB1", "COM0COM\\PORT\\CNCB1"),
+            },
+        ):
+            ensure_mfp_serial_port(mfp_config, "COM8", logger)
+
+        assert mfp_config.read_text(encoding="utf-8") == before
+
     def test_ensure_mfp_serial_port_updates_config_when_stale(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
