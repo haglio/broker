@@ -89,12 +89,12 @@ def test_park_schedules_delayed_write():
 
     session.handle_broker_command("PARK", object())
     # Not written yet — still pending
-    session._maybe_fire_park(real_port, lock)
+    session._maybe_fire_hold(real_port, lock)
     real_port.write.assert_not_called()
 
     # Advance past the delay
     clock[0] = 12.0
-    session._maybe_fire_park(real_port, lock)
+    session._maybe_fire_hold(real_port, lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
@@ -106,7 +106,7 @@ def test_park_suppresses_mfp_forwarding():
 
     session.handle_broker_command("PARK", object())
     clock[0] = 12.0
-    session._maybe_fire_park(real_port, lock)
+    session._maybe_fire_hold(real_port, lock)
     assert session._last_tcode_udp_time == 12.0
 
 
@@ -119,8 +119,44 @@ def test_resume_cancels_pending_park():
     session.handle_broker_command("PARK", object())
     session.handle_broker_command("RESUME", object())
     clock[0] = 12.0
-    session._maybe_fire_park(real_port, lock)
+    session._maybe_fire_hold(real_port, lock)
     real_port.write.assert_not_called()
+
+
+def test_retract_schedules_the_far_end_instead_of_home():
+    """RETRACT is PARK's antonym: same settle delay, opposite end of the stroke.
+
+    Park sends the device home (position 0); retract sends it as far away as it
+    goes (9999), which is what the sensation emergency asks for.
+    """
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    real_port = MagicMock()
+    lock = threading.Lock()
+
+    session.handle_broker_command("RETRACT", object())
+    session._maybe_fire_hold(real_port, lock)
+    real_port.write.assert_not_called()
+
+    clock[0] = 12.0
+    session._maybe_fire_hold(real_port, lock)
+    real_port.write.assert_called_once_with(b"L09999I500\n")
+
+
+def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
+    """The log names the end the device went to, so a retract is never read back
+    as a park at position 0 when someone is tracing where the OSR2 went."""
+    clock = [10.0]
+    session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
+    lock = threading.Lock()
+
+    session.handle_broker_command("RETRACT", object())
+    clock[0] = 12.0
+    session._maybe_fire_hold(MagicMock(), lock)
+
+    fired = [call.args[0] for call in logger.info.call_args_list]
+    assert any("retracting" in msg and "9999" in msg for msg in fired), fired
+    assert not any("parking" in msg for msg in fired), fired
 
 
 def test_auto_mode_deactivation_schedules_park():
@@ -135,26 +171,26 @@ def test_auto_mode_deactivation_schedules_park():
     session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
 
     # Park should be pending now (auto went inactive)
-    assert session._pending_park_time is not None
+    assert session._pending_hold_time is not None
     real_port.write.assert_not_called()
 
     # Advance past delay
     clock[0] = 12.0
-    session._maybe_fire_park(real_port, lock)
+    session._maybe_fire_hold(real_port, lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
 def test_park_suppresses_virtual_to_real_forwarding():
     session, _auto_mode, _logger = _build_session()
     session.handle_broker_command("PARK", object())
-    assert session._park_suppressed_since is not None
+    assert session._hold_suppressed_since is not None
 
 
 def test_resume_clears_mfp_suppression():
     session, _auto_mode, _logger = _build_session()
     session.handle_broker_command("PARK", object())
     session.handle_broker_command("RESUME", object())
-    assert session._park_suppressed_since is None
+    assert session._hold_suppressed_since is None
 
 
 def test_auto_mode_deactivation_between_ticks_schedules_park():
@@ -170,7 +206,7 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
 
     # Next tick should detect the deactivation via the flag
     session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
-    assert session._pending_park_time is not None
+    assert session._pending_hold_time is not None
 
 
 def test_handle_broker_command_toggles_genau_enablement():
@@ -356,12 +392,12 @@ def test_park_suppression_heals_when_mfp_active_after_grace():
         def write(self, data: bytes):
             self.writes.append(data)
 
-    clock[0] = 100.0 + session._PARK_SUPPRESS_GRACE_SECONDS + 0.1  # past grace
+    clock[0] = 100.0 + session._HOLD_SUPPRESS_GRACE_SECONDS + 0.1  # past grace
     real = FakeReal()
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
 
     assert real.writes == [b"L05000\n"]
-    assert session._park_suppressed_since is None
+    assert session._hold_suppressed_since is None
 
 
 def test_park_suppression_holds_within_grace_window():
@@ -393,7 +429,7 @@ def test_park_suppression_holds_within_grace_window():
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
 
     assert real.writes == []
-    assert session._park_suppressed_since is not None
+    assert session._hold_suppressed_since is not None
 
 
 def test_session_stops_when_peer_disconnects():

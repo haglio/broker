@@ -3,8 +3,8 @@
 All that is left of what was ``runtime_support``: the CLI, logging and threading
 scaffolding it held alongside this is now ``app_support``.
 
-One command at a time, folded to upper case — the broker's verbs (PARK, RESUME)
-carry no arguments, so the whole payload can be uppercased, and the file is
+One command at a time, folded to upper case — the broker's verbs (PARK, RETRACT,
+RESUME) carry no arguments, so the whole payload can be uppercased, and the file is
 emptied as it is read so a verb never replays. The players read a *list* from
 their own channel (``player_core.file_channel``) because they can be handed
 several navigation verbs between ticks; the broker cannot, so it does not.
