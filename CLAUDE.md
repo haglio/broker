@@ -16,7 +16,7 @@ No integration tests currently.
 - Serial broker: bridges MFP (virtual COM port) ↔ OSR2 (real COM4)
 - Auto-mode state machine: parses OSR2 serial output, publishes to Genau via UDP
 - Idle monitor: alerts after configurable idle timeout, blocks Windows shutdown when device is on
-- Tray UI: PowerShell WinForms tray icon with auto-restart
+- Tray UI: PyQt6 tray icon (`osr2_broker/tray.py`), dark-themed via shared_ui, which supervises and auto-restarts the broker
 
 The monitor runs on a dedicated daemon thread with its own Win32 message pump (ShutdownGuard). The broker's serial forwarding runs on separate daemon threads. Main thread manages the session retry loop.
 

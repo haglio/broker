@@ -6,6 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "osr2-broker"
 version = "0.1.0"
 requires-python = ">=3.10"
+# The shared siblings are NOT listed here — ../app_support (logging, threading
+# and CLI scaffolding) and ../shared_ui (the family's design tokens, which the
+# tray and the idle-warning dialog paint themselves with). Each is installed
+# editable from a local path and neither is published, so pip would go looking
+# for them on PyPI.
 dependencies = [
     "pyserial",
     "PyQt6",
