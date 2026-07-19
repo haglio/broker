@@ -1,0 +1,17 @@
+# Sanitization blocklist — EXAMPLE / template.
+#
+# The guard (tools/sanitize_guard.py) refuses to let any of these terms reach a
+# commit. The REAL list is git-ignored (blocklist.local.txt) because a checked-in
+# blocklist would itself be a catalogue of the words we're keeping out of the
+# public repo. Copy this file to blocklist.local.txt and fill it in with the
+# real terms; that copy never gets committed.
+#
+# Format: one term per line. Blank lines and '#' comments are ignored. Matching
+# is case-insensitive, on word boundaries (so "redacted" won't fire inside "class"),
+# with flexible internal whitespace (so "two words" catches "two   words").
+# List explicit vocabulary, media filenames/fragments, provider & site names,
+# and personal identifiers.
+
+example-forbidden-term
+another example phrase
+provider-name.example

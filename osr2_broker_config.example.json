@@ -1,0 +1,12 @@
+{
+  "state_dir": "C:/path/to/fun_time/state",
+  "virtual_port": "COM8",
+  "real_port": "COM4",
+  "baud": 115200,
+  "udp_host": "127.0.0.1",
+  "udp_port": 50555,
+  "auto_stale_timeout": 8.0,
+  "idle_minutes": 15.0,
+  "mfp_config_path": "C:/path/to/MultiFunPlayer/MultiFunPlayer.config.json",
+  "tcode_udp_port": 50557
+}

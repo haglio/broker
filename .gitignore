@@ -6,3 +6,8 @@ __pycache__/
 # Caches pytest drops in whatever directory it runs from.
 .hypothesis/
 .tmp-pytest-local/
+
+# Private overlays — real values live here and never get published; each has a
+# committed *.example.* template documenting its shape.
+/osr2_broker_config.json
+/sanitize/blocklist.local.txt
