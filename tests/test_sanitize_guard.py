@@ -19,7 +19,7 @@ class TestFindViolations:
         assert find_violations("FORBIDDENTERM", ["forbiddenterm"])
 
     def test_word_boundary_prevents_substring_false_positive(self):
-        assert find_violations("a class of objects", ["redacted"]) == []
+        assert find_violations("a concatenated list", ["cat"]) == []
 
     def test_matches_a_multi_word_term_across_flexible_whitespace(self):
         assert find_violations("a two   word phrase", ["two word"])

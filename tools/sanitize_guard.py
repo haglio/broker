@@ -37,7 +37,7 @@ def _term_pattern(term: str) -> re.Pattern[str]:
     """Case-insensitive matcher for *term*.
 
     A term whose first/last character is a word character gets a word-boundary
-    guard on that side, so ``redacted`` does not fire inside ``class`` while a
+    guard on that side, so ``cat`` does not fire inside ``concatenate`` while a
     punctuated term like ``site.co`` still matches literally. Internal runs of
     whitespace match any whitespace, so ``two word`` catches ``two   word``.
     """

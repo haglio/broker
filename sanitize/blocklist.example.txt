@@ -7,7 +7,7 @@
 # real terms; that copy never gets committed.
 #
 # Format: one term per line. Blank lines and '#' comments are ignored. Matching
-# is case-insensitive, on word boundaries (so "redacted" won't fire inside "class"),
+# is case-insensitive, on word boundaries (so "cat" won't fire inside "concatenate"),
 # with flexible internal whitespace (so "two words" catches "two   words").
 # List explicit vocabulary, media filenames/fragments, provider & site names,
 # and personal identifiers.
