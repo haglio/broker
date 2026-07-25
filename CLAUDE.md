@@ -1,6 +1,6 @@
-# osr2_broker — Project-Specific Instructions
+# broker — Project-Specific Instructions
 
-Shared rules are in the global `~/.claude/CLAUDE.md`. This file contains only osr2_broker-specific overrides.
+Shared rules are in the global `~/.claude/CLAUDE.md`. This file contains only broker-specific overrides.
 
 ## Test commands
 
