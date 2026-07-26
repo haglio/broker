@@ -1,0 +1,7 @@
+# Local, per-machine agent state — commit only the shared tooling below.
+*
+!/.gitignore
+!/settings.json
+!/hooks/
+!/hooks/git-rebase-guard.sh
+!/hooks/wip-checkpoint.sh
