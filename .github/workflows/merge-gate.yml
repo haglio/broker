@@ -1,0 +1,37 @@
+name: merge gate (full suite)
+
+# The merge queue's required check. The queue builds the candidate merge of a PR
+# onto current main, runs the whole suite on that candidate, and lets it land only
+# when green. Also runs on PRs for early feedback and on push to main as a backstop.
+#
+# windows-latest: these are Windows apps whose suites include Windows-only tests,
+# and the Qt ones need a headless platform (QT_QPA_PLATFORM=offscreen). Siblings
+# that aren't published on PyPI are installed from their public GitHub repos first.
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+  push:
+    branches: [main]
+
+concurrency:
+  group: merge-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-suite:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" --config-settings editable_mode=compat
+      - name: Run the suite
+        run: python -m pytest -q
