@@ -11,12 +11,12 @@ name: merge gate (full suite)
 # we leave the runner's native "windows" platform in place (it has a desktop that
 # renders) rather than forcing QT_QPA_PLATFORM=offscreen.
 #
-# The broker imports two siblings that are not on PyPI. app_support has a normal
-# nested package and editable-installs cleanly. shared_ui's importable package IS
-# its repo root (a flat layout), which `pip install -e` cannot expose as
-# `import shared_ui`; it is checked out alone under siblings/ and put on PYTHONPATH
-# instead. shell: bash makes a failed sibling install abort the step -- Actions
-# bash runs with `set -eo pipefail`, whereas pwsh would sail past a non-zero pip.
+# The broker imports two siblings that are not on PyPI -- app_support and
+# shared_ui. Both ship a standard nested package layout, so both editable-install
+# cleanly: they are checked out next to the broker and pip-installed before it
+# (siblings first, so the broker's own install finds them already satisfied).
+# shell: bash makes a failed sibling install abort the step -- Actions bash runs
+# with `set -eo pipefail`, whereas pwsh would sail past a non-zero pip.
 
 on:
   pull_request:
@@ -28,11 +28,6 @@ on:
 concurrency:
   group: merge-gate-${{ github.ref }}
   cancel-in-progress: false
-
-env:
-  # shared_ui is consumed off PYTHONPATH, not pip-installed (see the note above and
-  # its checkout below). It lives alone under siblings/ so nothing else leaks in.
-  PYTHONPATH: ${{ github.workspace }}/siblings
 
 jobs:
   full-suite:
@@ -48,15 +43,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: haglio/shared_ui
-          path: siblings/shared_ui
+          path: shared_ui
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install app_support and the broker (editable, compat mode)
+      - name: Install the siblings and the broker (editable, compat mode)
         shell: bash
         working-directory: broker
         run: |
           python -m pip install --upgrade pip
+          pip install -e ../shared_ui --config-settings editable_mode=compat
           pip install -e ../app_support --config-settings editable_mode=compat
           pip install -e ".[dev]" --config-settings editable_mode=compat
       - name: Run the suite
