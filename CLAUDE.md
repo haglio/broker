@@ -52,3 +52,24 @@ So fabricate fully. Use `Jane Doe`, `Example Studio`, `scene one`, the
 already uses. The near miss that still counts: taking a real filename and
 changing a character or two — it is still that clip, still that performer. Make
 it up from scratch, don't lightly edit a real one.
+
+## Landing — GitHub merge queue, not local ff-merge
+
+This repo is public at `github.com/haglio/broker` with a merge-queue ruleset on
+`main`, so the global "ff-merge into the primary checkout under
+`.git/agent-merge.lock`" flow does NOT apply here:
+
+- **Land through a pull request.** From your worktree: commit, `git fetch origin
+  && git rebase origin/main`, `git push -u origin <branch>`, then
+  `gh pr create --fill`. Auto-merge arms itself; the queue rebases your PR onto
+  `main`, runs the required check, and merges it when green. Don't ff-merge into
+  the primary checkout, don't push `main` directly, and never force-push `main`.
+- **The `.git/agent-merge.lock` is retired here** — the GitHub queue serializes.
+- **Sync local checkouts by pulling.** `main` advances only on origin (via the
+  queue), so the primary checkout and worktrees update with
+  `git pull --ff-only origin main`; the running app self-updates the same way.
+  The primary is only ever fast-forwarded — never reset or merged-into.
+- **A red required check** (`.github/workflows/merge-gate.yml`) can't land.
+
+Everything else in the global CLAUDE.md — work in a worktree, green tests before
+you push, clean handoff — still applies.
