@@ -1,0 +1,28 @@
+name: auto-arm auto-merge
+
+# A green PR should never sit waiting for someone to click "merge when ready".
+# This enables auto-merge on every non-draft PR the moment it opens, so the merge
+# queue picks it up automatically once the required check passes on the candidate.
+# Drafts are exempt (mark a PR draft to hold it). Requires "Allow auto-merge" on
+# in repo Settings -- until then the step logs a warning instead of failing.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  arm:
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" --auto \
+            || echo "::warning::Could not enable auto-merge — is 'Allow auto-merge' on in repo Settings?"

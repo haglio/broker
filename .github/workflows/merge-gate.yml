@@ -1,0 +1,65 @@
+name: merge gate (full suite)
+
+# The merge queue's required check. The queue builds the candidate merge of a PR
+# onto current main, runs the whole suite on that candidate, and fast-forwards
+# main only when this is green -- so a red tree can never land. Also runs on PRs
+# for early feedback and on push to main as a visible post-merge backstop.
+#
+# runs-on windows-latest: the broker wraps Windows-only serial/ctypes/subprocess
+# behaviour, and its Qt tray tests grab real pixels off a rendered menu. The
+# offscreen Qt platform paints that menu black and the palette assertion fails, so
+# we leave the runner's native "windows" platform in place (it has a desktop that
+# renders) rather than forcing QT_QPA_PLATFORM=offscreen.
+#
+# The broker imports two siblings that are not on PyPI. app_support has a normal
+# nested package and editable-installs cleanly. shared_ui's importable package IS
+# its repo root (a flat layout), which `pip install -e` cannot expose as
+# `import shared_ui`; it is checked out alone under siblings/ and put on PYTHONPATH
+# instead. shell: bash makes a failed sibling install abort the step -- Actions
+# bash runs with `set -eo pipefail`, whereas pwsh would sail past a non-zero pip.
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+  push:
+    branches: [main]
+
+concurrency:
+  group: merge-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # shared_ui is consumed off PYTHONPATH, not pip-installed (see the note above and
+  # its checkout below). It lives alone under siblings/ so nothing else leaks in.
+  PYTHONPATH: ${{ github.workspace }}/siblings
+
+jobs:
+  full-suite:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: broker
+      - uses: actions/checkout@v4
+        with:
+          repository: haglio/app_support
+          path: app_support
+      - uses: actions/checkout@v4
+        with:
+          repository: haglio/shared_ui
+          path: siblings/shared_ui
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install app_support and the broker (editable, compat mode)
+        shell: bash
+        working-directory: broker
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ../app_support --config-settings editable_mode=compat
+          pip install -e ".[dev]" --config-settings editable_mode=compat
+      - name: Run the suite
+        shell: bash
+        working-directory: broker
+        run: python -m pytest -q
