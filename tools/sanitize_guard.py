@@ -8,15 +8,17 @@ Instead the real list lives in a git-ignored overlay (``blocklist.local.txt``)
 and only a tame ``blocklist.example.txt`` ships in the tree to document the
 format.
 
-The module is dependency-free and importable without the app, so a pre-commit
-hook and the unit suite can both call it cheaply. Excerpts are fully redacted
-(every matched term replaced with ``***``) so the guard's own output never
-reproduces the content it is guarding against.
+The module is dependency-free and importable without the app, so the git hooks
+in ``tools/githooks/`` and the unit suite can both call it cheaply — run it as
+``python -m tools.sanitize_guard --staged`` or ``--message FILE``. Excerpts are
+fully redacted (every matched term replaced with ``***``) so the guard's own
+output never reproduces the content it is guarding against.
 """
 from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -158,3 +160,94 @@ def scan_files(
         display = str(path.relative_to(root)) if root else str(path)
         out.extend(find_violations(text, terms, path=display))
     return out
+
+
+# --------------------------------------------------------------------------
+# Command line, for the git hooks in tools/githooks/.
+#
+# A hook catches a term while it is still staged, which is the only point at
+# which the fix is free. The unit suite catches the same term afterwards, and by
+# then it is already a commit -- and on a public repo, a commit is forever: a
+# history rewrite is partial protection at best, since unreferenced objects stay
+# reachable for a while and clones, forks and caches outlive the rewrite.
+# --------------------------------------------------------------------------
+
+
+def _repo_root() -> Path:
+    top = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return Path(top)
+
+
+def _staged_violations(repo: Path, terms: Sequence[str]) -> list[Violation]:
+    """Blocklist hits in what is *staged*, read from the index rather than disk.
+
+    The index is what the commit will contain: a partially-staged file must be
+    judged on the staged half, not on the working copy sitting next to it.
+    """
+    names = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
+        cwd=repo, capture_output=True, text=True, check=True,
+    ).stdout.split("\0")
+    out: list[Violation] = []
+    for rel in filter(None, names):
+        blob = subprocess.run(
+            ["git", "show", f":{rel}"], cwd=repo, capture_output=True, check=False,
+        )
+        if blob.returncode:
+            continue
+        try:
+            text = blob.stdout.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        out.extend(find_violations(text, terms, path=rel))
+    return out
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """``--staged`` for pre-commit, ``--message FILE`` for commit-msg.
+
+    Exits 0 when there is no blocklist to enforce, so a public clone and a
+    checkout without the overlay both commit normally.
+    """
+    args = list(sys.argv[1:] if argv is None else argv)
+    try:
+        repo = _repo_root()
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    path = blocklist_path(repo)
+    terms = load_blocklist(path) if path.exists() else []
+    if not terms:
+        return 0
+
+    if "--message" in args:
+        target = args[args.index("--message") + 1]
+        text = Path(target).read_text(encoding="utf-8", errors="replace")
+        what = "commit message"
+        violations = find_violations(text, terms, path=target)
+    else:
+        what = "staged changes"
+        violations = _staged_violations(repo, terms)
+    if not violations:
+        return 0
+
+    # Report the redacted excerpt only; naming the term would print the content
+    # this guard exists to keep out of the terminal as well as the repo.
+    print(f"blocked term in {what}:", file=sys.stderr)
+    for v in violations[:20]:
+        print(f"  {v.path}:{v.line}  {v.excerpt}", file=sys.stderr)
+    if len(violations) > 20:
+        print(f"  ... {len(violations) - 20} more", file=sys.stderr)
+    print(
+        "\nFabricate the value instead -- invent it from scratch rather than\n"
+        "editing a real one, which leaves the same thing named. `--no-verify`\n"
+        "skips this, and puts the term in history for good.",
+        file=sys.stderr,
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
