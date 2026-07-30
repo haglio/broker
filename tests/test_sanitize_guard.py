@@ -5,9 +5,15 @@ blocklist is git-ignored, and these tests must themselves stay publishable.
 """
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
-from tools.sanitize_guard import find_violations, load_blocklist, scan_files
+from tools.sanitize_guard import (
+    blocklist_path,
+    find_violations,
+    load_blocklist,
+    scan_files,
+)
 
 
 class TestFindViolations:
@@ -63,16 +69,61 @@ class TestScanFiles:
         assert scan_files([tmp_path / "img.bin"], ["badterm"], root=tmp_path) == []
 
 
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+class TestBlocklistPath:
+    """The blocklist is git-ignored, so only its resolution keeps the guard alive."""
+
+    def test_uses_this_checkout_when_the_blocklist_is_here(self, tmp_path: Path):
+        (tmp_path / "sanitize").mkdir()
+        here = tmp_path / "sanitize" / "blocklist.local.txt"
+        here.write_text("alpha\n", encoding="utf-8")
+        assert blocklist_path(tmp_path) == here
+
+    def test_falls_back_to_the_primary_checkout_from_a_worktree(self, tmp_path: Path):
+        """The regression this whole helper exists for: a worktree never has the
+        git-ignored overlay, so resolving it locally left the guard toothless
+        wherever the work actually happens.
+        """
+        primary = tmp_path / "primary"
+        primary.mkdir()
+        _git(primary, "init", "-b", "main")
+        _git(primary, "config", "user.email", "guard@example.test")
+        _git(primary, "config", "user.name", "Guard Test")
+        (primary / "sanitize").mkdir()
+        real = primary / "sanitize" / "blocklist.local.txt"
+        real.write_text("alpha\n", encoding="utf-8")
+        (primary / "README.md").write_text("hi\n", encoding="utf-8")
+        _git(primary, "add", "README.md")
+        _git(primary, "commit", "-m", "seed")
+
+        tree = tmp_path / "tree"
+        _git(primary, "worktree", "add", str(tree), "-b", "side")
+        assert not (tree / "sanitize" / "blocklist.local.txt").exists()
+        assert blocklist_path(tree) == real.resolve()
+
+    def test_returns_a_missing_path_when_no_checkout_has_one(self, tmp_path: Path):
+        """The public-clone case: no blocklist here, none in the primary either.
+        Absence must read as "nothing to enforce" — a returned path that simply
+        does not exist — never a crash. Same outcome when git is missing entirely,
+        which the helper swallows for the benefit of a source tree with no repo.
+        """
+        clone = tmp_path / "clone"
+        clone.mkdir()
+        _git(clone, "init", "-b", "main")
+        assert not blocklist_path(clone).exists()
+
+
 def test_no_blocklisted_terms_in_the_tracked_tree():
     """Enforcement: with the real (git-ignored) blocklist present, no tracked
     file may contain a banned term — reintroducing one fails the suite. A public
     checkout has no blocklist, so there is nothing to enforce and the check is a
     no-op (deliberately not a skip, so the run stays clean either way).
     """
-    import subprocess
-
     repo = Path(__file__).resolve().parent.parent
-    blocklist = repo / "sanitize" / "blocklist.local.txt"
+    blocklist = blocklist_path(repo)
     terms = load_blocklist(blocklist) if blocklist.exists() else []
     if not terms:
         return
