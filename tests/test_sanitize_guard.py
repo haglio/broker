@@ -30,6 +30,29 @@ class TestFindViolations:
     def test_matches_a_multi_word_term_across_flexible_whitespace(self):
         assert find_violations("a two   word phrase", ["two word"])
 
+    def test_matches_a_multi_word_term_joined_the_way_a_filename_joins_it(self):
+        """The list is written in prose; the leak arrives as a filename. Real
+        names sat on a public `main` in exactly these shapes, unflagged, because
+        the matcher allowed only whitespace between a term's words.
+        """
+        for slug in ("two-word", "two_word", "two.word", "twoword"):
+            assert find_violations(f"clip-{slug}-scene-a.mp4", ["two word"]), slug
+
+    def test_matches_an_inflected_form(self):
+        """`badterm` on the list did not catch `badterms` in prose: the trailing
+        word boundary refused the plural.
+        """
+        for form in ("badterms", "badterm's", "badtermed", "badterming"):
+            assert find_violations(f"the {form} here", ["badterm"]), form
+
+    def test_widening_still_refuses_an_unrelated_longer_word(self):
+        """Separator and inflection slack must not decay into a substring match:
+        `cat` may reach `cat-s`, never `concatenated`.
+        """
+        assert find_violations("a concatenated list", ["cat"]) == []
+        assert find_violations("scatter the words", ["cat"]) == []
+        assert find_violations("a category error", ["cat"]) == []
+
     def test_punctuated_term_matches_literally(self):
         assert find_violations("go to site.example now", ["site.example"])
 
