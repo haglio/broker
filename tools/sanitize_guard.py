@@ -23,6 +23,11 @@ from typing import Iterable, Sequence
 
 _MAX_EXCERPT = 160
 _BLOCKLIST_NAME = "blocklist.local.txt"
+# What may stand between the words of a multi-word term: any run of spacing or
+# joining punctuation, or nothing — the shapes a filename uses.
+_SEPARATOR = r"[\s\-_.]*"
+# Trailing inflections a blocklist entry is not written with but text uses.
+_INFLECTION = r"(?:'?s|es|ed|ing)?"
 
 
 @dataclass(frozen=True)
@@ -36,19 +41,32 @@ class Violation:
 
 
 def _term_pattern(term: str) -> re.Pattern[str]:
-    """Case-insensitive matcher for *term*.
+    """Case-insensitive matcher for *term*, in the forms text actually uses.
 
     A term whose first/last character is a word character gets a word-boundary
     guard on that side, so ``cat`` does not fire inside ``concatenate`` while a
-    punctuated term like ``site.co`` still matches literally. Internal runs of
-    whitespace match any whitespace, so ``two word`` catches ``two   word``.
+    punctuated term like ``site.co`` still matches literally.
+
+    The two things a plain literal misses are the two things that leak:
+
+    * **Separators.** A blocklist is written in prose — ``two word`` — and the
+      leak arrives as a filename: ``two-word``, ``two_word``, ``two.word``,
+      ``twoword``. So the gaps between a term's words match any run of spacing
+      or joining punctuation, including none at all.
+    * **Inflections.** ``badterm`` on the list did not catch ``badterms`` in a
+      README, because the trailing ``(?!\\w)`` refused the plural. A short
+      inflectional tail is allowed before that boundary.
+
+    Both widenings were measured against every tracked file in all eleven repos
+    before landing: they added no false positive, and they caught real names that
+    had been sitting on a public ``main`` in slug form.
     """
     stripped = term.strip()
     parts = stripped.split()
-    core = r"\s+".join(re.escape(p) for p in parts) if parts else re.escape(stripped)
+    core = _SEPARATOR.join(re.escape(p) for p in parts) if parts else re.escape(stripped)
     left = r"(?<!\w)" if stripped[:1].isalnum() or stripped[:1] == "_" else ""
     right = r"(?!\w)" if stripped[-1:].isalnum() or stripped[-1:] == "_" else ""
-    return re.compile(left + core + right, re.IGNORECASE)
+    return re.compile(left + core + _INFLECTION + right, re.IGNORECASE)
 
 
 def _compile(terms: Iterable[str]) -> list[tuple[str, re.Pattern[str]]]:
