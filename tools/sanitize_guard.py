@@ -16,11 +16,13 @@ reproduces the content it is guarding against.
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
 _MAX_EXCERPT = 160
+_BLOCKLIST_NAME = "blocklist.local.txt"
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,36 @@ def find_violations(
             excerpt = _redact(line, patterns)
             out.extend(Violation(path, lineno, term, excerpt) for term in hits)
     return out
+
+
+def blocklist_path(repo: Path) -> Path:
+    """Where *repo*'s real blocklist lives — found from a worktree as well.
+
+    ``blocklist.local.txt`` is git-ignored, so it exists only in the checkout
+    where it was written: the primary. A worktree has none, and that made the
+    tracked-tree check a silent no-op in exactly the place all the work happens
+    — a banned term could be written, committed and landed without one red test.
+
+    ``git rev-parse --git-common-dir`` names the primary's git directory, which
+    every worktree shares, so its parent is the primary checkout. Borrowing the
+    overlay across checkouts is the point: it describes the machine, not the
+    tree.
+
+    The returned path need not exist — a public clone legitimately has no
+    blocklist, and so does a source tree with no git at all. Callers check
+    ``.exists()`` and treat absence as nothing to enforce.
+    """
+    local = repo / "sanitize" / _BLOCKLIST_NAME
+    if local.exists():
+        return local
+    try:
+        common_dir = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return local
+    return (repo / common_dir).resolve().parent / "sanitize" / _BLOCKLIST_NAME
 
 
 def load_blocklist(path: Path) -> list[str]:
