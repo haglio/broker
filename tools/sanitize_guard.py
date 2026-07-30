@@ -16,6 +16,7 @@ output never reproduces the content it is guarding against.
 """
 from __future__ import annotations
 
+import bisect
 import re
 import subprocess
 import sys
@@ -88,14 +89,32 @@ def find_violations(
     *,
     path: str = "<text>",
 ) -> list[Violation]:
-    """Every blocklisted term occurrence in *text*, one per (line, term)."""
+    """Every blocklisted term occurrence in *text*, one per (line, term).
+
+    Matched against the whole text rather than line by line, because a term's
+    words are separated by *any* whitespace — a newline included — so a
+    multi-word term that a wrap has split across two lines is a real occurrence
+    that a per-line scan cannot see. One was: a title broken over a docstring's
+    line break survived every scan until a history rewrite, matching on the whole
+    blob, put it back together.
+
+    The line reported is where the match *starts*, and the excerpt is that line,
+    so a wrapped hit still points at somewhere useful to look.
+    """
     patterns = _compile(terms)
+    lines = text.splitlines()
+    # Offset of each line start, to turn a match position into a line number.
+    starts, at = [], 0
+    for line in lines:
+        starts.append(at)
+        at += len(line) + 1
     out: list[Violation] = []
-    for lineno, line in enumerate(text.splitlines(), start=1):
-        hits = [term for term, pat in patterns if pat.search(line)]
-        if hits:
-            excerpt = _redact(line, patterns)
-            out.extend(Violation(path, lineno, term, excerpt) for term in hits)
+    for term, pat in patterns:
+        for match in pat.finditer(text):
+            lineno = bisect.bisect_right(starts, match.start())
+            excerpt = _redact(lines[lineno - 1], patterns) if lines else ""
+            out.append(Violation(path, lineno, term, excerpt))
+    out.sort(key=lambda v: (v.line, v.term))
     return out
 
 
