@@ -1,0 +1,28 @@
+#!/bin/sh
+# Refuse a commit message carrying a blocklisted term.
+#
+# Separate from pre-commit because a pre-commit hook never sees the message, and
+# the message is where terms have actually landed: a commit that sanitizes a file
+# tends to describe what it took out.
+set -e
+
+repo=$(git rev-parse --show-toplevel)
+common=$(git rev-parse --git-common-dir)
+primary=$(cd "$(dirname "$common")" && pwd)
+
+for candidate in \
+    "$repo/.venv/Scripts/python.exe" \
+    "$repo/.venv/bin/python" \
+    "$primary/.venv/Scripts/python.exe" \
+    "$primary/.venv/bin/python"
+do
+    if [ -x "$candidate" ]; then python="$candidate"; break; fi
+done
+if [ -z "${python:-}" ]; then
+    python=$(command -v python3 || command -v python || true)
+fi
+[ -n "$python" ] || exit 0
+
+message=$1
+cd "$repo"
+exec "$python" -m tools.sanitize_guard --message "$message"
