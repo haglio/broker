@@ -10,6 +10,7 @@ __pycache__/
 # committed *.example.* template documenting its shape.
 /osr2_broker_config.json
 /sanitize/blocklist.local.txt
+/sanitize/library_roots.local.txt
 
 # Windows shortcuts are machine-specific and embed the real install path.
 *.lnk
