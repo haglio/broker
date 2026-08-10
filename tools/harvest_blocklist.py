@@ -254,11 +254,36 @@ HEADER = """\
 """
 
 
+def primary_of(repo: Path) -> Path:
+    """The primary checkout *repo* belongs to, given a worktree or the primary.
+
+    Worktrees share one git directory whose parent is the primary -- the same
+    trick ``blocklist_path`` uses, needed here for the same reason.
+    """
+    try:
+        common = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return repo
+    return (repo / common).resolve().parent
+
+
 def siblings_of(repo: Path) -> list[Path]:
-    """Sibling checkouts that already keep a blocklist of their own."""
+    """Sibling checkouts that keep a blocklist of their own, plus the primary.
+
+    Anchored on the primary checkout, never on *repo* itself. A worktree lives
+    at ``<primary>/.claude/worktrees/<name>``, so its neighbours are other
+    worktrees -- and everything here runs in a worktree. Taking those as the
+    siblings quietly halved the job: the collision check saw a couple of
+    checkouts instead of all eleven, so three ordinary project words survived it
+    and turned three repos red the moment the list synced.
+    """
+    primary = primary_of(repo)
     return sorted(
-        d for d in repo.parent.iterdir()
-        if d.is_dir() and d != repo and (d / "sanitize").is_dir()
+        d for d in primary.parent.iterdir()
+        if d.is_dir() and d != primary and (d / "sanitize").is_dir()
     )
 
 
@@ -309,7 +334,9 @@ def main(argv: list[str]) -> int:
               "reachable right now; harvesting the rest.", file=sys.stderr)
 
     harvested = harvest(roots)
-    checkouts = [repo, *siblings_of(repo)]
+    # The primary, not this checkout: run from a worktree, `repo` has no
+    # blocklist and shares its tracked files with the primary anyway.
+    checkouts = [primary_of(repo), *siblings_of(repo)]
     collisions = already_in_code(harvested, checkouts)
     keep = harvested - collisions
     current = load_blocklist(blocklist_path(repo))
@@ -320,8 +347,9 @@ def main(argv: list[str]) -> int:
 
     if "--dry-run" in argv:
         return 0
-    write_list(repo, merged)
-    targets = [repo.name]
+    home = primary_of(repo)
+    write_list(home, merged)
+    targets = [home.name]
     if "--sync" in argv:
         for sibling in siblings_of(repo):
             write_list(sibling, merged)
