@@ -3,6 +3,7 @@
     python tools/harvest_blocklist.py            # this checkout's list
     python tools/harvest_blocklist.py --sync     # ...and every sibling's
     python tools/harvest_blocklist.py --dry-run  # counts only, write nothing
+    python tools/harvest_blocklist.py --if-stale 12 --detach --sync   # startup
 
 ``sanitize_guard`` can only refuse a term it has been told about, which leaves
 one hole it cannot close on its own: a performer name nobody has ever added
@@ -20,6 +21,13 @@ one path per line, because the paths describe the machine and the folder names
 under them are the very thing being kept out of the repo. With no such file
 there is nothing to harvest and this exits quietly.
 
+A list is only as good as its last run, so the run should not depend on anyone
+remembering it. ``--if-stale HOURS`` returns immediately unless the last harvest
+is older than that, and ``--detach`` hands the work to a background process and
+returns at once -- together they make this safe to fire from anything that
+starts, however often it starts, without a 50-second walk of the library in
+front of it.
+
 Nothing here ever prints a harvested value. Counts only, the same rule the guard
 follows for its own excerpts.
 """
@@ -28,6 +36,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -35,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tools.sanitize_guard import blocklist_path, load_blocklist  # noqa: E402
 
 ROOTS_NAME = "library_roots.local.txt"
+STAMP_NAME = "harvest_stamp.local.txt"
 MEDIA_SUFFIXES = {".mp4", ".mkv", ".mov", ".avi", ".wmv", ".m4v", ".webm", ".funscript"}
 # Deep enough for `<root>/2D/non_AI/<bucket>/<stage>/<file>`, shallow enough that
 # a stray archive folder does not turn into an all-night walk.
@@ -172,6 +182,45 @@ def already_in_code(candidates: set[str], repos: list[Path]) -> set[str]:
     return collisions
 
 
+def stamp_path(repo: Path) -> Path:
+    """Where the last successful harvest recorded itself.
+
+    Beside the blocklist, so it follows the same rule the blocklist does: one
+    per machine, found from a worktree, and never committed.
+    """
+    return blocklist_path(repo).parent / STAMP_NAME
+
+
+def hours_since_harvest(repo: Path) -> float | None:
+    """Age of the last successful harvest in hours, or None if there wasn't one."""
+    stamp = stamp_path(repo)
+    try:
+        return (time.time() - stamp.stat().st_mtime) / 3600
+    except OSError:
+        return None
+
+
+def detach(argv: list[str]) -> None:
+    """Re-run this script in the background and return immediately.
+
+    A harvest walks the whole library and takes the best part of a minute. That
+    is fine in the background and unacceptable in front of anything a person is
+    waiting on, so the callers that fire this on startup never wait for it. The
+    child is fully detached: it outlives the session that started it, and its
+    output goes nowhere, since the only thing it could print about a failure is
+    a count.
+    """
+    flags = 0
+    if sys.platform == "win32":  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        flags = 0x00000008 | 0x00000200
+    subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()),
+         *[a for a in argv if a != "--detach"]],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, creationflags=flags, close_fds=True,
+    )
+
+
 def read_roots(repo: Path) -> list[Path]:
     """Library roots to walk, from the git-ignored overlay beside the blocklist."""
     listing = blocklist_path(repo).parent / ROOTS_NAME
@@ -219,6 +268,16 @@ def write_list(repo: Path, terms: list[str]) -> None:
     target.write_text(HEADER + "\n".join(terms) + "\n", encoding="utf-8")
 
 
+def _stale_hours(argv: list[str]) -> float | None:
+    """The ``--if-stale HOURS`` threshold, or None when the flag is absent."""
+    if "--if-stale" not in argv:
+        return None
+    try:
+        return float(argv[argv.index("--if-stale") + 1])
+    except (IndexError, ValueError):
+        return 24.0
+
+
 def main(argv: list[str]) -> int:
     repo = Path(subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
@@ -230,6 +289,19 @@ def main(argv: list[str]) -> int:
         print(f"no {ROOTS_NAME} beside the blocklist -- nothing to harvest.")
         print("Write one path per line into "
               f"{blocklist_path(repo).parent / ROOTS_NAME} to enable it.")
+        return 0
+
+    # Both checks come before any work: a startup caller fires this every time
+    # it starts, and must pay nothing on the runs that have nothing to do.
+    threshold = _stale_hours(argv)
+    if threshold is not None:
+        age = hours_since_harvest(repo)
+        if age is not None and age < threshold:
+            print(f"harvested {age:.1f}h ago, under the {threshold:g}h "
+                  "threshold -- nothing to do.")
+            return 0
+    if "--detach" in argv:
+        detach(argv)
         return 0
     missing = [r for r in roots if not r.is_dir()]
     if missing:
@@ -254,6 +326,9 @@ def main(argv: list[str]) -> int:
         for sibling in siblings_of(repo):
             write_list(sibling, merged)
             targets.append(sibling.name)
+    # Stamped only on a run that reached the end, so a harvest that died partway
+    # is retried rather than treated as this window's run.
+    stamp_path(repo).write_text("", encoding="utf-8")
     print(f"written to: {', '.join(targets)}")
     return 0
 
