@@ -12,13 +12,16 @@ import subprocess
 
 from tools.harvest_blocklist import (
     EXCLUDED,
+    _stale_hours,
     already_in_code,
     candidates_from,
     harvest,
+    hours_since_harvest,
     merge,
     normalize,
     read_roots,
     siblings_of,
+    stamp_path,
 )
 
 
@@ -185,6 +188,57 @@ class TestRoots:
         (tmp_path / "sanitize").mkdir()
         (tmp_path / "sanitize" / "blocklist.local.txt").write_text("x\n", encoding="utf-8")
         assert read_roots(tmp_path) == []
+
+
+class TestStaleness:
+    """The throttle that makes this safe to fire from anything that starts.
+
+    A harvest walks the whole library and takes the best part of a minute, so a
+    startup caller has to be able to ask "is there anything to do?" and get an
+    answer instantly on the runs where there is not.
+    """
+
+    def _repo(self, tmp_path: Path) -> Path:
+        (tmp_path / "sanitize").mkdir()
+        (tmp_path / "sanitize" / "blocklist.local.txt").write_text("x\n", encoding="utf-8")
+        return tmp_path
+
+    def test_no_stamp_reads_as_never_harvested(self, tmp_path: Path):
+        assert hours_since_harvest(self._repo(tmp_path)) is None
+
+    def test_a_fresh_stamp_reads_as_hours_ago(self, tmp_path: Path):
+        repo = self._repo(tmp_path)
+        stamp_path(repo).write_text("", encoding="utf-8")
+        age = hours_since_harvest(repo)
+        assert age is not None and age < 0.1
+
+    def test_an_old_stamp_reads_its_age(self, tmp_path: Path):
+        import os
+        import time
+
+        repo = self._repo(tmp_path)
+        stamp = stamp_path(repo)
+        stamp.write_text("", encoding="utf-8")
+        long_ago = time.time() - 30 * 3600
+        os.utime(stamp, (long_ago, long_ago))
+        assert 29 < hours_since_harvest(repo) < 31
+
+    def test_the_stamp_sits_beside_the_blocklist(self, tmp_path: Path):
+        """So it is found from a worktree the same way, and ignored the same way."""
+        repo = self._repo(tmp_path)
+        assert stamp_path(repo).parent == (repo / "sanitize")
+        assert stamp_path(repo).name.endswith(".local.txt")
+
+    def test_the_threshold_is_read_from_the_flag(self):
+        assert _stale_hours(["--if-stale", "6", "--sync"]) == 6.0
+
+    def test_absent_flag_means_no_throttle(self):
+        assert _stale_hours(["--sync"]) is None
+
+    def test_a_malformed_threshold_falls_back_rather_than_crashing(self):
+        """Fired from a startup path, so a typo must not take the caller down."""
+        assert _stale_hours(["--if-stale"]) == 24.0
+        assert _stale_hours(["--if-stale", "soon"]) == 24.0
 
 
 class TestSiblings:
