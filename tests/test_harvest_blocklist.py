@@ -19,10 +19,15 @@ from tools.harvest_blocklist import (
     hours_since_harvest,
     merge,
     normalize,
+    primary_of,
     read_roots,
     siblings_of,
     stamp_path,
 )
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
 
 
 class TestNormalize:
@@ -242,9 +247,45 @@ class TestStaleness:
 
 
 class TestSiblings:
-    def test_finds_checkouts_that_keep_a_blocklist(self, tmp_path: Path):
+    def _family(self, tmp_path: Path) -> Path:
+        """Three neighbouring checkouts, two of which keep a blocklist.
+
+        ``here`` is a real repo: without that, resolving its primary walks up
+        into whatever repo the test itself is running inside, and the assertion
+        is about the wrong family entirely.
+        """
         for name in ("here", "kin", "stranger"):
             (tmp_path / name).mkdir()
         for name in ("here", "kin"):
             (tmp_path / name / "sanitize").mkdir()
-        assert [p.name for p in siblings_of(tmp_path / "here")] == ["kin"]
+        here = tmp_path / "here"
+        _git(here, "init", "-b", "main")
+        _git(here, "config", "user.email", "h@e.test")
+        _git(here, "config", "user.name", "H")
+        return here
+
+    def test_finds_checkouts_that_keep_a_blocklist(self, tmp_path: Path):
+        assert [p.name for p in siblings_of(self._family(tmp_path))] == ["kin"]
+
+    def test_from_a_worktree_it_still_finds_the_real_siblings(self, tmp_path: Path):
+        """The whole point. A worktree's own neighbours are other worktrees, so
+        anchoring on it hid most of the family — and the collision check that
+        keeps ordinary words off the list is only as good as the checkouts it
+        can see. Three project words got through exactly this way.
+        """
+        here = self._family(tmp_path)
+        (here / "README.md").write_text("hi\n", encoding="utf-8")
+        _git(here, "add", "README.md")
+        _git(here, "commit", "-m", "seed", "--no-verify")
+        tree = here / ".claude" / "worktrees" / "wt"
+        tree.parent.mkdir(parents=True)
+        _git(here, "worktree", "add", str(tree), "-b", "side")
+
+        assert [p.name for p in siblings_of(tree)] == ["kin"]
+        assert primary_of(tree) == here.resolve()
+
+    def test_a_primary_is_its_own_primary(self, tmp_path: Path):
+        assert primary_of(self._family(tmp_path)) == (tmp_path / "here").resolve()
+
+    def test_outside_git_it_falls_back_to_the_path_given(self, tmp_path: Path):
+        assert primary_of(tmp_path / "nowhere") == tmp_path / "nowhere"
