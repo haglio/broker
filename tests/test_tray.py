@@ -144,12 +144,19 @@ def _supervisor(cfg_path, *, running=False):
 def test_start_runs_the_broker_module_against_our_config(cfg_path):
     import sys
 
+    from osr2_broker.process_names import BROKER_ROLE, NAMER
+
     supervisor, calls = _supervisor(cfg_path, running=False)
 
     supervisor.start()
 
+    # Through the copy named for the broker rather than the bare interpreter, so
+    # the task list can tell it from the tray supervising it -- see
+    # osr2_broker.process_names.  named_exe falls back to the interpreter it was
+    # handed when the copy cannot be made, so this holds either way.
     assert calls["launched"] == [
-        [sys.executable, "-m", "osr2_broker.app", "--config", str(cfg_path)],
+        [NAMER.named_exe(sys.executable, BROKER_ROLE), "-m", "osr2_broker.app",
+         "--config", str(cfg_path)],
     ]
 
 
