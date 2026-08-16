@@ -82,8 +82,12 @@ class BrokerSupervisor:
         return self._is_held(self._mutex_name)
 
     def _broker_argv(self) -> list[str]:
+        # Named outright rather than one launch behind: the broker is a child,
+        # so the tray is holding the interpreter that writes the copy and is not
+        # the process being named.  See osr2_broker.process_names.
+        from .process_names import BROKER_ROLE, NAMER
         return [
-            sys.executable, "-m", "osr2_broker.app",
+            NAMER.named_exe(sys.executable, BROKER_ROLE), "-m", "osr2_broker.app",
             "--config", str(self._config.config_path),
         ]
 
@@ -215,12 +219,17 @@ def terminate_broker(logger) -> None:
     The tray does not necessarily own it: a tray that was itself restarted
     inherits the broker of the tray before it, so this matches on the command
     line rather than on a child handle we may not hold.
+
+    The image-name half comes from the same namer that decides what a broker is
+    launched under, because the two cannot be allowed to drift: a broker running
+    under a name this sweep does not know is a broker nothing here can stop.
     """
+    from .process_names import NAMER
     subprocess.run(
         [
             "powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
             "Get-CimInstance Win32_Process | Where-Object { "
-            "$_.Name -match '^pythonw?\\.exe$|^py\\.exe$' -and "
+            f"$_.Name -match '{NAMER.process_name_pattern}' -and "
             "$_.CommandLine -match 'osr2_broker\\.app' "
             "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
             "-ErrorAction SilentlyContinue }",
@@ -239,7 +248,22 @@ def _guarded_tick(tray_app: BrokerTrayApp, logger) -> None:
         logger.exception("Watchdog tick failed")
 
 
+def _name_this_process() -> None:
+    """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker – Tray".
+
+    The tray is the one process here that cannot be named on the way in: writing
+    the copy takes the very interpreter being named.  So each run makes it for
+    the run after and the launcher picks it up, which costs one launch, once.
+    """
+    try:
+        from .process_names import NAMER, TRAY_ROLE
+        NAMER.prepare_launcher(TRAY_ROLE)
+    except Exception:
+        pass  # Cosmetic: costs a name in the task list, never a launch.
+
+
 def main(argv: list[str] | None = None) -> int:
+    _name_this_process()
     from PyQt6.QtCore import QTimer
     from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import QApplication

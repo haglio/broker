@@ -10,6 +10,16 @@ configPath = projectRoot & "\osr2_broker_config.json"
 
 ' pythonw, not python: the tray is a GUI app and must not flash up a console.
 pythonExe = projectRoot & "\.venv\Scripts\pythonw.exe"
+
+' The copy a previous run left named for the tray, when there is one.  Windows
+' identifies a process by the file it was started from, so a bare interpreter
+' puts the tray and the broker it supervises in the task list as two identical
+' anonymous "Python" rows -- which is exactly the pair you need to tell apart
+' when one of them is stuck.  See osr2_broker.process_names.
+namedExe = projectRoot & "\.venv\Scripts\Broker-Tray.exe"
+If fso.FileExists(namedExe) Then
+    pythonExe = namedExe
+End If
 If Not fso.FileExists(pythonExe) Then
     pythonExe = "pythonw.exe"
 End If
