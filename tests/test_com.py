@@ -8,6 +8,7 @@ state-file writes and UDP message emission.
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -81,6 +82,28 @@ def _start_real_thread(target, args, name):
     return t
 
 
+@contextmanager
+def _running(stack, *, timeout=2.0):
+    """Run the session on a thread, and stop it however the block ends.
+
+    `stop_event.set()` used to sit after the wait, so a test whose predicate
+    timed out never reached it -- and `session.run` plus its two forwarding
+    threads spin (the fake ports return b"" straight away), so one red test left
+    three threads burning a core each. They compound, and pytest itself stalls:
+    one mutation probe never printed a summary at all and the file had to be
+    killed at 120 s, which on CI is a job timeout with no traceback naming the
+    test that caused it.
+    """
+    runner = threading.Thread(target=stack.session.run, args=(object(),),
+                              name="broker-session", daemon=True)
+    runner.start()
+    try:
+        yield runner
+    finally:
+        stack.stop_event.set()
+        runner.join(timeout=timeout)
+
+
 def _wait_until(predicate, *, timeout=2.0, poll=0.02):
     import time
     deadline = time.monotonic() + timeout
@@ -147,7 +170,11 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         consume_command=lambda _path: None,
         read_genau_enabled=lambda _path: enabled,
         monotonic=clock,
-        sleep=lambda _s: None,
+        # Not a no-op: with nothing to read the run loop and both forwarding
+        # threads would spin at full tilt for as long as the test lasts. A
+        # millisecond on the stop event yields the core and returns the moment
+        # the test asks them to stop.
+        sleep=lambda _s: stop_event.wait(0.001),
     )
     session.port_exists = lambda _name: True
 
@@ -173,11 +200,8 @@ class TestAutoTransitionFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"Auto mode is on!\r\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: s.controller.is_active)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: s.controller.is_active)
 
         assert s.state_file.read_text(encoding="utf-8") == "1"
         assert "AUTO 1" in s.udp_messages
@@ -190,11 +214,8 @@ class TestAutoTransitionFromSerial:
         s.udp_messages.clear()
 
         s.real_port.inject(b"Auto mode is off!\r\n")
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: not s.controller.is_active)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: not s.controller.is_active)
 
         assert s.state_file.read_text(encoding="utf-8") == "0"
         assert "AUTO 0" in s.udp_messages
@@ -204,11 +225,8 @@ class TestAutoTransitionFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"freeMode is on!\r\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: s.controller.is_active)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: s.controller.is_active)
 
         assert "AUTO 1" in s.udp_messages
 
@@ -218,11 +236,8 @@ class TestStrokeAndBpmFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"StrokeName: Pull, PatternDuration: 2.0\r\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: "STROKE Pull" in s.udp_messages)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: "STROKE Pull" in s.udp_messages)
 
         assert "STROKE Pull" in s.udp_messages
         assert "PATTERN 2.0" in s.udp_messages
@@ -232,11 +247,8 @@ class TestStrokeAndBpmFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"bpm 120, beats 4\r\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: "BPM 120" in s.udp_messages)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: "BPM 120" in s.udp_messages)
 
         assert "BPM 120" in s.udp_messages
         assert "BEATS 4" in s.udp_messages
@@ -246,11 +258,8 @@ class TestStrokeAndBpmFromSerial:
         line = b"StrokeName: Twist, PatternDuration: 1.5 bpm 90, beats 2 continue StrokeName:\r\n"
         s.real_port.inject(line)
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: "BEATS 2" in s.udp_messages)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: "BEATS 2" in s.udp_messages)
 
         assert s.udp_messages == [
             "AUTO 1", "SHOW", "BPM 87",
@@ -265,11 +274,8 @@ class TestSerialForwarding:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"device says hello\r\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: len(s.virt_port.tx_data) > 0)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: len(s.virt_port.tx_data) > 0)
 
         assert b"device says hello" in s.virt_port.tx_data
 
@@ -277,11 +283,8 @@ class TestSerialForwarding:
         s = _build_stack(tmp_path)
         s.virt_port.inject(b"L0100\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: len(s.real_port.tx_data) > 0)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: len(s.real_port.tx_data) > 0)
 
         assert b"L0100" in s.real_port.tx_data
 
@@ -291,11 +294,8 @@ class TestSerialForwarding:
 
         s.virt_port.inject(b"L0100\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: s.virt_port.in_waiting == 0)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: s.virt_port.in_waiting == 0)
 
         assert s.real_port.tx_data == b""
 
@@ -305,11 +305,8 @@ class TestGenauEnabledSuppression:
         s = _build_stack(tmp_path, enabled=False)
         s.real_port.inject(b"Auto mode is on!\r\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: s.controller.is_active)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: s.controller.is_active)
 
         assert s.controller.is_active is True
         assert s.state_file.read_text(encoding="utf-8") == "0"
@@ -371,17 +368,14 @@ class TestMultiLineSerialBuffer:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"Auto mode")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        import time
-        time.sleep(0.1)
+        with _running(s):
+            import time
+            time.sleep(0.1)
 
-        assert s.controller.is_active is False
+            assert s.controller.is_active is False
 
-        s.real_port.inject(b" is on!\r\n")
-        _wait_until(lambda: s.controller.is_active)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+            s.real_port.inject(b" is on!\r\n")
+            _wait_until(lambda: s.controller.is_active)
 
         assert s.controller.is_active is True
 
@@ -392,11 +386,8 @@ class TestMultiLineSerialBuffer:
             b"bpm 60, beats 8\r\n"
         )
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: "BEATS 8" in s.udp_messages)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: "BEATS 8" in s.udp_messages)
 
         assert "STROKE Push" in s.udp_messages
         assert "PATTERN 3.0" in s.udp_messages
@@ -409,18 +400,15 @@ class TestAutoTransitionSequence:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"Auto mode is on!\r\n")
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: s.controller.is_active)
+        with _running(s):
+            _wait_until(lambda: s.controller.is_active)
 
-        s.real_port.inject(b"Auto mode is off!\r\n")
-        _wait_until(lambda: not s.controller.is_active)
+            s.real_port.inject(b"Auto mode is off!\r\n")
+            _wait_until(lambda: not s.controller.is_active)
 
-        s.real_port.inject(b"freeMode is on!\r\n")
-        _wait_until(lambda: s.controller.is_active)
+            s.real_port.inject(b"freeMode is on!\r\n")
+            _wait_until(lambda: s.controller.is_active)
 
-        s.stop_event.set()
-        runner.join(timeout=2.0)
 
         auto_msgs = [m for m in s.udp_messages if m.startswith("AUTO")]
         transitions = [auto_msgs[0]] + [
@@ -436,11 +424,8 @@ class TestAutoTransitionSequence:
             b"bpm 140, beats 4\r\n"
         )
 
-        runner = threading.Thread(target=s.session.run, args=(object(),), daemon=True)
-        runner.start()
-        _wait_until(lambda: "BEATS 4" in s.udp_messages)
-        s.stop_event.set()
-        runner.join(timeout=2.0)
+        with _running(s):
+            _wait_until(lambda: "BEATS 4" in s.udp_messages)
 
         assert "AUTO 1" in s.udp_messages
         assert "STROKE Wave" in s.udp_messages
