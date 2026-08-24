@@ -316,11 +316,26 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
 
 def test_a_second_tray_stands_down(cfg_path):
     """The scheduled task relaunches the tray every couple of minutes."""
+    import logging
     from unittest.mock import patch
+
+    from app_support import logging_utils
 
     from osr2_broker import tray as tray_module
 
-    with patch.object(tray_module, "try_acquire_mutex", return_value=None) as acquire:
+    # main() installs its process-wide scaffolding before it reaches the mutex
+    # check, and none of it belongs to the rest of the session: both excepthooks
+    # replaced by one that logs to the 'osr2_broker.tray' logger, a rotating file
+    # handler on that logger pointed inside a state directory this test is about
+    # to delete, and -- on Windows -- pythonw.exe copied into the live .venv and
+    # stamped. tests/test_app.py patches the same three for the broker's own
+    # main(); main() imports these two inside the function, so they are patched
+    # where they are defined.
+    with patch.object(logging_utils, "configure_logging",
+                      return_value=logging.getLogger("test.tray")), \
+         patch.object(logging_utils, "install_exception_logging"), \
+         patch.object(tray_module, "_name_this_process"), \
+         patch.object(tray_module, "try_acquire_mutex", return_value=None) as acquire:
         assert tray_module.main(["--config", str(cfg_path)]) == 0
 
     acquire.assert_called_once_with(tray_module.MUTEX_TRAY)
