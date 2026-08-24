@@ -22,7 +22,11 @@ import pytest
 from tests import conftest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SAMPLE = PROJECT_ROOT / "tests" / "test_protocol.py"
+# This file, whose tests are plain module-level functions collected in source
+# order. Taking another file as the sample coupled this probe to that file's
+# shape: a test added there inside a class collects in alphabetical order, not
+# source order, and reds a check about something else entirely.
+SAMPLE = Path(__file__).resolve()
 IDS = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"]
 
 
