@@ -59,3 +59,17 @@ jobs:
         shell: bash
         working-directory: broker
         run: python -m pytest -q
+      # Again, back to front. Reversing inverts every "this runs before that" the
+      # suite has, so a test that starts leaning on the one beside it -- a hook
+      # another test installed, a log handler left open -- goes red on the commit
+      # that introduces the lean rather than on some later rename.
+      # TEST_COLLECTION_ORDER=shuffle with TEST_COLLECTION_SEED is the deeper
+      # local check (see tests/conftest.py); the gate takes the deterministic one.
+      # Note this job deliberately does NOT set QT_QPA_PLATFORM (see the header):
+      # both legs run on the runner's native platform.
+      - name: Run the suite back to front
+        shell: bash
+        working-directory: broker
+        env:
+          TEST_COLLECTION_ORDER: reverse
+        run: python -m pytest -q
