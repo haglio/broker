@@ -633,6 +633,28 @@ def test_activity_file_not_written_when_path_is_none():
     assert session.last_real_rx_time == 12.5
 
 
+def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threading.Event) -> None:
+    """Keep offering ``payload`` on a thread until the forwarder has taken it.
+
+    ``forward_udp_tcode_to_real`` binds its own socket inside the call under
+    test, so there is no moment a test can watch for from outside -- and a
+    datagram sent before that bind is dropped rather than queued. So it is
+    re-offered rather than timed, which lands the instant the socket is up and
+    cannot go red on a machine where 0.05 s was not enough.
+
+    Re-offering cannot double up: the forwarding loop rereads ``session_stop``
+    before every receive, and the fakes here set it from the write, so anything
+    still in flight is never read.
+    """
+    def _offer() -> None:
+        while True:
+            sender.sendto(payload, ("127.0.0.1", port))
+            if session_stop.wait(0.02):
+                return
+
+    threading.Thread(target=_offer, daemon=True).start()
+
+
 def test_forward_udp_tcode_to_real_writes_to_serial():
     import socket as _socket
 
@@ -656,12 +678,7 @@ def test_forward_udp_tcode_to_real_writes_to_serial():
     real = FakeReal()
 
     sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-
-    def send_after_bind():
-        time.sleep(0.05)
-        sender.sendto(b"L05000I33", ("127.0.0.1", port))
-
-    threading.Thread(target=send_after_bind, daemon=True).start()
+    _offer_until_taken(sender, port, b"L05000I33", session_stop)
 
     session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
 
@@ -692,12 +709,7 @@ def test_forward_udp_tcode_to_real_splits_multi_line_datagram():
 
     real = FakeReal()
     sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-
-    def send_after_bind():
-        time.sleep(0.05)
-        sender.sendto(b"L05000I33\nL09999I33", ("127.0.0.1", port))
-
-    threading.Thread(target=send_after_bind, daemon=True).start()
+    _offer_until_taken(sender, port, b"L05000I33\nL09999I33", session_stop)
 
     session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
 
@@ -706,6 +718,13 @@ def test_forward_udp_tcode_to_real_splits_multi_line_datagram():
 
 
 def test_forward_udp_tcode_to_real_ignores_empty_lines():
+    """The blank lines around a real one are dropped, and it is not.
+
+    One datagram carries both, so the proof is positive and needs no waiting
+    out: if a blank line could reach the port, the writes would not be exactly
+    the one real command. Splitting them across two datagrams would leave the
+    blank half unverified whenever the socket bound between the two.
+    """
     import socket as _socket
 
     listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
@@ -723,22 +742,16 @@ def test_forward_udp_tcode_to_real_ignores_empty_lines():
             self.writes: list[bytes] = []
         def write(self, data: bytes):
             self.writes.append(data)
+            session_stop.set()
 
     real = FakeReal()
     sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-
-    def send_and_stop():
-        time.sleep(0.05)
-        sender.sendto(b"\n\n", ("127.0.0.1", port))
-        time.sleep(0.05)
-        session_stop.set()
-
-    threading.Thread(target=send_and_stop, daemon=True).start()
+    _offer_until_taken(sender, port, b"\n\nL05000I33\n\n", session_stop)
 
     session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
 
     sender.close()
-    assert real.writes == []
+    assert real.writes == [b"L05000I33\n"]
 
 
 def test_forward_udp_tcode_to_real_writes_activity_tx(tmp_path):
@@ -764,12 +777,7 @@ def test_forward_udp_tcode_to_real_writes_activity_tx(tmp_path):
             session_stop.set()
 
     sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-
-    def send_after_bind():
-        time.sleep(0.05)
-        sender.sendto(b"L05000I33", ("127.0.0.1", port))
-
-    threading.Thread(target=send_after_bind, daemon=True).start()
+    _offer_until_taken(sender, port, b"L05000I33", session_stop)
 
     session.forward_udp_tcode_to_real(FakeReal(), session_stop, retry_state, lock)
 
