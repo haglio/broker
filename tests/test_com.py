@@ -25,6 +25,11 @@ class FakeSerialPort:
         self._tx_buf = bytearray()
         self._lock = threading.Lock()
         self._closed = False
+        # How many times the session has come back for more. A test that needs
+        # to know the session finished with what it last took waits for this to
+        # advance: the forwarding loop only reads again after it has buffered
+        # and parsed the previous read.
+        self.reads = 0
 
     def inject(self, data: bytes) -> None:
         with self._lock:
@@ -42,6 +47,7 @@ class FakeSerialPort:
 
     def read(self, size: int = 1) -> bytes:
         with self._lock:
+            self.reads += 1
             chunk = bytes(self._rx_buf[:size])
             del self._rx_buf[:size]
             return chunk
@@ -371,11 +377,15 @@ class TestMultiLineSerialBuffer:
         s.real_port.inject(b"Auto mode")
 
         with _running(s):
-            # The half line has been read off the port and is sitting in the
-            # session's buffer -- which is the moment the "not yet active" claim
-            # is about. A tenth of a second was standing in for it, and said
-            # nothing at all on a machine where the reader had not got there.
+            # The claim below is that a half line leaves auto mode alone, so the
+            # test has to stand after the parse that could have activated it,
+            # not merely after the read. `in_waiting` reaching zero is only the
+            # read: it drops inside `real.read(...)`, before the buffering and
+            # the line loop. The session coming back for another read is the
+            # signal that it finished with what it took.
             _wait_until(lambda: s.real_port.in_waiting == 0)
+            took_the_half_line = s.real_port.reads
+            _wait_until(lambda: s.real_port.reads > took_the_half_line)
 
             assert s.controller.is_active is False
 
