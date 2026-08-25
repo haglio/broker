@@ -16,33 +16,42 @@ import tomllib
 from pathlib import Path
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
-MERGE_GATE = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "merge-gate.yml"
+WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
 
 
-def _jobs_and_whether_they_are_clocked(workflow: str) -> dict[str, bool]:
-    """Map every job in a workflow to whether it declares ``timeout-minutes``.
+_JOB = re.compile(r'  "?([A-Za-z0-9_-]+)"?:\s*(#.*)?')
+_CLOCK = re.compile(r'    "?timeout-minutes"?:\s*"?[1-9][0-9]*"?\s*(#.*)?')
+
+
+def _jobs_without_a_clock(workflow: str) -> list[str]:
+    """The jobs in one workflow that do not declare ``timeout-minutes``.
 
     A scan rather than a YAML parse: PyYAML is not a dependency here, and adding
-    one to read a single key would cost more than the key is worth.
+    one to read a single key would cost more than the key is worth. Comments are
+    skipped wherever they sit, including at column 0 -- a full-line separator
+    between two jobs is legal YAML, and reading it as the end of the block would
+    wave through every job below it without ever looking.
     """
-    jobs: dict[str, bool] = {}
+    unclocked: list[str] = []
     current: str | None = None
     in_jobs = False
     for line in workflow.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
         if line.startswith("jobs:"):
             in_jobs = True
             continue
-        if not in_jobs or not line.strip():
+        if not in_jobs:
             continue
         if not line.startswith(" "):
             break
-        named = re.fullmatch(r"  ([A-Za-z0-9_-]+):", line)
+        named = _JOB.fullmatch(line)
         if named:
             current = named.group(1)
-            jobs[current] = False
-        elif current and re.fullmatch(r"    timeout-minutes: [1-9][0-9]*", line):
-            jobs[current] = True
-    return jobs
+            unclocked.append(current)
+        elif current in unclocked and _CLOCK.fullmatch(line):
+            unclocked.remove(current)
+    return unclocked
 
 
 def test_every_test_runs_under_its_own_clock(pytestconfig):
@@ -54,13 +63,16 @@ def test_every_test_runs_under_its_own_clock(pytestconfig):
     assert "--timeout-method=thread" in addopts
 
 
-def test_the_merge_gate_runs_under_its_own_clock():
-    """The other half. A run that hangs before pytest's timer is armed -- in
-    collection, in a plugin, in pip -- is only ever caught by the job's clock."""
-    jobs = _jobs_and_whether_they_are_clocked(MERGE_GATE.read_text(encoding="utf-8"))
+def test_every_workflow_job_runs_under_its_own_clock():
+    """The other half, and not only for the gate. A run that hangs before
+    pytest's timer is armed -- in collection, in a plugin, in pip -- is caught by
+    nothing but the job's clock, and that is as true of a workflow nobody is
+    watching as of the required check."""
+    unclocked = {path.name: _jobs_without_a_clock(path.read_text(encoding="utf-8"))
+                 for path in sorted(WORKFLOWS.glob("*.y*ml"))}
 
-    assert jobs, f"no jobs found in {MERGE_GATE.name}"
-    assert [name for name, clocked in jobs.items() if not clocked] == []
+    assert unclocked, f"no workflows found in {WORKFLOWS}"
+    assert {name: jobs for name, jobs in unclocked.items() if jobs} == {}
 
 
 def test_the_plugin_that_keeps_the_clock_is_declared_where_ci_installs_it():
