@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app_support.threading_utils import wait_until
 from osr2_broker.protocol import BrokerAutoController
 from osr2_broker.session import BrokerSerialSession
 
@@ -104,14 +105,15 @@ def _running(stack, *, timeout=2.0):
         runner.join(timeout=timeout)
 
 
-def _wait_until(predicate, *, timeout=2.0, poll=0.02):
-    import time
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return
-        time.sleep(poll)
-    raise AssertionError("Timed out waiting for predicate")
+def _wait_until(predicate) -> None:
+    """The shared waiter, with the one timeout this file's stack ever needs.
+
+    Two seconds is far past anything the fake ports here take, and the helper
+    returns the moment the predicate holds, so the number costs nothing until
+    something is actually wrong -- at which point it names the predicate that
+    never came true.
+    """
+    wait_until(predicate, timeout=2.0, interval=0.02)
 
 
 def _build_stack(tmp_path: Path, *, enabled: bool = True):
