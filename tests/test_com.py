@@ -371,8 +371,11 @@ class TestMultiLineSerialBuffer:
         s.real_port.inject(b"Auto mode")
 
         with _running(s):
-            import time
-            time.sleep(0.1)
+            # The half line has been read off the port and is sitting in the
+            # session's buffer -- which is the moment the "not yet active" claim
+            # is about. A tenth of a second was standing in for it, and said
+            # nothing at all on a machine where the reader had not got there.
+            _wait_until(lambda: s.real_port.in_waiting == 0)
 
             assert s.controller.is_active is False
 
