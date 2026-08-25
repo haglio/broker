@@ -32,6 +32,12 @@ concurrency:
 jobs:
   full-suite:
     runs-on: windows-latest
+    # About three times a green run, so it can only fire on a hang. A green job
+    # is ~64 s of checkout, two sibling checkouts and install, plus two ~11 s
+    # suite legs, so ~87 s. Without this, the queue's required check would sit
+    # on a hung run until GitHub's six-hour default and print nothing that named
+    # it.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
