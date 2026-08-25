@@ -23,6 +23,10 @@ jobs:
   arm:
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
+    # It mints a token and runs one gh command. Minutes rather than seconds
+    # because both are network calls, but a green run is a few seconds, so this
+    # can only fire on something wedged.
+    timeout-minutes: 5
     steps:
       - name: Mint a token from the auto-merge App
         uses: actions/create-github-app-token@v1
