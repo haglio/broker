@@ -19,11 +19,18 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-timeout",
     "vulture",
 ]
 
 [tool.pytest.ini_options]
-addopts = "-p no:cacheprovider"
+# The timeout is a ceiling, not a target: the slowest test here is the
+# tracked-tree content scan at ~2.4 s, so 60 s clears it twenty times over and
+# can only bite on a hang -- which this repo has already produced, when a red
+# session test left three spinning daemon threads and the file had to be killed
+# at 120 s with no summary naming it. The thread method prints the hung stack.
+# tests/test_timeouts.py holds both halves of it.
+addopts = "-p no:cacheprovider --timeout=60 --timeout-method=thread"
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
