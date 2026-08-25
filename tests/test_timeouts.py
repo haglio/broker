@@ -12,8 +12,10 @@ run. They bite on a hang and on nothing else.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
+PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 MERGE_GATE = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "merge-gate.yml"
 
 
@@ -59,3 +61,21 @@ def test_the_merge_gate_runs_under_its_own_clock():
 
     assert jobs, f"no jobs found in {MERGE_GATE.name}"
     assert [name for name, clocked in jobs.items() if not clocked] == []
+
+
+def test_the_plugin_that_keeps_the_clock_is_declared_where_ci_installs_it():
+    """The half no run of this suite can catch by failing.
+
+    pytest rejects an option it does not recognise before it collects anything,
+    so a `--timeout` in the config with no `pytest-timeout` in the dev extra is
+    not a red test -- it is a usage error, and the required check goes red with
+    no suite behind it. It cannot happen locally either, because the shared
+    development venv has the plugin whether this repo asks for it or not. So the
+    declaration is checked here, where a run that works can still say it is
+    missing.
+    """
+    project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
+    dev = project["optional-dependencies"]["dev"]
+
+    assert "pytest-timeout" in {name.split(";")[0].strip().lower().replace("_", "-")
+                                for name in dev}
