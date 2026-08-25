@@ -645,10 +645,18 @@ def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threadin
     Re-offering cannot double up: the forwarding loop rereads ``session_stop``
     before every receive, and the fakes here set it from the write, so anything
     still in flight is never read.
+
+    Offering into a port nobody has bound draws an ICMP port-unreachable, which
+    Windows reports back on the *sending* socket -- and an unhandled one here
+    would kill this thread quietly, leaving the call under test to block until
+    the whole run is cut down. So a failed offer is simply the next offer.
     """
     def _offer() -> None:
         while True:
-            sender.sendto(payload, ("127.0.0.1", port))
+            try:
+                sender.sendto(payload, ("127.0.0.1", port))
+            except OSError:
+                pass
             if session_stop.wait(0.02):
                 return
 
