@@ -59,29 +59,120 @@ def broker_app_module():
     return module
 
 
-def test_start_monitor_seeds_state_from_persisted_idle_file(broker_app_module, cfg_path):
-    """A restarted broker must rebuild MonitorState from the on-disk idle state
-    so the 15-min countdown resumes instead of restarting from zero."""
+def _start_monitor_with_fake_guard(broker_app_module, config, *, auto_active=False):
+    """Run _start_monitor against a guard that hands back its two closures.
+
+    The real ShutdownGuard would pump Win32 messages; what the tests need is
+    what the guard is given — should_block_fn and poll_fn — driven directly.
+    """
+    captured: dict = {}
+
+    class FakeShutdownGuard:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def run(self):
+            return None
+
+    with patch("osr2_broker.win32.ShutdownGuard", FakeShutdownGuard), \
+         patch.object(broker_app_module, "start_daemon_thread"):
+        broker_app_module._start_monitor(
+            config, types.SimpleNamespace(is_active=auto_active),
+            logging.getLogger("test.broker"),
+        )
+    return captured
+
+
+def test_shutdown_is_blocked_while_the_device_is_on(broker_app_module, cfg_path):
+    """A fresh rx stamp means the OSR2 is still powered — Windows must wait."""
+    import time as _time
+    from osr2_broker.config import load_config
+
+    config = load_config(str(cfg_path))
+    config.osr2_serial_rx_file.write_text(str(_time.time()), encoding="utf-8")
+
+    captured = _start_monitor_with_fake_guard(broker_app_module, config)
+
+    assert captured["should_block_fn"]() is True
+
+
+def test_shutdown_is_allowed_once_the_rx_stamp_goes_stale(broker_app_module, cfg_path):
+    """Past RX_STALE_THRESHOLD the device counts as off — shutdown proceeds.
+    With the fresh case above, this pins the comparison from both sides, so
+    its sign cannot flip unseen (audit finding broker/all/tests/005)."""
+    import time as _time
+    from osr2_broker.config import load_config
+
+    config = load_config(str(cfg_path))
+    stale = _time.time() - (broker_app_module.RX_STALE_THRESHOLD + 10.0)
+    config.osr2_serial_rx_file.write_text(str(stale), encoding="utf-8")
+
+    captured = _start_monitor_with_fake_guard(broker_app_module, config)
+
+    assert captured["should_block_fn"]() is False
+
+
+def test_shutdown_is_allowed_when_the_device_has_never_reported(broker_app_module, cfg_path):
+    from osr2_broker.config import load_config
+
+    config = load_config(str(cfg_path))
+
+    captured = _start_monitor_with_fake_guard(broker_app_module, config)
+
+    assert captured["should_block_fn"]() is False
+
+
+def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_module, cfg_path):
+    """The idle state seeded from osr2_idle_state.txt must feed the poll: a
+    countdown that had already elapsed before the restart alerts on the first
+    beat instead of starting the 15 minutes over."""
+    import json
+    import threading
+    import time as _time
+
     import osr2_broker.monitor as monitor_mod
     from osr2_broker.config import load_config
 
     config = load_config(str(cfg_path))
-    monitor_mod.save_idle_state(config.osr2_idle_state_file, idle_since=111.0, alerted=True)
+    now = _time.time()
+    idle_threshold = config.idle_minutes * 60.0
+    monitor_mod.save_idle_state(
+        config.osr2_idle_state_file, idle_since=now - idle_threshold - 1.0, alerted=False,
+    )
+    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # device on
 
-    captured: dict = {}
-    real_cls = monitor_mod.MonitorState
+    warned = threading.Event()
+    with patch("osr2_broker.win32.show_warning", side_effect=lambda *a, **kw: warned.set()):
+        captured = _start_monitor_with_fake_guard(broker_app_module, config)
+        captured["poll_fn"]()
 
-    def capture(*args, **kwargs):
-        captured["kwargs"] = kwargs
-        return real_cls(*args, **kwargs)
+    assert warned.wait(timeout=5.0), "the idle alert never reached show_warning"
+    persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
+    assert persisted["alerted"] is True
 
-    with patch.object(monitor_mod, "MonitorState", side_effect=capture), \
-         patch("osr2_broker.win32.ShutdownGuard"), \
-         patch.object(broker_app_module, "start_daemon_thread"):
-        broker_app_module._start_monitor(config, MagicMock(), logging.getLogger("test.broker"))
 
-    assert captured["kwargs"].get("idle_since") == 111.0
-    assert captured["kwargs"].get("alerted") is True
+def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_path):
+    import json
+    import time as _time
+
+    import osr2_broker.monitor as monitor_mod
+    from osr2_broker.config import load_config
+
+    config = load_config(str(cfg_path))
+    now = _time.time()
+    monitor_mod.save_idle_state(
+        config.osr2_idle_state_file, idle_since=now - 300.0, alerted=False,
+    )
+    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")
+
+    warned = []
+    with patch("osr2_broker.win32.show_warning", side_effect=lambda *a, **kw: warned.append(True)):
+        captured = _start_monitor_with_fake_guard(broker_app_module, config)
+        captured["poll_fn"]()
+
+    assert warned == []
+    persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
+    assert persisted["alerted"] is False
 
 
 class TestMainReconnect:
