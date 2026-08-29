@@ -154,8 +154,6 @@ class BrokerSerialSession:
                         thread_virtual.join(timeout=1.0)
                     if thread_tcode is not None:
                         thread_tcode.join(timeout=1.0)
-        except KeyboardInterrupt:
-            raise
         except Exception as exc:
             self.logger.exception("Failed to open or run serial session")
             retry_state.value = self.is_retryable_error(exc)
