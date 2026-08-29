@@ -52,25 +52,24 @@ class BrokerAutoController:
 
     _SEED_BPM = 87
 
-    def publish_effective_state(self, sock: socket.socket, mode_value: str | None = None) -> None:
+    def publish_effective_state(self, sock: socket.socket) -> None:
         with self._lock:
             effective_active = self._auto_active and self._enabled
 
-        mode_text = mode_value if mode_value is not None else ("1" if effective_active else "0")
-        self.write_mode(self.state_file, mode_text, self.logger)
+        self.write_mode(self.state_file, "1" if effective_active else "0", self.logger)
         self.udp_send(sock, self.udp_host, self.udp_port, f"AUTO {1 if effective_active else 0}")
         self.udp_send(sock, self.udp_host, self.udp_port, "SHOW" if effective_active else "HIDE")
         if effective_active:
             self.udp_send(sock, self.udp_host, self.udp_port, f"BPM {self._SEED_BPM}")
 
-    def set_auto(self, sock: socket.socket, value: bool, mode_value: str | None = None) -> None:
+    def set_auto(self, sock: socket.socket, value: bool) -> None:
         with self._lock:
             changed = self._auto_active != value
             self._auto_active = value
             if changed and not value:
                 self._deactivated = True
 
-        self.publish_effective_state(sock, mode_value=mode_value)
+        self.publish_effective_state(sock)
 
         if changed:
             self.logger.info("AUTO %s", "ON" if value else "OFF")

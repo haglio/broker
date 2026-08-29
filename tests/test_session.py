@@ -12,7 +12,7 @@ class FakeAutoMode:
     def __init__(self, *, active: bool = False):
         self.active = active
         self.handle_line_calls: list[str] = []
-        self.set_auto_calls: list[tuple[object, bool, str | None]] = []
+        self.set_auto_calls: list[tuple[object, bool]] = []
         self.set_enabled_calls: list[tuple[object, bool]] = []
         self._deactivated = False
 
@@ -23,8 +23,8 @@ class FakeAutoMode:
     def handle_line(self, _sock, line: str) -> None:
         self.handle_line_calls.append(line)
 
-    def set_auto(self, sock, value: bool, mode_value: str | None = None) -> None:
-        self.set_auto_calls.append((sock, value, mode_value))
+    def set_auto(self, sock, value: bool) -> None:
+        self.set_auto_calls.append((sock, value))
         was_active = self.active
         self.active = value
         if was_active and not value:
@@ -237,7 +237,7 @@ def test_maybe_disable_stale_auto_turns_off_auto_when_stale():
 
     session.maybe_disable_stale_auto(sock)
 
-    assert auto_mode.set_auto_calls == [(sock, False, None)]
+    assert auto_mode.set_auto_calls == [(sock, False)]
     logger.warning.assert_called_once_with("AUTO stale timeout reached after %.2fs", 2.0)
 
 
