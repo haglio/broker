@@ -241,10 +241,47 @@ def test_maybe_disable_stale_auto_turns_off_auto_when_stale():
     logger.warning.assert_called_once_with("AUTO stale timeout reached after %.2fs", 2.0)
 
 
-def test_maybe_disable_stale_auto_skips_when_paused_or_not_stale():
+def test_maybe_disable_stale_auto_leaves_a_paused_broker_alone():
+    """Paused means the user took over; even a genuinely stale rx must not
+    flip AUTO behind their back."""
     session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
     session.broker_paused.set()
-    session.last_real_rx_time = 1.0
+    session.last_real_rx_time = 7.0  # stale: 3s old against a 2s timeout
+
+    session.maybe_disable_stale_auto(object())
+
+    assert auto_mode.set_auto_calls == []
+    logger.warning.assert_not_called()
+
+
+def test_maybe_disable_stale_auto_keeps_auto_on_while_rx_is_fresh():
+    """The fresh side of the timeout, pinned on its own: before this, deleting
+    the staleness comparison outright left the suite green (audit finding
+    broker/all/tests/001) — the timeout could degrade into 'AUTO off on every
+    tick' unnoticed."""
+    session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
+    session.last_real_rx_time = 10.0 - 1.9  # 0.1s inside the 2s timeout
+
+    session.maybe_disable_stale_auto(object())
+
+    assert auto_mode.set_auto_calls == []
+    logger.warning.assert_not_called()
+
+
+def test_maybe_disable_stale_auto_waits_until_something_has_been_received():
+    """Before the first real byte there is nothing to be stale relative to."""
+    session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
+    session.last_real_rx_time = 0.0
+
+    session.maybe_disable_stale_auto(object())
+
+    assert auto_mode.set_auto_calls == []
+    logger.warning.assert_not_called()
+
+
+def test_maybe_disable_stale_auto_ignores_an_inactive_auto_mode():
+    session, auto_mode, logger = _build_session(auto_active=False, monotonic=lambda: 10.0)
+    session.last_real_rx_time = 7.0  # stale, but there is no AUTO to turn off
 
     session.maybe_disable_stale_auto(object())
 
