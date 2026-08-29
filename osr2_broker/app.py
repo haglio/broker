@@ -64,10 +64,10 @@ def write_heartbeat(path: Path, logger: logging.Logger) -> None:
 
 def heartbeat_loop(
     path: Path, stop_event: threading.Event, logger: logging.Logger,
-    sleep=time.sleep, connected: threading.Event | None = None,
+    *, connected: threading.Event, sleep=time.sleep,
 ) -> None:
     while not stop_event.is_set():
-        if connected is None or connected.is_set():
+        if connected.is_set():
             write_heartbeat(path, logger)
         sleep(0.5)
 
@@ -215,8 +215,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
             )
             state.acknowledge()
 
-        import threading as _threading
-        _threading.Thread(target=_show_and_acknowledge, daemon=True).start()
+        threading.Thread(target=_show_and_acknowledge, daemon=True).start()
 
     def poll():
         run_monitor_poll(
