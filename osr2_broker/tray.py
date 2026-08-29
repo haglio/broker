@@ -17,7 +17,7 @@ from .single_instance import (
 )
 
 # The numbers the broker writes to its mode file, in the words the menu shows.
-MODE_NAMES = {"0": "control", "1": "auto", "2": "stale-timeout"}
+MODE_NAMES = {"0": "control", "1": "auto"}
 
 # How often the watchdog checks the broker is still there.
 WATCHDOG_INTERVAL_MS = 5_000

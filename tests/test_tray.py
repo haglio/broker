@@ -84,7 +84,6 @@ def test_tray_menu_offers_the_broker_controls(qapp):
     [
         ("0", "control"),
         ("1", "auto"),
-        ("2", "stale-timeout"),
         ("﻿1\r\n", "auto"),
         ("7", "mode=7"),
     ],
