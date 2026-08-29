@@ -143,10 +143,6 @@ _CreateWindowExW.argtypes = [
 ]
 _CreateWindowExW.restype = wt.HWND
 
-_DestroyWindow = ctypes.windll.user32.DestroyWindow
-_DestroyWindow.argtypes = [wt.HWND]
-_DestroyWindow.restype = wt.BOOL
-
 _DefWindowProcW = ctypes.windll.user32.DefWindowProcW
 _DefWindowProcW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
 _DefWindowProcW.restype = ctypes.c_long
@@ -170,10 +166,6 @@ _DispatchMessageW.restype = ctypes.c_long
 _ShutdownBlockReasonCreate = ctypes.windll.user32.ShutdownBlockReasonCreate
 _ShutdownBlockReasonCreate.argtypes = [wt.HWND, wt.LPCWSTR]
 _ShutdownBlockReasonCreate.restype = wt.BOOL
-
-_ShutdownBlockReasonDestroy = ctypes.windll.user32.ShutdownBlockReasonDestroy
-_ShutdownBlockReasonDestroy.argtypes = [wt.HWND]
-_ShutdownBlockReasonDestroy.restype = wt.BOOL
 
 _GetModuleHandleW = ctypes.windll.kernel32.GetModuleHandleW
 _GetModuleHandleW.argtypes = [wt.LPCWSTR]
