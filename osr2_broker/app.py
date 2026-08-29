@@ -17,13 +17,9 @@ from .ports import resolve_virtual_port, ensure_mfp_serial_port
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
 from .config import load_config
-from .command_file import consume_command_file as _consume_command_file
+from .command_file import consume_command_file
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
-
-
-def _preparse_config(argv: list[str] | None) -> str | None:
-    return preparse_config_path(argv)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,10 +34,6 @@ def write_mode(path: Path, value: str, logger: logging.Logger) -> None:
         path.write_text(value, encoding="utf-8")
     except Exception:
         logger.exception("Failed to write mode file %s", path)
-
-
-def consume_broker_cmd(path: Path) -> str | None:
-    return _consume_command_file(path)
 
 
 def read_genau_enabled(path: Path) -> bool:
@@ -89,7 +81,7 @@ def is_retryable_serial_error(exc: BaseException) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    config = load_config(_preparse_config(argv))
+    config = load_config(preparse_config_path(argv))
     logger = configure_logging("osr2_broker", config.log_file("broker"))
     install_exception_logging(logger)
 
@@ -140,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         auto_mode=auto_mode,
         logger=logger,
         start_thread=start_daemon_thread,
-        consume_command=consume_broker_cmd,
+        consume_command=consume_command_file,
         read_genau_enabled=read_genau_enabled,
         monotonic=time.monotonic,
         sleep=time.sleep,
