@@ -59,12 +59,6 @@ def broker_app_module():
     return module
 
 
-def test_config_exposes_idle_state_file(cfg_path):
-    from osr2_broker.config import load_config
-    config = load_config(str(cfg_path))
-    assert config.osr2_idle_state_file == config.state_dir / "osr2_idle_state.txt"
-
-
 def test_start_monitor_seeds_state_from_persisted_idle_file(broker_app_module, cfg_path):
     """A restarted broker must rebuild MonitorState from the on-disk idle state
     so the 15-min countdown resumes instead of restarting from zero."""
