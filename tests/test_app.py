@@ -197,11 +197,12 @@ class TestMainReconnect:
              patch.object(broker_app_module.serial, "Serial", side_effect=FakeSerial), \
              patch.object(broker_app_module, "socket") as mock_socket_mod, \
              patch.object(broker_app_module, "_start_monitor"), \
+             patch.object(broker_app_module, "SERIAL_RETRY_DELAY_SECONDS", 0.0), \
              patch.object(broker_app_module.time, "sleep", side_effect=fake_sleep):
             mock_socket_mod.socket.return_value = FakeSocket()
             mock_socket_mod.AF_INET = 2
             mock_socket_mod.SOCK_DGRAM = 2
-            result = broker_app_module.main(["--config", str(cfg_path), "--serial-retry-delay", "0"])
+            result = broker_app_module.main(["--config", str(cfg_path)])
 
         assert result == 0
         assert open_ports.count("COM4") >= 2

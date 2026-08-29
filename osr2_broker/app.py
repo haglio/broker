@@ -26,21 +26,9 @@ def _preparse_config(argv: list[str] | None) -> str | None:
     return preparse_config_path(argv)
 
 
-def build_parser(config) -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="OSR2 serial broker with idle monitor.")
     ap.add_argument("--config", help="Path to a JSON config file.")
-    ap.add_argument("--virtual-port", default=config.virtual_port)
-    ap.add_argument("--real-port", default=config.real_port)
-    ap.add_argument("--baud", type=int, default=config.baud)
-    ap.add_argument("--udp-host", default=config.udp_host)
-    ap.add_argument("--udp-port", type=int, default=config.udp_port)
-    ap.add_argument("--auto-stale-timeout", type=float, default=config.auto_stale_timeout)
-    ap.add_argument("--tcode-udp-port", type=int, default=config.tcode_udp_port)
-    ap.add_argument("--serial-retry-delay", type=float, default=SERIAL_RETRY_DELAY_SECONDS, help=argparse.SUPPRESS)
-    ap.add_argument("--state-file", default=str(config.genau_mode_file))
-    ap.add_argument("--genau-enabled-file", default=str(config.genau_enabled_file))
-    ap.add_argument("--broker-cmd-file", default=str(config.broker_cmd_file))
-    ap.add_argument("--heartbeat-file", default=str(config.broker_heartbeat_file))
     return ap
 
 
@@ -111,29 +99,29 @@ def main(argv: list[str] | None = None) -> int:
         logger.warning("Another broker instance is already running; exiting")
         return 0
 
-    args = build_parser(config).parse_args(argv)
-    args.virtual_port = resolve_virtual_port(config.mfp_config_path, args.virtual_port, logger)
+    build_parser().parse_args(argv)
+    virtual_port = resolve_virtual_port(config.mfp_config_path, config.virtual_port, logger)
 
     # Point MFP at our virtual port. A courtesy, not a prerequisite: MFP's config
     # lives under Program Files and MFP may hold it open, and being refused there
     # must not stop us from bridging.
     try:
-        ensure_mfp_serial_port(config.mfp_config_path, args.virtual_port, logger)
+        ensure_mfp_serial_port(config.mfp_config_path, virtual_port, logger)
     except Exception:
         logger.exception("Could not update MFP serial port config")
 
-    state_file = Path(args.state_file)
-    genau_enabled_file = Path(args.genau_enabled_file)
-    broker_cmd_file = Path(args.broker_cmd_file)
-    heartbeat_file = Path(args.heartbeat_file)
+    state_file = config.genau_mode_file
+    genau_enabled_file = config.genau_enabled_file
+    broker_cmd_file = config.broker_cmd_file
+    heartbeat_file = config.broker_heartbeat_file
     ensure_genau_enabled_file(genau_enabled_file, logger)
     genau_enabled = read_genau_enabled(genau_enabled_file)
     stop_event = threading.Event()
     broker_paused = threading.Event()
     auto_mode = BrokerAutoController(
         state_file=state_file,
-        udp_host=args.udp_host,
-        udp_port=args.udp_port,
+        udp_host=config.udp_host,
+        udp_port=config.udp_port,
         logger=logger,
         write_mode=write_mode,
         udp_send=udp_send,
@@ -141,12 +129,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     session = BrokerSerialSession(
         serial_factory=serial.Serial,
-        virtual_port=args.virtual_port,
-        real_port=args.real_port,
-        baud=args.baud,
+        virtual_port=virtual_port,
+        real_port=config.real_port,
+        baud=config.baud,
         broker_cmd_file=broker_cmd_file,
         genau_enabled_file=genau_enabled_file,
-        auto_stale_timeout=args.auto_stale_timeout,
+        auto_stale_timeout=config.auto_stale_timeout,
         stop_event=stop_event,
         broker_paused=broker_paused,
         auto_mode=auto_mode,
@@ -159,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         is_retryable_error=is_retryable_serial_error,
         activity_rx_file=config.osr2_serial_rx_file,
         activity_tx_file=config.osr2_serial_tx_file,
-        tcode_udp_port=args.tcode_udp_port,
+        tcode_udp_port=config.tcode_udp_port,
     )
 
     write_mode(state_file, "0", logger)
@@ -177,17 +165,17 @@ def main(argv: list[str] | None = None) -> int:
     # --- Monitor (idle alert + shutdown blocking) ---
     _start_monitor(config, auto_mode, logger)
 
-    logger.info("Starting broker: %s <-> %s", args.virtual_port, args.real_port)
-    logger.info("Genau UDP target: %s:%s", args.udp_host, args.udp_port)
-    logger.info("T-Code UDP listener: 127.0.0.1:%s", args.tcode_udp_port)
+    logger.info("Starting broker: %s <-> %s", virtual_port, config.real_port)
+    logger.info("Genau UDP target: %s:%s", config.udp_host, config.udp_port)
+    logger.info("T-Code UDP listener: 127.0.0.1:%s", config.tcode_udp_port)
 
     try:
         while not stop_event.is_set():
             should_retry = session.run(udp_sock)
             if not should_retry or stop_event.is_set():
                 break
-            logger.warning("Retrying serial session in %.2fs", args.serial_retry_delay)
-            time.sleep(args.serial_retry_delay)
+            logger.warning("Retrying serial session in %.2fs", SERIAL_RETRY_DELAY_SECONDS)
+            time.sleep(SERIAL_RETRY_DELAY_SECONDS)
     except KeyboardInterrupt:
         logger.info("Broker interrupted")
     finally:
