@@ -262,6 +262,23 @@ def test_starting_by_hand_clears_the_pause(tray, cfg_path):
     assert supervisor.starts == 1
 
 
+def test_restart_from_the_menu_replaces_a_live_broker(tray, cfg_path):
+    """On a running broker the menu says 'Restart broker', and it must mean it:
+    because start() is idempotent, collapsing the restart branch into start()
+    turns the menu item into a silent no-op — and until this test, nothing
+    noticed (audit finding broker/all/tests/013)."""
+    from osr2_broker.config import load_config
+    from osr2_broker.tray import BrokerTrayApp
+
+    supervisor = FakeSupervisor(running=True)
+    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
+
+    app.start_or_restart()
+
+    assert supervisor.restarts == 1
+    assert supervisor.starts == 0
+
+
 def test_a_failed_beat_does_not_stop_the_watchdog(tray, cfg_path):
     """The tray is the broker's only supervisor; one bad tick must not end it."""
     import logging
