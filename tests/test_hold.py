@@ -78,7 +78,13 @@ def test_the_mute_heals_itself_once_the_grace_window_has_elapsed():
 
     assert holds.suppresses_mfp() is False
     assert holds.suppresses_mfp() is False  # and it stays let go
-    logger.info.assert_any_call("MFP active after hold grace; resuming forwarding")
+
+    # Once, not once per packet: the forwarder asks this on every MFP packet it
+    # takes, so a latch that answered False without ever clearing would say the
+    # same thing and bury the log in it.
+    healed = [c for c in logger.info.call_args_list
+              if c.args[0] == "MFP active after hold grace; resuming forwarding"]
+    assert len(healed) == 1, healed
 
 
 def test_cancelling_drops_both_the_pending_write_and_the_mute():

@@ -66,6 +66,23 @@ def test_the_window_stays_open_to_the_last_moment():
     assert window.is_open() is True
 
 
+def test_the_direct_write_window_is_half_a_second():
+    """Both bounds as literals rather than off SUPPRESS_SECONDS, which measures
+    the constant against itself and leaves it free to move. Too short and MFP
+    argues with the datagram that just landed; too long and MFP is silenced by a
+    device Genau has stopped driving."""
+    clock = [10.0]
+    window = TCodeWriteWindow(monotonic=lambda: clock[0])
+
+    window.mark()
+
+    clock[0] = 10.49
+    assert window.is_open() is True
+
+    clock[0] = 10.5
+    assert window.is_open() is False
+
+
 def _free_port() -> int:
     """A port nobody is bound to, released before the listener claims it."""
     probe = _REAL_SOCKET(socket.AF_INET, socket.SOCK_DGRAM)
@@ -138,6 +155,31 @@ def test_a_datagram_reaches_the_serial_port():
 
     sender.close()
     assert real.writes == [b"L05000I33\n"]
+
+
+def test_the_datagram_is_written_under_the_caller_s_serial_lock():
+    """The third of the three writers to the one port. A hold's write is pinned
+    in tests/test_hold.py and MFP's in tests/test_session.py; without this one,
+    dropping the lock here would leave a T-Code line free to land interleaved
+    with either of them, which the device reads as neither."""
+    port = _free_port()
+    listener = _build_listener(port)
+    session_stop = threading.Event()
+    lock = threading.Lock()
+    held_during_write = []
+
+    class FakeReal:
+        def write(self, _data):
+            held_during_write.append(lock.locked())
+            session_stop.set()
+
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    _offer_until_taken(sender, port, b"L05000I33", session_stop)
+
+    listener.run(FakeReal(), session_stop, SessionRetryState(), lock)
+
+    sender.close()
+    assert held_during_write == [True]
 
 
 def test_one_datagram_carrying_several_lines_becomes_several_writes():
@@ -265,9 +307,11 @@ class _RecordingSocket:
         self._real.close()
 
 
-def test_the_listener_binds_loopback_only(monkeypatch):
-    """T-Code drives the device. A listener reachable from the network is one
-    anybody on it can drive, so the address is pinned, not just the port."""
+def test_the_listener_binds_loopback_only_and_gives_itself_a_way_out(monkeypatch):
+    """T-Code drives the device, so a listener reachable from the network is one
+    anybody on it can drive: the address is pinned, not just the port. The
+    receive timeout is pinned here too, because it is the only thing that gets
+    `session_stop` looked at again once the loop is in `recvfrom`."""
     record: dict = {}
     monkeypatch.setattr(
         "osr2_broker.tcode_udp.socket.socket",
@@ -281,6 +325,7 @@ def test_the_listener_binds_loopback_only(monkeypatch):
     listener.run(MagicMock(), session_stop, SessionRetryState(), threading.Lock())
 
     assert record["bound_to"] == ("127.0.0.1", port)
+    assert record["timeout"] == 0.2, "the receive timeout is the session's only way out of recvfrom"
     assert record["closed"] is True
 
 
@@ -299,7 +344,10 @@ def test_a_quiet_listener_still_notices_the_session_ending():
     listener.run(MagicMock(), session_stop, SessionRetryState(), threading.Lock())
     took = time.monotonic() - started
 
-    assert took < 5.0, f"the listener took {took:.1f}s to notice the session had ended"
+    # The bound is `run()`'s own `thread_tcode.join(timeout=1.0)`: past it the join
+    # returns with the listener still holding the port and the next session cannot
+    # bind it. One receive timeout is 0.2 s, and this measures 0.20-0.21 s.
+    assert took < 1.0, f"the listener took {took:.1f}s to notice the session had ended"
 
 
 def test_a_listener_that_cannot_bind_ends_the_session_and_says_whether_to_retry(monkeypatch):

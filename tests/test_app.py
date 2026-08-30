@@ -318,9 +318,8 @@ class TestMainPublishesItsStateFiles:
 
         Nothing else in the suite reads a state file after main(): the writers
         are all substituted in the tests below this one. So the wiring -- which
-        file each config property feeds, and the ensure-before-read ordering
-        that makes the enable file exist by the time it is read -- could shift
-        without a red anywhere.
+        config property feeds which of the two names -- could shift without a red
+        anywhere.
         """
         from osr2_broker.config import load_config
 
