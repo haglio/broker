@@ -49,14 +49,53 @@ def make_fake_serial(open_ports: list[str], fail_once_on: tuple[str, type[Except
 
 @pytest.fixture()
 def broker_app_module():
+    """app.py, imported against a stand-in for pyserial.
+
+    Only the one name is swapped, and only for the duration of the import. The
+    obvious `patch.dict(sys.modules, ...)` is wrong here: it restores the whole
+    mapping on exit, which evicts every module the import reached for the first
+    time -- see
+    `test_the_module_fixture_puts_back_only_the_name_it_borrowed`.
+    """
     fake_serial = types.SimpleNamespace(
         Serial=None,
         SerialException=type("FakeSerialException", (Exception,), {}),
     )
-    with patch.dict(sys.modules, {"serial": fake_serial}):
-        module = importlib.import_module("osr2_broker.app")
-        module = importlib.reload(module)
-    return module
+    borrowed_from = sys.modules.get("serial")
+    sys.modules["serial"] = fake_serial
+    try:
+        return importlib.reload(importlib.import_module("osr2_broker.app"))
+    finally:
+        if borrowed_from is None:
+            del sys.modules["serial"]
+        else:
+            sys.modules["serial"] = borrowed_from
+
+
+def test_the_module_fixture_puts_back_only_the_name_it_borrowed(broker_app_module):
+    """Importing app.py without pyserial means lending `sys.modules` a fake, and
+    the loan has to be that narrow.
+
+    Undoing it by restoring the whole of `sys.modules` also evicts every module
+    the import pulled in for the *first* time. An evicted submodule leaves its
+    parent package still holding the old object, so `from app_support import
+    logging_utils` keeps returning it while `from app_support.logging_utils
+    import x` -- which goes through `sys.modules` -- imports a second copy. A
+    test that patches one of the two then watches the code under test call the
+    other, and the patch does nothing at all.
+
+    That is not hypothetical: it is how `test_a_second_tray_stands_down` came to
+    run the tray's `main()` with its logging patches inert, leaving an
+    excepthook and an open log file behind for the rest of the session. It went
+    unnoticed because a later test in this file happened to pull the evicted
+    module back in before the tray tests ran.
+    """
+    for name in ("app_support.cli", "app_support.logging_utils", "app_support.threading_utils"):
+        assert name in sys.modules, f"the fixture evicted {name} from sys.modules"
+        package, _, attribute = name.rpartition(".")
+        assert getattr(sys.modules[package], attribute) is sys.modules[name], (
+            f"{package} and sys.modules disagree about which {attribute} is the real one"
+        )
 
 
 def _start_monitor_with_fake_guard(broker_app_module, config, *, auto_active=False):
