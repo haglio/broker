@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import socket
 import threading
 import time
 from dataclasses import dataclass
@@ -8,6 +7,7 @@ from pathlib import Path
 
 from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
+from .tcode_udp import TCodeWriteWindow, UdpTCodeListener
 
 
 @dataclass
@@ -62,9 +62,16 @@ class BrokerSerialSession:
         self.poll_interval_seconds = 0.05
         self._rx_activity = rx_activity
         self._tx_activity = tx_activity
-        self.tcode_udp_port = tcode_udp_port
-        self._last_tcode_udp_time: float = 0.0
         self._holds = HoldScheduler(monotonic=monotonic, logger=logger)
+        self._tcode_window = TCodeWriteWindow(monotonic=monotonic)
+        self._tcode_listener = UdpTCodeListener(
+            port=tcode_udp_port,
+            stop_event=stop_event,
+            logger=logger,
+            is_retryable_error=self.is_retryable_error,
+            window=self._tcode_window,
+            tx_activity=tx_activity,
+        ) if tcode_udp_port else None
 
     @staticmethod
     def _peer_connected(port) -> bool:
@@ -103,9 +110,9 @@ class BrokerSerialSession:
                         args=(virt, real, session_stop, retry_state, serial_write_lock),
                         name="broker-virtual",
                     )
-                    if self.tcode_udp_port:
+                    if self._tcode_listener is not None:
                         thread_tcode = self.start_thread(
-                            target=self.forward_udp_tcode_to_real,
+                            target=self._tcode_listener.run,
                             args=(real, session_stop, retry_state, serial_write_lock),
                             name="broker-tcode-udp",
                         )
@@ -139,8 +146,6 @@ class BrokerSerialSession:
                 self.connected_event.clear()
 
         return peer_disconnected or retry_state.value
-
-    _TCODE_UDP_SUPPRESS_SECONDS = 0.5
 
     def forward_real_to_virtual(self, real, virt, udp_sock, session_stop, retry_state: SessionRetryState) -> None:
         buf = bytearray()
@@ -178,11 +183,9 @@ class BrokerSerialSession:
                 data = virt.read(queued or 1)
                 if not data:
                     continue
-                tcode_suppressed = (
-                    self._last_tcode_udp_time > 0.0
-                    and (self.monotonic() - self._last_tcode_udp_time) < self._TCODE_UDP_SUPPRESS_SECONDS
-                )
-                if not self.auto_mode.is_active and not tcode_suppressed and not self._holds.suppresses_mfp():
+                if (not self.auto_mode.is_active
+                        and not self._tcode_window.is_open()
+                        and not self._holds.suppresses_mfp()):
                     if serial_write_lock is not None:
                         with serial_write_lock:
                             real.write(data)
@@ -196,32 +199,6 @@ class BrokerSerialSession:
                 session_stop.set()
                 return
 
-    def forward_udp_tcode_to_real(self, real, session_stop, retry_state: SessionRetryState,
-                                  serial_write_lock: threading.Lock) -> None:
-        udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        udp_sock.settimeout(0.2)
-        try:
-            udp_sock.bind(("127.0.0.1", self.tcode_udp_port))
-            while not self.stop_event.is_set() and not session_stop.is_set():
-                try:
-                    data, _addr = udp_sock.recvfrom(4096)
-                except TimeoutError:
-                    continue
-                for line in data.decode("ascii", errors="replace").split("\n"):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    self._last_tcode_udp_time = self.monotonic()
-                    with serial_write_lock:
-                        real.write((line + "\n").encode("ascii"))
-                    self._tx_activity.mark()
-        except Exception as exc:
-            self.logger.exception("T-Code UDP listener error")
-            retry_state.value = self.is_retryable_error(exc)
-            session_stop.set()
-        finally:
-            udp_sock.close()
-
     def tick_command_and_stale_timeout(self, udp_sock, *,
                                        real_port=None, serial_write_lock=None) -> None:
         cmd = self.consume_command(self.broker_cmd_file)
@@ -231,7 +208,7 @@ class BrokerSerialSession:
         if self.auto_mode.consume_deactivation():
             self._holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
         if self._holds.fire_due(real_port, serial_write_lock) is not None:
-            self._last_tcode_udp_time = self.monotonic()
+            self._tcode_window.mark()
 
     def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
         if cmd == "PAUSE":

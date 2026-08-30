@@ -126,7 +126,7 @@ def test_park_suppresses_mfp_forwarding():
     session.handle_broker_command("PARK", sock)
     clock[0] = 12.0
     session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
-    assert session._last_tcode_udp_time == 12.0
+    assert session._tcode_window.is_open() is True
 
 
 def test_resume_cancels_pending_park():
@@ -368,8 +368,10 @@ def test_forward_virtual_to_real_skips_writes_while_auto_is_active():
 
 
 def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
-    session, _auto_mode, _logger = _build_session(monotonic=lambda: 10.0)
-    session._last_tcode_udp_time = 9.9  # 0.1s ago — within suppression window
+    clock = [9.9]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    session._tcode_window.mark()
+    clock[0] = 10.0  # 0.1s ago — within suppression window
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -393,8 +395,10 @@ def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
 
 
 def test_forward_virtual_to_real_allows_writes_when_tcode_udp_idle():
-    session, _auto_mode, _logger = _build_session(monotonic=lambda: 10.0)
-    session._last_tcode_udp_time = 9.0  # 1.0s ago — outside suppression window
+    clock = [9.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    session._tcode_window.mark()
+    clock[0] = 10.0  # 1.0s ago — outside suppression window
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -693,166 +697,6 @@ def test_peer_disconnect_retries_despite_thread_teardown_error():
     assert should_retry is True
 
 
-def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threading.Event) -> None:
-    """Keep offering ``payload`` on a thread until the forwarder has taken it.
-
-    ``forward_udp_tcode_to_real`` binds its own socket inside the call under
-    test, so there is no moment a test can watch for from outside -- and a
-    datagram sent before that bind is dropped rather than queued. So it is
-    re-offered rather than timed, which lands the instant the socket is up and
-    cannot go red on a machine where 0.05 s was not enough.
-
-    Re-offering cannot double up: the forwarding loop rereads ``session_stop``
-    before every receive, and the fakes here set it from the write, so anything
-    still in flight is never read.
-
-    Offering into a port nobody has bound draws an ICMP port-unreachable, which
-    Windows reports back on the *sending* socket -- and an unhandled one here
-    would kill this thread quietly, leaving the call under test to block until
-    the whole run is cut down. So a failed offer is simply the next offer.
-    """
-    def _offer() -> None:
-        while True:
-            try:
-                sender.sendto(payload, ("127.0.0.1", port))
-            except OSError:
-                pass
-            if session_stop.wait(0.02):
-                return
-
-    threading.Thread(target=_offer, daemon=True).start()
-
-
-def test_forward_udp_tcode_to_real_writes_to_serial():
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-        def write(self, data: bytes):
-            self.writes.append(data)
-            session_stop.set()
-
-    real = FakeReal()
-
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
-
-    sender.close()
-    assert real.writes == [b"L05000I33\n"]
-
-
-def test_forward_udp_tcode_to_real_splits_multi_line_datagram():
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    received = []
-
-    class FakeReal:
-        def write(self, data: bytes):
-            received.append(data)
-            if len(received) >= 2:
-                session_stop.set()
-
-    real = FakeReal()
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33\nL09999I33", session_stop)
-
-    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
-
-    sender.close()
-    assert received == [b"L05000I33\n", b"L09999I33\n"]
-
-
-def test_forward_udp_tcode_to_real_ignores_empty_lines():
-    """The blank lines around a real one are dropped, and it is not.
-
-    One datagram carries both, so the proof is positive and needs no waiting
-    out: if a blank line could reach the port, the writes would not be exactly
-    the one real command. Splitting them across two datagrams would leave the
-    blank half unverified whenever the socket bound between the two.
-    """
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-        def write(self, data: bytes):
-            self.writes.append(data)
-            session_stop.set()
-
-    real = FakeReal()
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"\n\nL05000I33\n\n", session_stop)
-
-    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
-
-    sender.close()
-    assert real.writes == [b"L05000I33\n"]
-
-
-def test_forward_udp_tcode_to_real_writes_activity_tx(tmp_path):
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    tx_file = tmp_path / "osr2_serial_tx.txt"
-    session, _auto_mode, _logger = _build_session(
-        tcode_udp_port=port,
-        tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
-    )
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    class FakeReal:
-        def write(self, data: bytes):
-            session_stop.set()
-
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    session.forward_udp_tcode_to_real(FakeReal(), session_stop, retry_state, lock)
-
-    sender.close()
-    assert tx_file.exists()
-    assert float(tx_file.read_text()) == 1711900000.0
-
-
 def test_forward_virtual_to_real_uses_serial_write_lock():
     session, _auto_mode, _logger = _build_session()
     session_stop = threading.Event()
@@ -874,3 +718,47 @@ def test_forward_virtual_to_real_uses_serial_write_lock():
     session.forward_virtual_to_real(FakeVirt(), FakeReal(), session_stop, retry_state, lock)
 
     assert lock_held_during_write[0] is True
+
+
+def _thread_names_started_by_one_run(session) -> list[str]:
+    """Drive `run` through a single poll and report what it put on threads."""
+    started: list[str] = []
+
+    class FakePort:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self, _n): return b""
+        def write(self, _d): pass
+        @property
+        def dsr(self): return True
+
+    def _start(*, target, args, name):
+        started.append(name)
+        thread = threading.Thread(target=lambda: None, daemon=True)
+        thread.start()
+        return thread
+
+    session.serial_factory = lambda *a, **kw: FakePort()
+    session.sleep = lambda _s: session.stop_event.set()
+    session.start_thread = _start
+    session.run(object())
+    return started
+
+
+def test_a_configured_tcode_port_gets_a_listener_thread():
+    """Genau's datagrams arrive on a thread of their own, and nothing else in
+    the suite starts one -- so without this the port could stop being listened
+    on and every other test would stay green."""
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=50557)
+
+    assert _thread_names_started_by_one_run(session) == [
+        "broker-real", "broker-virtual", "broker-tcode-udp",
+    ]
+
+
+def test_no_tcode_port_means_no_listener_thread():
+    """Port 0 is how the listener is turned off; binding it would take an
+    ephemeral port nobody can address and spin a thread on nothing."""
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=0)
+
+    assert _thread_names_started_by_one_run(session) == ["broker-real", "broker-virtual"]
