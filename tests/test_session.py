@@ -233,6 +233,32 @@ def test_handle_broker_command_toggles_genau_enablement():
     logger.info.assert_not_called()
 
 
+def test_a_verb_the_broker_does_not_know_is_ignored():
+    """The command file is a shared channel: fun_time, genau and clipper all
+    write into it, and one of them growing a verb this broker has no handler for
+    must be a no-op, not a crash inside the 50 ms tick."""
+    session, auto_mode, logger = _build_session()
+
+    session.handle_broker_command("TELEPORT", object())
+
+    assert auto_mode.set_enabled_calls == []
+    assert not session.broker_paused.is_set()
+    logger.info.assert_not_called()
+    logger.warning.assert_not_called()
+
+
+def test_an_empty_tick_with_no_command_is_a_no_op():
+    """Almost every tick reads no command at all -- twenty times a second, all
+    session long -- so `None` has to fall through the whole table quietly."""
+    session, auto_mode, logger = _build_session()
+
+    session.handle_broker_command(None, object())
+
+    assert auto_mode.set_enabled_calls == []
+    assert not session.broker_paused.is_set()
+    logger.info.assert_not_called()
+
+
 def test_sync_genau_enabled_reads_shared_file_state():
     session, auto_mode, _logger = _build_session()
     session.read_genau_enabled = lambda _path: False

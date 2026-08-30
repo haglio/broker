@@ -4,6 +4,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
@@ -211,21 +212,47 @@ class BrokerSerialSession:
             self._tcode_window.mark()
 
     def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
-        if cmd == "PAUSE":
-            self.broker_paused.set()
-            self.logger.info("OmniPause: broker paused")
-        elif cmd == "RESUME":
-            self.broker_paused.clear()
-            self._holds.cancel()
-            self.logger.info("OmniPause: broker resumed")
-        elif cmd == "PARK":
-            self._holds.schedule(PARK, "OmniPause: park scheduled")
-        elif cmd == "RETRACT":
-            self._holds.schedule(RETRACT, "OmniPause: retract scheduled")
-        elif cmd == "GENAU_DISABLE":
-            self.auto_mode.set_enabled(udp_sock, False)
-        elif cmd == "GENAU_ENABLE":
-            self.auto_mode.set_enabled(udp_sock, True)
+        """Act on one verb off the command file, or on nothing at all.
+
+        Most ticks bring no command, and a sibling may write a verb this broker
+        has no handler for; both fall through to a no-op.
+        """
+        verb = self._VERBS.get(cmd)
+        if verb is not None:
+            verb(self, udp_sock)
+
+    def _pause(self, _udp_sock) -> None:
+        self.broker_paused.set()
+        self.logger.info("OmniPause: broker paused")
+
+    def _resume(self, _udp_sock) -> None:
+        self.broker_paused.clear()
+        self._holds.cancel()
+        self.logger.info("OmniPause: broker resumed")
+
+    def _park(self, _udp_sock) -> None:
+        self._holds.schedule(PARK, "OmniPause: park scheduled")
+
+    def _retract(self, _udp_sock) -> None:
+        self._holds.schedule(RETRACT, "OmniPause: retract scheduled")
+
+    def _genau_disable(self, udp_sock) -> None:
+        self.auto_mode.set_enabled(udp_sock, False)
+
+    def _genau_enable(self, udp_sock) -> None:
+        self.auto_mode.set_enabled(udp_sock, True)
+
+    # The whole vocabulary, in one place. fun_time, genau and clipper write
+    # these into broker_cmd.txt; command_file.py upper-cases whatever it reads,
+    # so the keys are the verbs as they arrive.
+    _VERBS = MappingProxyType({
+        "PAUSE": _pause,
+        "RESUME": _resume,
+        "PARK": _park,
+        "RETRACT": _retract,
+        "GENAU_DISABLE": _genau_disable,
+        "GENAU_ENABLE": _genau_enable,
+    })
 
     def sync_genau_enabled(self, udp_sock) -> None:
         enabled = self.read_genau_enabled(self.genau_enabled_file)
