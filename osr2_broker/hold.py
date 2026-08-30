@@ -118,9 +118,6 @@ class HoldScheduler:
                 return None
             hold = self._pending
             self._pending_time = None
-        if real_port is None or serial_write_lock is None:
-            self._logger.warning("Hold fired but serial port not available")
-            return None
         with serial_write_lock:
             real_port.write(hold.tcode)
         self._logger.info(hold.fired_message)

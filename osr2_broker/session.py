@@ -36,9 +36,10 @@ class BrokerSerialSession:
         read_genau_enabled,
         rx_activity: ActivityStamp,
         tx_activity: ActivityStamp,
+        connected_event: threading.Event,
+        is_retryable_error,
         monotonic=time.monotonic,
         sleep=time.sleep,
-        is_retryable_error=None,
         tcode_udp_port: int = 0,
     ):
         self.serial_factory = serial_factory
@@ -57,8 +58,8 @@ class BrokerSerialSession:
         self.read_genau_enabled = read_genau_enabled
         self.monotonic = monotonic
         self.sleep = sleep
-        self.is_retryable_error = is_retryable_error or (lambda _exc: False)
-        self.connected_event: threading.Event | None = None
+        self.is_retryable_error = is_retryable_error
+        self.connected_event = connected_event
         self.last_real_rx_time = 0.0
         self.poll_interval_seconds = 0.05
         self._rx_activity = rx_activity
@@ -98,8 +99,7 @@ class BrokerSerialSession:
             ) as real:
                 self.last_real_rx_time = 0.0
                 virt.write_timeout = 0.1
-                if self.connected_event is not None:
-                    self.connected_event.set()
+                self.connected_event.set()
                 try:
                     thread_real = self.start_thread(
                         target=self.forward_real_to_virtual,
@@ -143,8 +143,7 @@ class BrokerSerialSession:
             self.logger.exception("Failed to open or run serial session")
             retry_state.value = self.is_retryable_error(exc)
         finally:
-            if self.connected_event is not None:
-                self.connected_event.clear()
+            self.connected_event.clear()
 
         return peer_disconnected or retry_state.value
 
@@ -177,7 +176,7 @@ class BrokerSerialSession:
                 return
 
     def forward_virtual_to_real(self, virt, real, session_stop, retry_state: SessionRetryState,
-                               serial_write_lock: threading.Lock | None = None) -> None:
+                                serial_write_lock: threading.Lock) -> None:
         while not self.stop_event.is_set() and not session_stop.is_set():
             try:
                 queued = virt.in_waiting
@@ -187,10 +186,7 @@ class BrokerSerialSession:
                 if (not self.auto_mode.is_active
                         and not self._tcode_window.is_open()
                         and not self._holds.suppresses_mfp()):
-                    if serial_write_lock is not None:
-                        with serial_write_lock:
-                            real.write(data)
-                    else:
+                    with serial_write_lock:
                         real.write(data)
                     if queued:
                         self._tx_activity.mark()
@@ -200,8 +196,7 @@ class BrokerSerialSession:
                 session_stop.set()
                 return
 
-    def tick_command_and_stale_timeout(self, udp_sock, *,
-                                       real_port=None, serial_write_lock=None) -> None:
+    def tick_command_and_stale_timeout(self, udp_sock, *, real_port, serial_write_lock) -> None:
         cmd = self.consume_command(self.broker_cmd_file)
         self.handle_broker_command(cmd, udp_sock)
         self.sync_genau_enabled(udp_sock)

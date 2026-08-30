@@ -59,6 +59,7 @@ class FakeAutoMode:
 
 def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
                     rx_activity=None, tx_activity=None,
+                    is_retryable_error=lambda _exc: False,
                     tcode_udp_port: int = 0):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = MagicMock()
@@ -80,6 +81,8 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         monotonic=monotonic,
         rx_activity=rx_activity or StampSpy(),
         tx_activity=tx_activity or StampSpy(),
+        connected_event=threading.Event(),
+        is_retryable_error=is_retryable_error,
         tcode_udp_port=tcode_udp_port,
     )
     return session, auto_mode, logger
@@ -387,7 +390,7 @@ def test_forward_virtual_to_real_skips_writes_while_auto_is_active():
     real = FakeReal()
     virt = FakeVirt()
 
-    session.forward_virtual_to_real(virt, real, session_stop, retry_state)
+    session.forward_virtual_to_real(virt, real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == []
     assert retry_state.value is False
@@ -415,7 +418,7 @@ def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
             self.writes.append(data)
 
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == []
 
@@ -442,7 +445,7 @@ def test_forward_virtual_to_real_allows_writes_when_tcode_udp_idle():
             self.writes.append(data)
 
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L05000\n"]
 
@@ -474,7 +477,7 @@ def test_park_suppression_heals_when_mfp_active_after_grace():
 
     clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS + 0.1  # past grace
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L05000\n"]
 
@@ -505,7 +508,7 @@ def test_park_suppression_holds_within_grace_window():
 
     clock[0] = 100.0 + 1.0  # still within grace
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == []
 
@@ -539,9 +542,84 @@ def test_resume_hands_mfp_back_without_waiting_out_the_grace():
 
     clock[0] = 100.0 + 1.0  # still well inside the grace window
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L05000\n"]
+
+
+def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
+    """The heartbeat file is only written while this event is set, and fun_time
+    reads that file to decide whether the broker is alive. Only the clearing
+    half was pinned, so a session that never set it would have looked fine here
+    and shown up as a broker that never starts."""
+    session, _auto_mode, _logger = _build_session()
+    seen_inside: list[bool] = []
+
+    class FakePort:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self, _n): return b""
+        def write(self, _d): pass
+        @property
+        def dsr(self): return True
+
+    def _sleep(_seconds):
+        seen_inside.append(session.connected_event.is_set())
+        session.stop_event.set()
+
+    session.serial_factory = lambda *a, **kw: FakePort()
+    session.sleep = _sleep
+    session.start_thread = lambda *, target, args, name: threading.Thread(
+        target=lambda: None, daemon=True,
+    )
+
+    session.run(object())
+
+    assert seen_inside == [True]
+    assert not session.connected_event.is_set()
+
+
+def test_a_retryable_read_error_asks_the_caller_for_another_session():
+    """The classifier is the caller's -- app.py's is_retryable_serial_error --
+    and the forwarding thread's only job is to run it over what it caught and
+    put the answer where `run` will return it."""
+    session, _auto_mode, _logger = _build_session(is_retryable_error=lambda _exc: True)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            raise OSError("the port went away")
+
+    class FakeVirt:
+        def write(self, _data): pass
+
+    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
+
+    assert retry_state.value is True
+    assert session_stop.is_set()
+
+
+def test_an_unretryable_read_error_ends_the_session_for_good():
+    session, _auto_mode, _logger = _build_session(is_retryable_error=lambda _exc: False)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            raise OSError("the port went away")
+
+    class FakeVirt:
+        def write(self, _data): pass
+
+    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
+
+    assert retry_state.value is False
+    assert session_stop.is_set()
 
 
 def test_session_stops_when_peer_disconnects():
@@ -566,12 +644,9 @@ def test_session_stops_when_peer_disconnects():
         return t
     session.start_thread = _fake_start_thread
 
-    connected = threading.Event()
-    session.connected_event = connected
-
     should_retry = session.run(object())
 
-    assert not connected.is_set()
+    assert not session.connected_event.is_set()
     assert should_retry is True
 
 
@@ -604,10 +679,7 @@ def test_session_stays_alive_when_peer_never_connected():
         return t
     session.start_thread = _fake_start_thread
 
-    connected = threading.Event()
-    session.connected_event = connected
-
-    should_retry = session.run(object())
+    session.run(object())
 
     assert poll_count >= 5
 
@@ -659,7 +731,7 @@ def test_forward_virtual_to_real_writes_activity_tx_file(tmp_path):
             self.writes.append(data)
 
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L0500\n"]
     assert tx_file.exists()
@@ -715,8 +787,6 @@ def test_peer_disconnect_retries_despite_thread_teardown_error():
         t.start()
         return t
     session.start_thread = _start
-
-    session.connected_event = threading.Event()
 
     should_retry = session.run(object())
 

@@ -111,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     genau_enabled = read_genau_enabled(genau_enabled_file)
     stop_event = threading.Event()
     broker_paused = threading.Event()
+    connected = threading.Event()
     auto_mode = BrokerAutoController(
         state_file=state_file,
         udp_host=config.udp_host,
@@ -140,13 +141,12 @@ def main(argv: list[str] | None = None) -> int:
         is_retryable_error=is_retryable_serial_error,
         rx_activity=ActivityStamp(config.osr2_serial_rx_file),
         tx_activity=ActivityStamp(config.osr2_serial_tx_file),
+        connected_event=connected,
         tcode_udp_port=config.tcode_udp_port,
     )
 
     write_mode(state_file, "0", logger)
 
-    connected = threading.Event()
-    session.connected_event = connected
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     heartbeat_thread = start_daemon_thread(
         target=heartbeat_loop,

@@ -111,6 +111,8 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
         read_genau_enabled=lambda _path: True,
         rx_activity=ActivityStamp(tmp_path / "osr2_serial_rx.txt"),
         tx_activity=ActivityStamp(tmp_path / "osr2_serial_tx.txt"),
+        connected_event=threading.Event(),
+        is_retryable_error=lambda _exc: False,
         monotonic=lambda: clock[0],
     )
     real_port = MagicMock()
