@@ -49,6 +49,23 @@ def test_a_second_mark_inside_the_interval_leaves_the_file_alone(tmp_path: Path)
     assert path.read_text(encoding="utf-8") == "1711900000.0"
 
 
+def test_a_failed_write_still_spends_the_interval(tmp_path: Path):
+    """The throttle is advanced before the write is attempted, so a directory
+    that has gone away costs one stamp rather than turning the throttle off and
+    putting a write attempt on every byte off the serial port until it comes
+    back."""
+    path = tmp_path / "gone" / "osr2_serial_rx.txt"
+    now = [1711900000.0]
+    stamp = ActivityStamp(path, wall_clock=lambda: now[0])
+
+    stamp.mark()  # the parent does not exist yet, so this one cannot land
+    path.parent.mkdir()
+    now[0] += ActivityStamp.WRITE_INTERVAL_SECONDS - 0.1
+    stamp.mark()
+
+    assert not path.exists()
+
+
 def test_a_file_that_cannot_be_written_does_not_reach_the_forwarding_loop(tmp_path: Path):
     """The stamp is a courtesy to the monitor, and it is marked from inside the
     two loops that carry the serial traffic. A state directory that has gone away

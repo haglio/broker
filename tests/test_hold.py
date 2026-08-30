@@ -149,6 +149,62 @@ def test_a_second_hold_replaces_the_one_still_waiting_out_its_delay():
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
+def test_the_hold_is_written_under_the_caller_s_serial_lock():
+    """Three threads write to the one serial port -- the MFP forwarder, the
+    T-Code listener and this. The lock is what keeps a hold's ten bytes from
+    landing interleaved with a T-Code line, which the device would read as
+    neither."""
+    clock = [10.0]
+    holds, _logger = _build(clock)
+    lock = threading.Lock()
+    held_during_write = []
+
+    class FakeReal:
+        def write(self, _data):
+            held_during_write.append(lock.locked())
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 11.0
+    holds.fire_due(FakeReal(), lock)
+
+    assert held_during_write == [True]
+
+
+def test_the_settle_delay_is_one_second():
+    """Both bounds as literals rather than off DELAY_SECONDS, which would let
+    the constant shrink to zero with every test still green. The delay is what
+    the mute is for: shorten it and the hold is written into the script tail it
+    was meant to outlast."""
+    clock = [10.0]
+    holds, _logger = _build(clock)
+    real_port = MagicMock()
+    lock = threading.Lock()
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+
+    clock[0] = 10.9
+    assert holds.fire_due(real_port, lock) is None
+
+    clock[0] = 11.0
+    assert holds.fire_due(real_port, lock) is PARK
+
+
+def test_the_mute_grace_is_five_seconds():
+    """Likewise on both sides with literals. Too short and MFP undoes the hold;
+    too long and a lost RESUME leaves the device unable to move for as long as
+    the number says."""
+    clock = [10.0]
+    holds, _logger = _build(clock)
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+
+    clock[0] = 14.9
+    assert holds.suppresses_mfp() is True
+
+    clock[0] = 15.0
+    assert holds.suppresses_mfp() is False
+
+
 def test_a_park_arriving_mid_check_keeps_the_mute_it_just_asked_for():
     """broker/all/design/004, reconstructed: two threads, one latch, no lock.
 
