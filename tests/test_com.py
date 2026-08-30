@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app_support.threading_utils import wait_until
+from osr2_broker.activity import ActivityStamp
 from osr2_broker.protocol import BrokerAutoController
 from osr2_broker.session import BrokerSerialSession
 
@@ -177,6 +178,8 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         start_thread=_start_real_thread,
         consume_command=lambda _path: None,
         read_genau_enabled=lambda _path: enabled,
+        rx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_rx.txt"),
+        tx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_tx.txt"),
         monotonic=clock,
         # Not a no-op: with nothing to read the run loop and both forwarding
         # threads would spin at full tilt for as long as the test lasts. A

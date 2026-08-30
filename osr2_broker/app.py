@@ -13,6 +13,7 @@ from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
 
+from .activity import ActivityStamp
 from .ports import resolve_virtual_port, ensure_mfp_serial_port
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
@@ -137,8 +138,8 @@ def main(argv: list[str] | None = None) -> int:
         monotonic=time.monotonic,
         sleep=time.sleep,
         is_retryable_error=is_retryable_serial_error,
-        activity_rx_file=config.osr2_serial_rx_file,
-        activity_tx_file=config.osr2_serial_tx_file,
+        rx_activity=ActivityStamp(config.osr2_serial_rx_file),
+        tx_activity=ActivityStamp(config.osr2_serial_tx_file),
         tcode_udp_port=config.tcode_udp_port,
     )
 

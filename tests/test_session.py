@@ -5,7 +5,23 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from osr2_broker.activity import ActivityStamp
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
+
+
+class StampSpy:
+    """Stands in for an ActivityStamp where the test is not about the stamp.
+
+    The stamp's own file, throttle and clock are covered in
+    tests/test_activity.py; the tests here that do care about what lands on disk
+    hand the session a real ActivityStamp over a tmp_path instead.
+    """
+
+    def __init__(self):
+        self.marks = 0
+
+    def mark(self) -> None:
+        self.marks += 1
 
 
 class FakeAutoMode:
@@ -41,7 +57,7 @@ class FakeAutoMode:
 
 
 def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
-                    activity_rx_file=None, activity_tx_file=None,
+                    rx_activity=None, tx_activity=None,
                     tcode_udp_port: int = 0):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = MagicMock()
@@ -61,8 +77,8 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         consume_command=lambda _path: None,
         read_genau_enabled=lambda _path: True,
         monotonic=monotonic,
-        activity_rx_file=activity_rx_file,
-        activity_tx_file=activity_tx_file,
+        rx_activity=rx_activity or StampSpy(),
+        tx_activity=tx_activity or StampSpy(),
         tcode_udp_port=tcode_udp_port,
     )
     return session, auto_mode, logger
@@ -539,11 +555,10 @@ def test_session_stays_alive_when_peer_never_connected():
 
 def test_forward_real_to_virtual_writes_activity_rx_file(tmp_path):
     rx_file = tmp_path / "osr2_serial_rx.txt"
-    wall = [1711900000.0]
     session, _auto_mode, _logger = _build_session(
-        monotonic=lambda: 12.5, activity_rx_file=rx_file,
+        monotonic=lambda: 12.5,
+        rx_activity=ActivityStamp(rx_file, wall_clock=lambda: 1711900000.0),
     )
-    session._wall_clock = lambda: wall[0]
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -565,11 +580,9 @@ def test_forward_real_to_virtual_writes_activity_rx_file(tmp_path):
 
 def test_forward_virtual_to_real_writes_activity_tx_file(tmp_path):
     tx_file = tmp_path / "osr2_serial_tx.txt"
-    wall = [1711900000.0]
     session, _auto_mode, _logger = _build_session(
-        activity_tx_file=tx_file,
+        tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
     )
-    session._wall_clock = lambda: wall[0]
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -649,25 +662,6 @@ def test_peer_disconnect_retries_despite_thread_teardown_error():
     should_retry = session.run(object())
 
     assert should_retry is True
-
-
-def test_activity_file_not_written_when_path_is_none():
-    session, _auto_mode, _logger = _build_session(monotonic=lambda: 12.5)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    class FakeReal:
-        def __init__(self):
-            self.in_waiting = 1
-        def read(self, _size):
-            session_stop.set()
-            return b"data\n"
-
-    class FakeVirt:
-        def write(self, data): pass
-
-    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
-    assert session.last_real_rx_time == 12.5
 
 
 def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threading.Event) -> None:
@@ -808,11 +802,10 @@ def test_forward_udp_tcode_to_real_writes_activity_tx(tmp_path):
     listener.close()
 
     tx_file = tmp_path / "osr2_serial_tx.txt"
-    wall = [1711900000.0]
     session, _auto_mode, _logger = _build_session(
-        tcode_udp_port=port, activity_tx_file=tx_file,
+        tcode_udp_port=port,
+        tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
     )
-    session._wall_clock = lambda: wall[0]
     session_stop = threading.Event()
     retry_state = SessionRetryState()
     lock = threading.Lock()
