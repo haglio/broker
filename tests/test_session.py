@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from osr2_broker.activity import ActivityStamp
+from osr2_broker.hold import HoldScheduler
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
 
 
@@ -102,15 +103,16 @@ def test_park_schedules_delayed_write():
     session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("PARK", object())
+    session.handle_broker_command("PARK", sock)
     # Not written yet — still pending
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
     # Advance past the delay
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
@@ -119,10 +121,11 @@ def test_park_suppresses_mfp_forwarding():
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("PARK", object())
+    session.handle_broker_command("PARK", sock)
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     assert session._last_tcode_udp_time == 12.0
 
 
@@ -131,11 +134,12 @@ def test_resume_cancels_pending_park():
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("PARK", object())
-    session.handle_broker_command("RESUME", object())
+    session.handle_broker_command("PARK", sock)
+    session.handle_broker_command("RESUME", sock)
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
 
@@ -150,12 +154,14 @@ def test_retract_schedules_the_far_end_instead_of_home():
     real_port = MagicMock()
     lock = threading.Lock()
 
-    session.handle_broker_command("RETRACT", object())
-    session._maybe_fire_hold(real_port, lock)
+    sock = object()
+
+    session.handle_broker_command("RETRACT", sock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
@@ -165,10 +171,11 @@ def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
     clock = [10.0]
     session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("RETRACT", object())
+    session.handle_broker_command("RETRACT", sock)
     clock[0] = 12.0
-    session._maybe_fire_hold(MagicMock(), lock)
+    session.tick_command_and_stale_timeout(sock, real_port=MagicMock(), serial_write_lock=lock)
 
     fired = [call.args[0] for call in logger.info.call_args_list]
     assert any("retracting" in msg and "9999" in msg for msg in fired), fired
@@ -186,27 +193,13 @@ def test_auto_mode_deactivation_schedules_park():
     session.last_real_rx_time = 7.0
     session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
 
-    # Park should be pending now (auto went inactive)
-    assert session._pending_hold_time is not None
+    # Park is pending now (auto went inactive), and the settle delay is not up
     real_port.write.assert_not_called()
 
     # Advance past delay
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
-
-
-def test_park_suppresses_virtual_to_real_forwarding():
-    session, _auto_mode, _logger = _build_session()
-    session.handle_broker_command("PARK", object())
-    assert session._hold_suppressed_since is not None
-
-
-def test_resume_clears_mfp_suppression():
-    session, _auto_mode, _logger = _build_session()
-    session.handle_broker_command("PARK", object())
-    session.handle_broker_command("RESUME", object())
-    assert session._hold_suppressed_since is None
 
 
 def test_auto_mode_deactivation_between_ticks_schedules_park():
@@ -222,7 +215,11 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
 
     # Next tick should detect the deactivation via the flag
     session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
-    assert session._pending_hold_time is not None
+    real_port.write.assert_not_called()
+
+    clock[0] = 12.0
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
 def test_handle_broker_command_toggles_genau_enablement():
@@ -445,12 +442,11 @@ def test_park_suppression_heals_when_mfp_active_after_grace():
         def write(self, data: bytes):
             self.writes.append(data)
 
-    clock[0] = 100.0 + session._HOLD_SUPPRESS_GRACE_SECONDS + 0.1  # past grace
+    clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS + 0.1  # past grace
     real = FakeReal()
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
 
     assert real.writes == [b"L05000\n"]
-    assert session._hold_suppressed_since is None
 
 
 def test_park_suppression_holds_within_grace_window():
@@ -482,7 +478,40 @@ def test_park_suppression_holds_within_grace_window():
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
 
     assert real.writes == []
-    assert session._hold_suppressed_since is not None
+
+
+def test_resume_hands_mfp_back_without_waiting_out_the_grace():
+    """RESUME undoes the whole hold. Cancelling only the pending write would
+    leave MFP muted for the rest of the grace window with nothing on the way to
+    clear it -- the user asks for motion and the device stays still."""
+    clock = [100.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    sock = object()
+    session.handle_broker_command("PARK", sock)
+    session.handle_broker_command("RESUME", sock)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"L05000\n"
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    clock[0] = 100.0 + 1.0  # still well inside the grace window
+    real = FakeReal()
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+
+    assert real.writes == [b"L05000\n"]
 
 
 def test_session_stops_when_peer_disconnects():
