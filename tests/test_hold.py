@@ -13,6 +13,10 @@ from unittest.mock import MagicMock
 from osr2_broker.hold import PARK, RETRACT, HoldScheduler
 
 
+def _nothing() -> None:
+    """The `on_written` hook, where a test is not about what it records."""
+
+
 def _build(clock: list[float]):
     logger = MagicMock()
     return HoldScheduler(monotonic=lambda: clock[0], logger=logger), logger
@@ -25,12 +29,12 @@ def test_a_scheduled_hold_is_not_written_until_the_settle_delay_has_passed():
     lock = threading.Lock()
 
     holds.schedule(PARK, "OmniPause: park scheduled")
-    holds.fire_due(real_port, lock)
+    holds.fire_due(real_port, lock, _nothing)
 
     real_port.write.assert_not_called()
 
     clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
-    holds.fire_due(real_port, lock)
+    holds.fire_due(real_port, lock, _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
@@ -88,7 +92,7 @@ def test_cancelling_drops_both_the_pending_write_and_the_mute():
     holds.cancel()
     clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
 
-    assert holds.fire_due(real_port, threading.Lock()) is None
+    assert holds.fire_due(real_port, threading.Lock(), _nothing) is None
     real_port.write.assert_not_called()
     assert holds.suppresses_mfp() is False
 
@@ -105,7 +109,7 @@ def test_a_handover_park_is_scheduled_without_muting_mfp():
     assert holds.suppresses_mfp() is False
 
     clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
-    holds.fire_due(real_port, threading.Lock())
+    holds.fire_due(real_port, threading.Lock(), _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
@@ -119,11 +123,11 @@ def test_a_fired_hold_is_handed_back_to_the_caller():
 
     holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
-    assert holds.fire_due(MagicMock(), lock) is None
+    assert holds.fire_due(MagicMock(), lock, _nothing) is None
 
     clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
 
-    assert holds.fire_due(MagicMock(), lock) is RETRACT
+    assert holds.fire_due(MagicMock(), lock, _nothing) is RETRACT
 
 
 def test_a_second_hold_replaces_the_one_still_waiting_out_its_delay():
@@ -141,11 +145,11 @@ def test_a_second_hold_replaces_the_one_still_waiting_out_its_delay():
     holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
     clock[0] = 11.0  # when the park would have fired, had it survived
-    holds.fire_due(real_port, lock)
+    holds.fire_due(real_port, lock, _nothing)
     real_port.write.assert_not_called()
 
     clock[0] = 11.5
-    holds.fire_due(real_port, lock)
+    holds.fire_due(real_port, lock, _nothing)
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
@@ -165,9 +169,28 @@ def test_the_hold_is_written_under_the_caller_s_serial_lock():
 
     holds.schedule(PARK, "OmniPause: park scheduled")
     clock[0] = 11.0
-    holds.fire_due(FakeReal(), lock)
+    holds.fire_due(FakeReal(), lock, _nothing)
 
     assert held_during_write == [True]
+
+
+def test_the_direct_write_is_recorded_before_the_hold_is_logged():
+    """The MFP forwarding thread can run the instant the serial lock is
+    released, and it decides whether to forward by asking whether the device was
+    driven directly just now. Recording that after the log line -- a file
+    handler, a disk write, a rotation every megabyte -- leaves a window in which
+    the script tail is forwarded straight over the position just set."""
+    clock = [10.0]
+    holds, logger = _build(clock)
+    order: list[str] = []
+    logger.info.side_effect = lambda *_a: order.append("logged")
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    order.clear()
+    clock[0] = 11.0
+    holds.fire_due(MagicMock(), threading.Lock(), lambda: order.append("recorded"))
+
+    assert order == ["recorded", "logged"]
 
 
 def test_the_settle_delay_is_one_second():
@@ -183,10 +206,10 @@ def test_the_settle_delay_is_one_second():
     holds.schedule(PARK, "OmniPause: park scheduled")
 
     clock[0] = 10.9
-    assert holds.fire_due(real_port, lock) is None
+    assert holds.fire_due(real_port, lock, _nothing) is None
 
     clock[0] = 11.0
-    assert holds.fire_due(real_port, lock) is PARK
+    assert holds.fire_due(real_port, lock, _nothing) is PARK
 
 
 def test_the_mute_grace_is_five_seconds():
@@ -259,7 +282,7 @@ def test_a_hold_fires_once_and_is_not_replayed_on_the_next_tick():
 
     holds.schedule(PARK, "OmniPause: park scheduled")
     clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
-    holds.fire_due(real_port, lock)
-    holds.fire_due(real_port, lock)
+    holds.fire_due(real_port, lock, _nothing)
+    holds.fire_due(real_port, lock, _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I500\n")

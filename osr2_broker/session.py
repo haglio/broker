@@ -203,8 +203,7 @@ class BrokerSerialSession:
         self.maybe_disable_stale_auto(udp_sock)
         if self.auto_mode.consume_deactivation():
             self._holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
-        if self._holds.fire_due(real_port, serial_write_lock) is not None:
-            self._tcode_window.mark()
+        self._holds.fire_due(real_port, serial_write_lock, self._tcode_window.mark)
 
     def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
         """Act on one verb off the command file, or on nothing at all.

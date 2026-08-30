@@ -110,7 +110,15 @@ class HoldScheduler:
         self._logger.info("MFP active after hold grace; resuming forwarding")
         return False
 
-    def fire_due(self, real_port, serial_write_lock) -> Hold | None:
+    def fire_due(self, real_port, serial_write_lock, on_written) -> Hold | None:
+        """Write the pending hold if its delay has elapsed, and say which it was.
+
+        `on_written` runs between the write and the log line, and is where the
+        caller records that the device was just driven directly. It has to be
+        there and not after the return: the MFP forwarding thread is free to run
+        the moment `serial_write_lock` is released, and until that record exists
+        it will forward the script tail straight over the position just set.
+        """
         with self._lock:
             if self._pending_time is None:
                 return None
@@ -120,5 +128,6 @@ class HoldScheduler:
             self._pending_time = None
         with serial_write_lock:
             real_port.write(hold.tcode)
+        on_written()
         self._logger.info(hold.fired_message)
         return hold
