@@ -6,6 +6,7 @@ the gap, and the in-flight tail cannot immediately undo the move.
 """
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 
 
@@ -29,6 +30,20 @@ RETRACT = Hold(b"L09999I500\n", "OmniPause: retracting OSR2 to position 9999")
 
 
 class HoldScheduler:
+    """The pending hold and the mute latch, guarded.
+
+    Two threads reach in. The main tick schedules, cancels and fires; the
+    broker-virtual forwarding thread asks whether MFP is muted -- and that
+    question is a read, a comparison against the clock and a clear, which is
+    long enough for a PARK to land in the middle of it and be thrown away
+    (tests/test_hold.py reconstructs it). So every touch of the three fields is
+    under one lock, matching what the sibling BrokerAutoController already does
+    with its own flags.
+
+    Nothing that can block is done while holding it: the log lines and the
+    serial write are outside, the latter also because it takes a second lock.
+    """
+
     DELAY_SECONDS = 1.0
     # After a hold is scheduled, MFP forwarding is muted for this long to swallow
     # the in-flight script tail. Past it, live MFP data self-heals the mute so a
@@ -38,6 +53,7 @@ class HoldScheduler:
     def __init__(self, *, monotonic, logger):
         self._monotonic = monotonic
         self._logger = logger
+        self._lock = threading.Lock()
         self._pending: Hold = PARK
         self._pending_time: float | None = None
         self._suppressed_since: float | None = None
@@ -48,8 +64,9 @@ class HoldScheduler:
         The mute starts now and the write lands a delay later, so the script
         feed's tail is swallowed before the device is told where to go.
         """
-        self._arm(hold)
-        self._suppressed_since = self._monotonic()
+        with self._lock:
+            self._arm(hold)
+            self._suppressed_since = self._monotonic()
         self._logger.info(message)
 
     def schedule_without_muting(self, hold: Hold, message: str) -> None:
@@ -58,17 +75,20 @@ class HoldScheduler:
         Auto mode letting go is not OmniPause: MFP is what takes the device
         back, so there is nothing here to swallow.
         """
-        self._arm(hold)
+        with self._lock:
+            self._arm(hold)
         self._logger.info(message)
 
     def _arm(self, hold: Hold) -> None:
+        """Called with the lock held."""
         self._pending = hold
         self._pending_time = self._monotonic() + self.DELAY_SECONDS
 
     def cancel(self) -> None:
         """Drop the pending write and let the mute go — what RESUME means."""
-        self._pending_time = None
-        self._suppressed_since = None
+        with self._lock:
+            self._pending_time = None
+            self._suppressed_since = None
 
     def suppresses_mfp(self) -> bool:
         """Whether a scheduled hold is currently muting MFP->OSR2 forwarding.
@@ -80,22 +100,24 @@ class HoldScheduler:
         the user wants motion, so the latch self-heals rather than waiting on a
         RESUME that may never arrive.
         """
-        since = self._suppressed_since
-        if since is None:
-            return False
-        if self._monotonic() - since < self.SUPPRESS_GRACE_SECONDS:
-            return True
-        self._suppressed_since = None
+        with self._lock:
+            since = self._suppressed_since
+            if since is None:
+                return False
+            if self._monotonic() - since < self.SUPPRESS_GRACE_SECONDS:
+                return True
+            self._suppressed_since = None
         self._logger.info("MFP active after hold grace; resuming forwarding")
         return False
 
     def fire_due(self, real_port, serial_write_lock) -> Hold | None:
-        if self._pending_time is None:
-            return None
-        if self._monotonic() < self._pending_time:
-            return None
-        hold = self._pending
-        self._pending_time = None
+        with self._lock:
+            if self._pending_time is None:
+                return None
+            if self._monotonic() < self._pending_time:
+                return None
+            hold = self._pending
+            self._pending_time = None
         if real_port is None or serial_write_lock is None:
             self._logger.warning("Hold fired but serial port not available")
             return None

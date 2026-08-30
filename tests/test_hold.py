@@ -126,6 +126,52 @@ def test_a_fired_hold_is_handed_back_to_the_caller():
     assert holds.fire_due(MagicMock(), lock) is RETRACT
 
 
+def test_a_park_arriving_mid_check_keeps_the_mute_it_just_asked_for():
+    """broker/all/design/004, reconstructed: two threads, one latch, no lock.
+
+    `suppresses_mfp` reads the latch, compares it against the clock, and clears
+    it -- three steps, and the broker-virtual thread runs them while the main
+    tick is free to schedule a hold. A PARK that lands between the comparison
+    and the clear is written to a latch the reader is about to overwrite with
+    None, so the park goes out to the device with MFP unmuted and the script
+    tail immediately undoes it. The user pressed park and the device carried on.
+
+    The interleaving is driven rather than raced: the clock the reader consults
+    *is* the comparison step, so blocking inside it puts the reader exactly
+    where the window is. Under a lock the tick cannot get in, so it is still
+    waiting when the reader lets go -- `_slipped_in` is the ceiling on that
+    wait, and it is only ever spent on the green path.
+    """
+    clock = [100.0]
+    at_the_comparison = threading.Event()
+    _slipped_in = threading.Event()
+
+    def monotonic() -> float:
+        if threading.current_thread().name == "broker-virtual":
+            at_the_comparison.set()
+            _slipped_in.wait(timeout=0.25)
+        return clock[0]
+
+    holds = HoldScheduler(monotonic=monotonic, logger=MagicMock())
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS  # that mute has expired
+
+    def tick():
+        at_the_comparison.wait(timeout=5.0)
+        holds.schedule(PARK, "OmniPause: park scheduled")  # a fresh mute
+        _slipped_in.set()
+
+    reader = threading.Thread(target=holds.suppresses_mfp, name="broker-virtual")
+    ticker = threading.Thread(target=tick, name="broker-session")
+    ticker.start()
+    reader.start()
+    reader.join(timeout=5.0)
+    ticker.join(timeout=5.0)
+
+    assert not reader.is_alive() and not ticker.is_alive()
+    assert holds.suppresses_mfp() is True
+
+
 def test_a_hold_fires_once_and_is_not_replayed_on_the_next_tick():
     clock = [10.0]
     holds, _logger = _build(clock)
