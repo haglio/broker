@@ -10,6 +10,18 @@ from osr2_broker.hold import HoldScheduler
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
 
 
+class NotActuallyRunning:
+    """What `start_thread` hands back when a test only needs `run` to get on.
+
+    `run` does nothing with a worker but join it, so a stub is enough -- and
+    starting real threads here would make these tests the first to fall over
+    when the process is already carrying the ones another test left spinning.
+    """
+
+    def join(self, timeout=None) -> None:
+        pass
+
+
 class StampSpy:
     """Stands in for an ActivityStamp where the test is not about the stamp.
 
@@ -569,9 +581,7 @@ def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
 
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = _sleep
-    session.start_thread = lambda *, target, args, name: threading.Thread(
-        target=lambda: None, daemon=True,
-    )
+    session.start_thread = lambda *, target, args, name: NotActuallyRunning()
 
     session.run(object())
 
@@ -817,7 +827,11 @@ def test_forward_virtual_to_real_uses_serial_write_lock():
 
 
 def _thread_names_started_by_one_run(session) -> list[str]:
-    """Drive `run` through a single poll and report what it put on threads."""
+    """Drive `run` through a single poll and report what it put on threads.
+
+    The names are recorded rather than run: `run` only ever joins what it is
+    handed back.
+    """
     started: list[str] = []
 
     class FakePort:
@@ -830,9 +844,7 @@ def _thread_names_started_by_one_run(session) -> list[str]:
 
     def _start(*, target, args, name):
         started.append(name)
-        thread = threading.Thread(target=lambda: None, daemon=True)
-        thread.start()
-        return thread
+        return NotActuallyRunning()
 
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = lambda _s: session.stop_event.set()
