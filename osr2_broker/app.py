@@ -5,7 +5,6 @@ import logging
 import socket
 import threading
 import time
-from pathlib import Path
 
 import serial
 
@@ -17,6 +16,12 @@ from .activity import ActivityStamp
 from .ports import resolve_virtual_port, ensure_mfp_serial_port
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
+from .state_files import (
+    ensure_genau_enabled_file,
+    heartbeat_loop,
+    read_genau_enabled,
+    write_mode,
+)
 from .config import load_config
 from .command_file import consume_command_file
 
@@ -27,50 +32,6 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="OSR2 serial broker with idle monitor.")
     ap.add_argument("--config", help="Path to a JSON config file.")
     return ap
-
-
-def write_mode(path: Path, value: str, logger: logging.Logger) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value, encoding="utf-8")
-    except Exception:
-        logger.exception("Failed to write mode file %s", path)
-
-
-def read_genau_enabled(path: Path) -> bool:
-    try:
-        if not path.exists():
-            return True
-        return path.read_text(encoding="utf-8").replace("\ufeff", "").strip() != "0"
-    except Exception:
-        return True
-
-
-def ensure_genau_enabled_file(path: Path, logger: logging.Logger) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists() or not path.read_text(encoding="utf-8").replace("\ufeff", "").strip():
-            path.write_text("1", encoding="utf-8")
-    except Exception:
-        logger.exception("Failed to initialize Genau enabled file %s", path)
-
-
-def write_heartbeat(path: Path, logger: logging.Logger) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(time.time()), encoding="utf-8")
-    except Exception:
-        logger.exception("Failed to write broker heartbeat %s", path)
-
-
-def heartbeat_loop(
-    path: Path, stop_event: threading.Event, logger: logging.Logger,
-    *, connected: threading.Event, sleep=time.sleep,
-) -> None:
-    while not stop_event.is_set():
-        if connected.is_set():
-            write_heartbeat(path, logger)
-        sleep(0.5)
 
 
 def udp_send(sock: socket.socket, host: str, port: int, msg: str) -> None:

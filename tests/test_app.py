@@ -5,7 +5,7 @@ import importlib
 import logging
 import sys
 import types
-from pathlib import Path
+from contextlib import ExitStack, contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -214,6 +214,46 @@ def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_p
     assert persisted["alerted"] is False
 
 
+@contextmanager
+def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=None,
+                  retry_delay_seconds=None):
+    """main(), with everything it installs process-wide held off.
+
+    `configure_logging` and `install_exception_logging` replace both excepthooks
+    and open a rotating file handler inside a state directory the test is about
+    to delete, so they are patched here rather than cleaned up afterwards; the
+    mutex is granted; the monitor's Win32 message pump is skipped; and `socket`
+    is a stand-in so no datagram leaves the machine. `sleep` is how a test ends
+    the run loop -- raising KeyboardInterrupt out of it is main()'s ordinary
+    shutdown path.
+    """
+    patches = [
+        patch.object(broker_app_module, "configure_logging",
+                     return_value=logging.getLogger("test.broker")),
+        patch.object(broker_app_module, "install_exception_logging"),
+        patch("osr2_broker.single_instance.try_acquire_mutex", return_value=42),
+        patch.object(broker_app_module, "resolve_virtual_port",
+                     side_effect=lambda _config, port, _logger: port),
+        patch.object(broker_app_module, "ensure_mfp_serial_port",
+                     side_effect=mfp_config_error),
+        patch.object(broker_app_module.serial, "Serial", side_effect=fake_serial),
+        patch.object(broker_app_module, "_start_monitor"),
+        patch.object(broker_app_module.time, "sleep", side_effect=sleep),
+    ]
+    if retry_delay_seconds is not None:
+        patches.append(
+            patch.object(broker_app_module, "SERIAL_RETRY_DELAY_SECONDS", retry_delay_seconds),
+        )
+    with ExitStack() as stack:
+        for each in patches:
+            stack.enter_context(each)
+        mock_socket_mod = stack.enter_context(patch.object(broker_app_module, "socket"))
+        mock_socket_mod.socket.return_value = FakeSocket()
+        mock_socket_mod.AF_INET = 2
+        mock_socket_mod.SOCK_DGRAM = 2
+        yield
+
+
 class TestMainReconnect:
     def test_retries_after_retryable_serial_open_failure(self, broker_app_module, cfg_path):
         open_ports: list[str] = []
@@ -228,19 +268,8 @@ class TestMainReconnect:
             if sleep_calls["count"] >= 4:
                 raise KeyboardInterrupt
 
-        with patch.object(broker_app_module, "configure_logging", return_value=logging.getLogger("test.broker")), \
-             patch.object(broker_app_module, "install_exception_logging"), \
-             patch("osr2_broker.single_instance.try_acquire_mutex", return_value=42), \
-             patch.object(broker_app_module, "resolve_virtual_port", side_effect=lambda _c, port, _l: port), \
-             patch.object(broker_app_module, "ensure_mfp_serial_port"), \
-             patch.object(broker_app_module.serial, "Serial", side_effect=FakeSerial), \
-             patch.object(broker_app_module, "socket") as mock_socket_mod, \
-             patch.object(broker_app_module, "_start_monitor"), \
-             patch.object(broker_app_module, "SERIAL_RETRY_DELAY_SECONDS", 0.0), \
-             patch.object(broker_app_module.time, "sleep", side_effect=fake_sleep):
-            mock_socket_mod.socket.return_value = FakeSocket()
-            mock_socket_mod.AF_INET = 2
-            mock_socket_mod.SOCK_DGRAM = 2
+        with _main_running(broker_app_module, fake_serial=FakeSerial, sleep=fake_sleep,
+                           retry_delay_seconds=0.0):
             result = broker_app_module.main(["--config", str(cfg_path)])
 
         assert result == 0
@@ -258,21 +287,8 @@ class TestMainSurvivesMfpConfigTrouble:
         def fake_sleep(_seconds):
             raise KeyboardInterrupt
 
-        with patch.object(broker_app_module, "configure_logging", return_value=logging.getLogger("test.broker")), \
-             patch.object(broker_app_module, "install_exception_logging"), \
-             patch("osr2_broker.single_instance.try_acquire_mutex", return_value=42), \
-             patch.object(broker_app_module, "resolve_virtual_port", side_effect=lambda _c, port, _l: port), \
-             patch.object(
-                 broker_app_module, "ensure_mfp_serial_port",
-                 side_effect=PermissionError(13, "Access is denied"),
-             ), \
-             patch.object(broker_app_module.serial, "Serial", side_effect=FakeSerial), \
-             patch.object(broker_app_module, "socket") as mock_socket_mod, \
-             patch.object(broker_app_module, "_start_monitor"), \
-             patch.object(broker_app_module.time, "sleep", side_effect=fake_sleep):
-            mock_socket_mod.socket.return_value = FakeSocket()
-            mock_socket_mod.AF_INET = 2
-            mock_socket_mod.SOCK_DGRAM = 2
+        with _main_running(broker_app_module, fake_serial=FakeSerial, sleep=fake_sleep,
+                           mfp_config_error=PermissionError(13, "Access is denied")):
             result = broker_app_module.main(["--config", str(cfg_path)])
 
         assert result == 0
@@ -293,46 +309,30 @@ class TestBrokerSingleInstance:
         mock_socket_mod.socket.assert_not_called()
 
 
-def test_write_heartbeat_persists_current_timestamp(tmp_path: Path, broker_app_module):
-    heartbeat_file = tmp_path / "state" / "broker_heartbeat.txt"
-    logger = logging.getLogger("test.broker")
+class TestMainPublishesItsStateFiles:
+    def test_a_started_broker_leaves_the_mode_and_enable_files_where_the_family_looks(
+        self, broker_app_module, cfg_path,
+    ):
+        """The two files main() writes before it starts bridging, under the two
+        names the rest of the family opens by hand.
 
-    with patch("osr2_broker.app.time.time", return_value=123.45):
-        broker_app_module.write_heartbeat(heartbeat_file, logger)
+        Nothing else in the suite reads a state file after main(): the writers
+        are all substituted in the tests below this one. So the wiring -- which
+        file each config property feeds, and the ensure-before-read ordering
+        that makes the enable file exist by the time it is read -- could shift
+        without a red anywhere.
+        """
+        from osr2_broker.config import load_config
 
-    assert heartbeat_file.read_text(encoding="utf-8") == "123.45"
+        config = load_config(str(cfg_path))
+        FakeSerial = make_fake_serial([])
 
+        def stop_on_first_sleep(_seconds):
+            raise KeyboardInterrupt
 
-def test_heartbeat_loop_skips_write_when_connected_event_is_clear(tmp_path: Path, broker_app_module):
-    import threading
-    heartbeat_file = tmp_path / "broker_heartbeat.txt"
-    stop = threading.Event()
-    connected = threading.Event()
-    ticks = []
+        with _main_running(broker_app_module, fake_serial=FakeSerial,
+                           sleep=stop_on_first_sleep):
+            broker_app_module.main(["--config", str(cfg_path)])
 
-    def fake_sleep(s):
-        ticks.append(s)
-        if len(ticks) >= 3:
-            stop.set()
-
-    logger = logging.getLogger("test.broker")
-    broker_app_module.heartbeat_loop(heartbeat_file, stop, logger, sleep=fake_sleep, connected=connected)
-    assert not heartbeat_file.exists(), "heartbeat must not be written while disconnected"
-
-
-def test_heartbeat_loop_writes_when_connected_event_is_set(tmp_path: Path, broker_app_module):
-    import threading
-    heartbeat_file = tmp_path / "broker_heartbeat.txt"
-    stop = threading.Event()
-    connected = threading.Event()
-    connected.set()
-    ticks = []
-
-    def fake_sleep(s):
-        ticks.append(s)
-        if len(ticks) >= 1:
-            stop.set()
-
-    logger = logging.getLogger("test.broker")
-    broker_app_module.heartbeat_loop(heartbeat_file, stop, logger, sleep=fake_sleep, connected=connected)
-    assert heartbeat_file.exists(), "heartbeat must be written while connected"
+        assert (config.state_dir / "genau_mode.txt").read_text(encoding="utf-8") == "0"
+        assert (config.state_dir / "genau_enabled.txt").read_text(encoding="utf-8") == "1"
