@@ -126,6 +126,29 @@ def test_a_fired_hold_is_handed_back_to_the_caller():
     assert holds.fire_due(MagicMock(), lock) is RETRACT
 
 
+def test_a_second_hold_replaces_the_one_still_waiting_out_its_delay():
+    """RETRACT during PARK's settle delay is the emergency, and the device has to
+    go to the far end, not home. So a hold arriving while another is pending
+    takes its place -- position and delay both -- rather than being dropped as a
+    duplicate."""
+    clock = [10.0]
+    holds, _logger = _build(clock)
+    real_port = MagicMock()
+    lock = threading.Lock()
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 10.5
+    holds.schedule(RETRACT, "OmniPause: retract scheduled")
+
+    clock[0] = 11.0  # when the park would have fired, had it survived
+    holds.fire_due(real_port, lock)
+    real_port.write.assert_not_called()
+
+    clock[0] = 11.5
+    holds.fire_due(real_port, lock)
+    real_port.write.assert_called_once_with(b"L09999I500\n")
+
+
 def test_a_park_arriving_mid_check_keeps_the_mute_it_just_asked_for():
     """broker/all/design/004, reconstructed: two threads, one latch, no lock.
 
