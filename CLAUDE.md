@@ -42,7 +42,7 @@ every repo, read at runtime through the git-ignored overlays — so this habit i
 the only remaining path for a real name to get committed, and the only thing
 stopping it is you following this rule.
 
-Do not lean on the sanitize guard to catch it. `tools/sanitize_guard.py` fails
+Do not lean on the sanitize guard to catch it. `app_support.sanitize` fails
 the suite when a **known** blocked term appears in the tracked tree, but a brand-
 new performer name it has never seen passes every check and lands. The guard is a
 backstop for names already known; it cannot see the next one.
