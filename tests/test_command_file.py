@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from osr2_broker.activity import ActivityStamp
 from osr2_broker.command_file import consume_command_file
 
 
@@ -108,6 +109,10 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
         start_thread=MagicMock(),
         consume_command=consume_command_file,
         read_genau_enabled=lambda _path: True,
+        rx_activity=ActivityStamp(tmp_path / "osr2_serial_rx.txt"),
+        tx_activity=ActivityStamp(tmp_path / "osr2_serial_tx.txt"),
+        connected_event=threading.Event(),
+        is_retryable_error=lambda _exc: False,
         monotonic=lambda: clock[0],
     )
     real_port = MagicMock()

@@ -1,6 +1,6 @@
 # Sanitization blocklist — EXAMPLE / template.
 #
-# The guard (tools/sanitize_guard.py) refuses to let any of these terms reach a
+# The guard (app_support.sanitize) refuses to let any of these terms reach a
 # commit. The REAL list is git-ignored (blocklist.local.txt) because a checked-in
 # blocklist would itself be a catalogue of the words we're keeping out of the
 # public repo. Copy this file to blocklist.local.txt and fill it in with the

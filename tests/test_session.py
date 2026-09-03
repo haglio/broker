@@ -5,7 +5,36 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from osr2_broker.activity import ActivityStamp
+from osr2_broker.hold import HoldScheduler
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
+
+
+class NotActuallyRunning:
+    """What `start_thread` hands back when a test only needs `run` to get on.
+
+    `run` does nothing with a worker but join it, so a stub is enough -- and
+    starting real threads here would make these tests the first to fall over
+    when the process is already carrying the ones another test left spinning.
+    """
+
+    def join(self, timeout=None) -> None:
+        pass
+
+
+class StampSpy:
+    """Stands in for an ActivityStamp where the test is not about the stamp.
+
+    The stamp's own file, throttle and clock are covered in
+    tests/test_activity.py; the tests here that do care about what lands on disk
+    hand the session a real ActivityStamp over a tmp_path instead.
+    """
+
+    def __init__(self):
+        self.marks = 0
+
+    def mark(self) -> None:
+        self.marks += 1
 
 
 class FakeAutoMode:
@@ -41,7 +70,8 @@ class FakeAutoMode:
 
 
 def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
-                    activity_rx_file=None, activity_tx_file=None,
+                    rx_activity=None, tx_activity=None,
+                    is_retryable_error=lambda _exc: False,
                     tcode_udp_port: int = 0):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = MagicMock()
@@ -61,8 +91,10 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         consume_command=lambda _path: None,
         read_genau_enabled=lambda _path: True,
         monotonic=monotonic,
-        activity_rx_file=activity_rx_file,
-        activity_tx_file=activity_tx_file,
+        rx_activity=rx_activity or StampSpy(),
+        tx_activity=tx_activity or StampSpy(),
+        connected_event=threading.Event(),
+        is_retryable_error=is_retryable_error,
         tcode_udp_port=tcode_udp_port,
     )
     return session, auto_mode, logger
@@ -86,15 +118,16 @@ def test_park_schedules_delayed_write():
     session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("PARK", object())
+    session.handle_broker_command("PARK", sock)
     # Not written yet — still pending
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
     # Advance past the delay
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
@@ -103,11 +136,12 @@ def test_park_suppresses_mfp_forwarding():
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("PARK", object())
+    session.handle_broker_command("PARK", sock)
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
-    assert session._last_tcode_udp_time == 12.0
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    assert session._tcode_window.is_open() is True
 
 
 def test_resume_cancels_pending_park():
@@ -115,11 +149,12 @@ def test_resume_cancels_pending_park():
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("PARK", object())
-    session.handle_broker_command("RESUME", object())
+    session.handle_broker_command("PARK", sock)
+    session.handle_broker_command("RESUME", sock)
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
 
@@ -134,12 +169,14 @@ def test_retract_schedules_the_far_end_instead_of_home():
     real_port = MagicMock()
     lock = threading.Lock()
 
-    session.handle_broker_command("RETRACT", object())
-    session._maybe_fire_hold(real_port, lock)
+    sock = object()
+
+    session.handle_broker_command("RETRACT", sock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
@@ -149,10 +186,11 @@ def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
     clock = [10.0]
     session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
     lock = threading.Lock()
+    sock = object()
 
-    session.handle_broker_command("RETRACT", object())
+    session.handle_broker_command("RETRACT", sock)
     clock[0] = 12.0
-    session._maybe_fire_hold(MagicMock(), lock)
+    session.tick_command_and_stale_timeout(sock, real_port=MagicMock(), serial_write_lock=lock)
 
     fired = [call.args[0] for call in logger.info.call_args_list]
     assert any("retracting" in msg and "9999" in msg for msg in fired), fired
@@ -170,27 +208,13 @@ def test_auto_mode_deactivation_schedules_park():
     session.last_real_rx_time = 7.0
     session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
 
-    # Park should be pending now (auto went inactive)
-    assert session._pending_hold_time is not None
+    # Park is pending now (auto went inactive), and the settle delay is not up
     real_port.write.assert_not_called()
 
     # Advance past delay
     clock[0] = 12.0
-    session._maybe_fire_hold(real_port, lock)
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
-
-
-def test_park_suppresses_virtual_to_real_forwarding():
-    session, _auto_mode, _logger = _build_session()
-    session.handle_broker_command("PARK", object())
-    assert session._hold_suppressed_since is not None
-
-
-def test_resume_clears_mfp_suppression():
-    session, _auto_mode, _logger = _build_session()
-    session.handle_broker_command("PARK", object())
-    session.handle_broker_command("RESUME", object())
-    assert session._hold_suppressed_since is None
 
 
 def test_auto_mode_deactivation_between_ticks_schedules_park():
@@ -206,7 +230,11 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
 
     # Next tick should detect the deactivation via the flag
     session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
-    assert session._pending_hold_time is not None
+    real_port.write.assert_not_called()
+
+    clock[0] = 12.0
+    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
 def test_handle_broker_command_toggles_genau_enablement():
@@ -217,6 +245,32 @@ def test_handle_broker_command_toggles_genau_enablement():
     session.handle_broker_command("GENAU_ENABLE", sock)
 
     assert auto_mode.set_enabled_calls == [(sock, False), (sock, True)]
+    logger.info.assert_not_called()
+
+
+def test_a_verb_the_broker_does_not_know_is_ignored():
+    """The command file is a shared channel: fun_time, genau and clipper all
+    write into it, and one of them growing a verb this broker has no handler for
+    must be a no-op, not a crash inside the 50 ms tick."""
+    session, auto_mode, logger = _build_session()
+
+    session.handle_broker_command("TELEPORT", object())
+
+    assert auto_mode.set_enabled_calls == []
+    assert not session.broker_paused.is_set()
+    logger.info.assert_not_called()
+    logger.warning.assert_not_called()
+
+
+def test_an_empty_tick_with_no_command_is_a_no_op():
+    """Almost every tick reads no command at all -- twenty times a second, all
+    session long -- so `None` has to fall through the whole table quietly."""
+    session, auto_mode, logger = _build_session()
+
+    session.handle_broker_command(None, object())
+
+    assert auto_mode.set_enabled_calls == []
+    assert not session.broker_paused.is_set()
     logger.info.assert_not_called()
 
 
@@ -348,15 +402,17 @@ def test_forward_virtual_to_real_skips_writes_while_auto_is_active():
     real = FakeReal()
     virt = FakeVirt()
 
-    session.forward_virtual_to_real(virt, real, session_stop, retry_state)
+    session.forward_virtual_to_real(virt, real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == []
     assert retry_state.value is False
 
 
 def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
-    session, _auto_mode, _logger = _build_session(monotonic=lambda: 10.0)
-    session._last_tcode_udp_time = 9.9  # 0.1s ago — within suppression window
+    clock = [9.9]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    session._tcode_window.mark()
+    clock[0] = 10.0  # 0.1s ago — within suppression window
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -374,14 +430,16 @@ def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
             self.writes.append(data)
 
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == []
 
 
 def test_forward_virtual_to_real_allows_writes_when_tcode_udp_idle():
-    session, _auto_mode, _logger = _build_session(monotonic=lambda: 10.0)
-    session._last_tcode_udp_time = 9.0  # 1.0s ago — outside suppression window
+    clock = [9.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    session._tcode_window.mark()
+    clock[0] = 10.0  # 1.0s ago — outside suppression window
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -399,7 +457,7 @@ def test_forward_virtual_to_real_allows_writes_when_tcode_udp_idle():
             self.writes.append(data)
 
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L05000\n"]
 
@@ -429,12 +487,11 @@ def test_park_suppression_heals_when_mfp_active_after_grace():
         def write(self, data: bytes):
             self.writes.append(data)
 
-    clock[0] = 100.0 + session._HOLD_SUPPRESS_GRACE_SECONDS + 0.1  # past grace
+    clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS + 0.1  # past grace
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L05000\n"]
-    assert session._hold_suppressed_since is None
 
 
 def test_park_suppression_holds_within_grace_window():
@@ -463,10 +520,116 @@ def test_park_suppression_holds_within_grace_window():
 
     clock[0] = 100.0 + 1.0  # still within grace
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == []
-    assert session._hold_suppressed_since is not None
+
+
+def test_resume_hands_mfp_back_without_waiting_out_the_grace():
+    """RESUME undoes the whole hold. Cancelling only the pending write would
+    leave MFP muted for the rest of the grace window with nothing on the way to
+    clear it -- the user asks for motion and the device stays still."""
+    clock = [100.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    sock = object()
+    session.handle_broker_command("PARK", sock)
+    session.handle_broker_command("RESUME", sock)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"L05000\n"
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    clock[0] = 100.0 + 1.0  # still well inside the grace window
+    real = FakeReal()
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
+
+    assert real.writes == [b"L05000\n"]
+
+
+def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
+    """The heartbeat file is only written while this event is set, and fun_time
+    reads that file to decide whether the broker is alive. Only the clearing
+    half was pinned, so a session that never set it would have looked fine here
+    and shown up as a broker that never starts."""
+    session, _auto_mode, _logger = _build_session()
+    seen_inside: list[bool] = []
+
+    class FakePort:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self, _n): return b""
+        def write(self, _d): pass
+        @property
+        def dsr(self): return True
+
+    def _sleep(_seconds):
+        seen_inside.append(session.connected_event.is_set())
+        session.stop_event.set()
+
+    session.serial_factory = lambda *a, **kw: FakePort()
+    session.sleep = _sleep
+    session.start_thread = lambda *, target, args, name: NotActuallyRunning()
+
+    session.run(object())
+
+    assert seen_inside == [True]
+    assert not session.connected_event.is_set()
+
+
+def test_a_retryable_read_error_asks_the_caller_for_another_session():
+    """The classifier is the caller's -- app.py's is_retryable_serial_error --
+    and the forwarding thread's only job is to run it over what it caught and
+    put the answer where `run` will return it."""
+    session, _auto_mode, _logger = _build_session(is_retryable_error=lambda _exc: True)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            raise OSError("the port went away")
+
+    class FakeVirt:
+        def write(self, _data): pass
+
+    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
+
+    assert retry_state.value is True
+    assert session_stop.is_set()
+
+
+def test_an_unretryable_read_error_ends_the_session_for_good():
+    session, _auto_mode, _logger = _build_session(is_retryable_error=lambda _exc: False)
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            raise OSError("the port went away")
+
+    class FakeVirt:
+        def write(self, _data): pass
+
+    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
+
+    assert retry_state.value is False
+    assert session_stop.is_set()
 
 
 def test_session_stops_when_peer_disconnects():
@@ -491,12 +654,9 @@ def test_session_stops_when_peer_disconnects():
         return t
     session.start_thread = _fake_start_thread
 
-    connected = threading.Event()
-    session.connected_event = connected
-
     should_retry = session.run(object())
 
-    assert not connected.is_set()
+    assert not session.connected_event.is_set()
     assert should_retry is True
 
 
@@ -529,21 +689,17 @@ def test_session_stays_alive_when_peer_never_connected():
         return t
     session.start_thread = _fake_start_thread
 
-    connected = threading.Event()
-    session.connected_event = connected
-
-    should_retry = session.run(object())
+    session.run(object())
 
     assert poll_count >= 5
 
 
 def test_forward_real_to_virtual_writes_activity_rx_file(tmp_path):
     rx_file = tmp_path / "osr2_serial_rx.txt"
-    wall = [1711900000.0]
     session, _auto_mode, _logger = _build_session(
-        monotonic=lambda: 12.5, activity_rx_file=rx_file,
+        monotonic=lambda: 12.5,
+        rx_activity=ActivityStamp(rx_file, wall_clock=lambda: 1711900000.0),
     )
-    session._wall_clock = lambda: wall[0]
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -565,11 +721,9 @@ def test_forward_real_to_virtual_writes_activity_rx_file(tmp_path):
 
 def test_forward_virtual_to_real_writes_activity_tx_file(tmp_path):
     tx_file = tmp_path / "osr2_serial_tx.txt"
-    wall = [1711900000.0]
     session, _auto_mode, _logger = _build_session(
-        activity_tx_file=tx_file,
+        tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
     )
-    session._wall_clock = lambda: wall[0]
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -587,7 +741,7 @@ def test_forward_virtual_to_real_writes_activity_tx_file(tmp_path):
             self.writes.append(data)
 
     real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state)
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L0500\n"]
     assert tx_file.exists()
@@ -644,191 +798,9 @@ def test_peer_disconnect_retries_despite_thread_teardown_error():
         return t
     session.start_thread = _start
 
-    session.connected_event = threading.Event()
-
     should_retry = session.run(object())
 
     assert should_retry is True
-
-
-def test_activity_file_not_written_when_path_is_none():
-    session, _auto_mode, _logger = _build_session(monotonic=lambda: 12.5)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    class FakeReal:
-        def __init__(self):
-            self.in_waiting = 1
-        def read(self, _size):
-            session_stop.set()
-            return b"data\n"
-
-    class FakeVirt:
-        def write(self, data): pass
-
-    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
-    assert session.last_real_rx_time == 12.5
-
-
-def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threading.Event) -> None:
-    """Keep offering ``payload`` on a thread until the forwarder has taken it.
-
-    ``forward_udp_tcode_to_real`` binds its own socket inside the call under
-    test, so there is no moment a test can watch for from outside -- and a
-    datagram sent before that bind is dropped rather than queued. So it is
-    re-offered rather than timed, which lands the instant the socket is up and
-    cannot go red on a machine where 0.05 s was not enough.
-
-    Re-offering cannot double up: the forwarding loop rereads ``session_stop``
-    before every receive, and the fakes here set it from the write, so anything
-    still in flight is never read.
-
-    Offering into a port nobody has bound draws an ICMP port-unreachable, which
-    Windows reports back on the *sending* socket -- and an unhandled one here
-    would kill this thread quietly, leaving the call under test to block until
-    the whole run is cut down. So a failed offer is simply the next offer.
-    """
-    def _offer() -> None:
-        while True:
-            try:
-                sender.sendto(payload, ("127.0.0.1", port))
-            except OSError:
-                pass
-            if session_stop.wait(0.02):
-                return
-
-    threading.Thread(target=_offer, daemon=True).start()
-
-
-def test_forward_udp_tcode_to_real_writes_to_serial():
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-        def write(self, data: bytes):
-            self.writes.append(data)
-            session_stop.set()
-
-    real = FakeReal()
-
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
-
-    sender.close()
-    assert real.writes == [b"L05000I33\n"]
-
-
-def test_forward_udp_tcode_to_real_splits_multi_line_datagram():
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    received = []
-
-    class FakeReal:
-        def write(self, data: bytes):
-            received.append(data)
-            if len(received) >= 2:
-                session_stop.set()
-
-    real = FakeReal()
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33\nL09999I33", session_stop)
-
-    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
-
-    sender.close()
-    assert received == [b"L05000I33\n", b"L09999I33\n"]
-
-
-def test_forward_udp_tcode_to_real_ignores_empty_lines():
-    """The blank lines around a real one are dropped, and it is not.
-
-    One datagram carries both, so the proof is positive and needs no waiting
-    out: if a blank line could reach the port, the writes would not be exactly
-    the one real command. Splitting them across two datagrams would leave the
-    blank half unverified whenever the socket bound between the two.
-    """
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    session, _auto_mode, _logger = _build_session(tcode_udp_port=port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-        def write(self, data: bytes):
-            self.writes.append(data)
-            session_stop.set()
-
-    real = FakeReal()
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"\n\nL05000I33\n\n", session_stop)
-
-    session.forward_udp_tcode_to_real(real, session_stop, retry_state, lock)
-
-    sender.close()
-    assert real.writes == [b"L05000I33\n"]
-
-
-def test_forward_udp_tcode_to_real_writes_activity_tx(tmp_path):
-    import socket as _socket
-
-    listener = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-    listener.close()
-
-    tx_file = tmp_path / "osr2_serial_tx.txt"
-    wall = [1711900000.0]
-    session, _auto_mode, _logger = _build_session(
-        tcode_udp_port=port, activity_tx_file=tx_file,
-    )
-    session._wall_clock = lambda: wall[0]
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-    lock = threading.Lock()
-
-    class FakeReal:
-        def write(self, data: bytes):
-            session_stop.set()
-
-    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    session.forward_udp_tcode_to_real(FakeReal(), session_stop, retry_state, lock)
-
-    sender.close()
-    assert tx_file.exists()
-    assert float(tx_file.read_text()) == 1711900000.0
 
 
 def test_forward_virtual_to_real_uses_serial_write_lock():
@@ -852,3 +824,49 @@ def test_forward_virtual_to_real_uses_serial_write_lock():
     session.forward_virtual_to_real(FakeVirt(), FakeReal(), session_stop, retry_state, lock)
 
     assert lock_held_during_write[0] is True
+
+
+def _thread_names_started_by_one_run(session) -> list[str]:
+    """Drive `run` through a single poll and report what it put on threads.
+
+    The names are recorded rather than run: `run` only ever joins what it is
+    handed back.
+    """
+    started: list[str] = []
+
+    class FakePort:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self, _n): return b""
+        def write(self, _d): pass
+        @property
+        def dsr(self): return True
+
+    def _start(*, target, args, name):
+        started.append(name)
+        return NotActuallyRunning()
+
+    session.serial_factory = lambda *a, **kw: FakePort()
+    session.sleep = lambda _s: session.stop_event.set()
+    session.start_thread = _start
+    session.run(object())
+    return started
+
+
+def test_a_configured_tcode_port_gets_a_listener_thread():
+    """Genau's datagrams arrive on a thread of their own, and nothing else in
+    the suite starts one -- so without this the port could stop being listened
+    on and every other test would stay green."""
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=50557)
+
+    assert _thread_names_started_by_one_run(session) == [
+        "broker-real", "broker-virtual", "broker-tcode-udp",
+    ]
+
+
+def test_no_tcode_port_means_no_listener_thread():
+    """Port 0 is how the listener is turned off; binding it would take an
+    ephemeral port nobody can address and spin a thread on nothing."""
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=0)
+
+    assert _thread_names_started_by_one_run(session) == ["broker-real", "broker-virtual"]
