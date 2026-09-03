@@ -1,14 +1,22 @@
 #!/bin/sh
 # Refuse to stage a blocklisted term into a commit.
 #
+# The guard is `app_support.sanitize`, installed with the package. This file
+# only finds an interpreter that can import it, and gets out of the way.
+#
 # Installed by pointing core.hooksPath here (see tools/githooks/install.py), NOT
 # by copying into .git/hooks: a copy goes stale the moment this file changes, and
 # every worktree would need its own. core.hooksPath lives in the shared config,
 # so one setting covers the primary checkout and every worktree at once.
 #
-# Silent when there is nothing to enforce -- a checkout without the git-ignored
-# blocklist, or without a usable interpreter, commits exactly as before. A guard
-# that blocks commits when it cannot run would just get switched off.
+# There is deliberately no `exit 0` below. While the guard was a file in this
+# repo it ran off any interpreter, so "cannot run" meant "no python at all" and
+# giving up quietly was safe. Now it is an installed package, and "cannot run"
+# means "not installed in the interpreter this hook found" -- a checkout that has
+# silently stopped being guarded, which is indistinguishable from one that is.
+# So every way of not running ends non-zero: a failed import fails the commit.
+# (A checkout with no blocklist still commits normally -- that is the guard's own
+# answer, given after it has run, not a way of never running it.)
 set -e
 
 repo=$(git rev-parse --show-toplevel)
@@ -23,10 +31,9 @@ for candidate in \
 do
     if [ -x "$candidate" ]; then python="$candidate"; break; fi
 done
-if [ -z "${python:-}" ]; then
-    python=$(command -v python3 || command -v python || true)
-fi
-[ -n "$python" ] || exit 0
+# An unresolved name is itself the loud failure: the exec below fails and the
+# commit stops, rather than a branch here deciding to let it through.
+python=${python:-$(command -v python3 || command -v python || echo python3)}
 
 cd "$repo"
-exec "$python" -m tools.sanitize_guard --staged
+exec "$python" -m app_support.sanitize --staged

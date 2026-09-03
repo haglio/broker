@@ -5,7 +5,6 @@ import logging
 import socket
 import threading
 import time
-from pathlib import Path
 
 import serial
 
@@ -13,9 +12,16 @@ from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
 
+from .activity import ActivityStamp
 from .ports import resolve_virtual_port, ensure_mfp_serial_port
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
+from .state_files import (
+    ensure_genau_enabled_file,
+    heartbeat_loop,
+    read_genau_enabled,
+    write_mode,
+)
 from .config import load_config
 from .command_file import consume_command_file
 
@@ -26,50 +32,6 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="OSR2 serial broker with idle monitor.")
     ap.add_argument("--config", help="Path to a JSON config file.")
     return ap
-
-
-def write_mode(path: Path, value: str, logger: logging.Logger) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value, encoding="utf-8")
-    except Exception:
-        logger.exception("Failed to write mode file %s", path)
-
-
-def read_genau_enabled(path: Path) -> bool:
-    try:
-        if not path.exists():
-            return True
-        return path.read_text(encoding="utf-8").replace("\ufeff", "").strip() != "0"
-    except Exception:
-        return True
-
-
-def ensure_genau_enabled_file(path: Path, logger: logging.Logger) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists() or not path.read_text(encoding="utf-8").replace("\ufeff", "").strip():
-            path.write_text("1", encoding="utf-8")
-    except Exception:
-        logger.exception("Failed to initialize Genau enabled file %s", path)
-
-
-def write_heartbeat(path: Path, logger: logging.Logger) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(time.time()), encoding="utf-8")
-    except Exception:
-        logger.exception("Failed to write broker heartbeat %s", path)
-
-
-def heartbeat_loop(
-    path: Path, stop_event: threading.Event, logger: logging.Logger,
-    *, connected: threading.Event, sleep=time.sleep,
-) -> None:
-    while not stop_event.is_set():
-        if connected.is_set():
-            write_heartbeat(path, logger)
-        sleep(0.5)
 
 
 def udp_send(sock: socket.socket, host: str, port: int, msg: str) -> None:
@@ -110,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     genau_enabled = read_genau_enabled(genau_enabled_file)
     stop_event = threading.Event()
     broker_paused = threading.Event()
+    connected = threading.Event()
     auto_mode = BrokerAutoController(
         state_file=state_file,
         udp_host=config.udp_host,
@@ -137,15 +100,14 @@ def main(argv: list[str] | None = None) -> int:
         monotonic=time.monotonic,
         sleep=time.sleep,
         is_retryable_error=is_retryable_serial_error,
-        activity_rx_file=config.osr2_serial_rx_file,
-        activity_tx_file=config.osr2_serial_tx_file,
+        rx_activity=ActivityStamp(config.osr2_serial_rx_file),
+        tx_activity=ActivityStamp(config.osr2_serial_tx_file),
+        connected_event=connected,
         tcode_udp_port=config.tcode_udp_port,
     )
 
     write_mode(state_file, "0", logger)
 
-    connected = threading.Event()
-    session.connected_event = connected
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     heartbeat_thread = start_daemon_thread(
         target=heartbeat_loop,

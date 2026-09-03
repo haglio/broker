@@ -18,8 +18,3 @@ write_timeout  # noqa: F821
 # -- Qt QApplication ----------------------------------------------------------
 # Must exist while any widget is alive; reference kept in local `app`.
 app  # noqa: F821
-
-# -- Dynamic attribute access (getattr / setattr) ----------------------------
-# _write_activity() uses getattr(self, last_attr) / setattr(self, last_attr, now)
-_last_rx_write  # noqa: F821
-_last_tx_write  # noqa: F821
