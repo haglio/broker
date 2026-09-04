@@ -15,6 +15,3 @@ lpszClassName  # noqa: F821
 # Set on the virtual serial port object; pyserial uses it internally.
 write_timeout  # noqa: F821
 
-# -- Qt QApplication ----------------------------------------------------------
-# Must exist while any widget is alive; reference kept in local `app`.
-app  # noqa: F821
