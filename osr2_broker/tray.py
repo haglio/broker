@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 from shared_ui.colors import BG_BUTTON, BG_TERTIARY, TEXT_MUTED, TEXT_PRIMARY
 
+from . import peer_watch
 from .single_instance import (
     MUTEX_BROKER, MUTEX_TRAY, is_mutex_held, mutex_name_for_config,
     try_acquire_mutex,
@@ -149,11 +150,14 @@ class BrokerTray(QSystemTrayIcon):
 class BrokerTrayApp:
     """Policy: keep a broker alive, and keep the tray telling the truth."""
 
-    def __init__(self, config, supervisor, tray: BrokerTray, *, open_file=None):
+    def __init__(self, config, supervisor, tray: BrokerTray, *, open_file=None,
+                 peer=None, stand_down=peer_watch.stand_broker_down):
         self._config = config
         self._supervisor = supervisor
         self._tray = tray
         self._open_file = open_file or open_in_editor
+        self._peer = peer
+        self._stand_down = stand_down
         self._paused = False
 
         tray.start_action.triggered.connect(self.start_or_restart)
@@ -161,9 +165,17 @@ class BrokerTrayApp:
         tray.log_action.triggered.connect(self.open_log)
 
     def tick(self) -> None:
-        """One watchdog beat: revive the broker unless the user paused it."""
+        """One watchdog beat: revive the broker unless the user paused it.
+
+        Evolver gets looked at on the same beat, and is NOT covered by the pause
+        -- pausing here is about the OSR2, and says nothing about the app next
+        door. The watch throttles itself to its own interval, so passing every
+        five-second beat through it costs one comparison.
+        """
         if not self._paused:
             self._supervisor.start()
+        if self._peer is not None:
+            self._peer.tick()
         self.refresh()
 
     def refresh(self) -> None:
@@ -194,7 +206,13 @@ class BrokerTrayApp:
         self._open_file(log_path)
 
     def quit(self, quit_app) -> None:
-        """Take the broker down too — nothing else would supervise it."""
+        """Take the broker down too — nothing else would supervise it.
+
+        And leave the mark that tells Evolver this was asked for, so it does not
+        start the tray again a quarter of an hour later. Every other way the tray
+        dies leaves no mark and is undone, which is the point of the pairing.
+        """
+        self._stand_down()
         self._supervisor.stop()
         self._tray.hide()
         quit_app()
@@ -285,6 +303,12 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Another tray is already running; exiting")
         return 0
 
+    # Whatever the user wanted the last time they quit this tray, starting it is
+    # them wanting it up now -- and the scheduled task relaunches us every couple
+    # of minutes, so the mutex check above is what makes this run once per
+    # deliberate start rather than every two minutes.
+    peer_watch.clear_broker_stand_down()
+
     _set_app_user_model_id()
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
@@ -297,7 +321,8 @@ def main(argv: list[str] | None = None) -> int:
         launch=lambda argv_: launch_broker(argv_, config, logger),
         terminate=lambda: terminate_broker(logger),
     )
-    tray_app = BrokerTrayApp(config, supervisor, tray)
+    tray_app = BrokerTrayApp(
+        config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger))
     tray.quit_action.triggered.connect(lambda: tray_app.quit(app.quit))
 
     timer = QTimer()

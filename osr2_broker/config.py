@@ -7,6 +7,12 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_DIR / "osr2_broker_config.json"
 
+# Evolver, whose launcher this tray runs when it finds Evolver gone (see
+# osr2_broker/peer_watch.py). Relative to this repo, because the pair is a
+# pair of sibling checkouts; a machine with no Evolver beside the broker
+# leaves this pointing at nothing, which is how the watch turns itself off.
+DEFAULT_EVOLVER_LAUNCHER = "../evolver/launch_evolver.vbs"
+
 
 @dataclass(frozen=True)
 class BrokerConfig:
@@ -22,6 +28,7 @@ class BrokerConfig:
     idle_minutes: float
     mfp_config_path: Path
     tcode_udp_port: int
+    evolver_launcher: Path
 
     @property
     def genau_mode_file(self) -> Path:
@@ -87,4 +94,6 @@ def load_config(config_path: str | Path | None = None) -> BrokerConfig:
         idle_minutes=float(raw.get("idle_minutes", 15.0)),
         mfp_config_path=_resolve_path(project_dir, raw.get("mfp_config_path", "")),
         tcode_udp_port=int(raw.get("tcode_udp_port", 50557)),
+        evolver_launcher=_resolve_path(
+            project_dir, raw.get("evolver_launcher", DEFAULT_EVOLVER_LAUNCHER)),
     )
