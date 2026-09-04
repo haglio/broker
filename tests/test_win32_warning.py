@@ -1,106 +1,42 @@
-"""Tests for the show_warning dark-themed dialog."""
+"""The broker's half of the family's warning dialog: its identity and its icon."""
 from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
-from shared_ui.colors import BG_TERTIARY, TEXT_SECONDARY
+from shared_ui.alert import Level
+
+from osr2_broker import win32
 
 
-@pytest.fixture(scope="module")
-def qapp():
-    app = QApplication.instance() or QApplication([])
-    yield app
+def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon():
+    with patch("shared_ui.alert.show_alert") as show_alert:
+        win32.show_warning("OSR2 Broker", "Still going.", button_text="Got it")
+
+    show_alert.assert_called_once_with(
+        "OSR2 Broker", "Still going.",
+        level=Level.WARNING, icon=win32.ICON_PATH, button_text="Got it",
+    )
 
 
-def test_dialog_has_correct_title_and_message(qapp):
-    with patch.object(QDialog, "exec", return_value=QDialog.DialogCode.Accepted):
-        from osr2_broker.win32 import show_warning
+def test_the_button_says_ok_unless_the_caller_says_otherwise():
+    with patch("shared_ui.alert.show_alert") as show_alert:
+        win32.show_warning("OSR2 Broker", "Still going.")
 
-        # Capture the dialog before exec is called
-        created = {}
-
-        original_init = QDialog.__init__
-
-        def spy_init(self, *args, **kwargs):
-            original_init(self, *args, **kwargs)
-            created["dlg"] = self
-
-        with patch.object(QDialog, "__init__", spy_init):
-            show_warning("Test Title", "Test message", button_text="Got it")
-
-        dlg = created["dlg"]
-        assert dlg.windowTitle() == "Test Title"
-        labels = dlg.findChildren(QLabel)
-        texts = [lbl.text() for lbl in labels]
-        assert "Test message" in texts
+    assert show_alert.call_args.kwargs["button_text"] == "OK"
 
 
-def test_button_has_custom_text(qapp):
-    created = {}
-    original_init = QDialog.__init__
-
-    def spy_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        created["dlg"] = self
+def test_the_process_claims_its_taskbar_identity_before_the_dialog_appears():
+    """Windows reads the identity when a window of this process first appears,
+    so claiming it after the dialog is up is claiming it too late."""
+    order = []
 
     with (
-        patch.object(QDialog, "exec", return_value=QDialog.DialogCode.Accepted),
-        patch.object(QDialog, "__init__", spy_init),
+        patch.object(
+            win32, "_SetCurrentProcessExplicitAppUserModelID",
+            side_effect=lambda aumid: order.append(aumid),
+        ),
+        patch("shared_ui.alert.show_alert", side_effect=lambda *a, **k: order.append("dialog")),
     ):
-        from osr2_broker.win32 import show_warning
-        show_warning("Title", "Msg", button_text="I don't know, did you?")
+        win32.show_warning("OSR2 Broker", "Still going.")
 
-    btns = created["dlg"].findChildren(QPushButton)
-    assert any(b.text() == "I don't know, did you?" for b in btns)
-
-
-def test_show_warning_sets_broker_window_icon(qapp):
-    created = {}
-    original_init = QDialog.__init__
-
-    def spy_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        created["dlg"] = self
-
-    with (
-        patch.object(QDialog, "exec", return_value=QDialog.DialogCode.Accepted),
-        patch.object(QDialog, "__init__", spy_init),
-    ):
-        from osr2_broker.win32 import show_warning
-        show_warning("Title", "Msg")
-
-    assert not created["dlg"].windowIcon().isNull()
-
-
-def test_show_warning_sets_explicit_app_user_model_id(qapp):
-    from osr2_broker import win32
-
-    with (
-        patch.object(QDialog, "exec", return_value=QDialog.DialogCode.Accepted),
-        patch.object(win32, "_SetCurrentProcessExplicitAppUserModelID") as mock_set,
-    ):
-        win32.show_warning("Title", "Msg")
-
-    mock_set.assert_called_once_with(win32.APP_USER_MODEL_ID)
-
-
-def test_stylesheet_uses_dark_theme_colors(qapp):
-    created = {}
-    original_init = QDialog.__init__
-
-    def spy_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        created["dlg"] = self
-
-    with (
-        patch.object(QDialog, "exec", return_value=QDialog.DialogCode.Accepted),
-        patch.object(QDialog, "__init__", spy_init),
-    ):
-        from osr2_broker.win32 import show_warning
-        show_warning("Title", "Msg")
-
-    ss = created["dlg"].styleSheet()
-    assert BG_TERTIARY.name() in ss
-    assert TEXT_SECONDARY.name() in ss
+    assert order == [win32.APP_USER_MODEL_ID, "dialog"]
