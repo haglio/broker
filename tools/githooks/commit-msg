@@ -13,11 +13,22 @@ repo=$(git rev-parse --show-toplevel)
 common=$(git rev-parse --git-common-dir)
 primary=$(cd "$(dirname "$common")" && pwd)
 
+# One level up from the checkout: on this family's Mac there is ONE venv beside
+# the twelve repositories rather than one inside each, so none of the candidates
+# above exists there and the search falls through to whatever `python3` is on
+# PATH -- which cannot import the package unless that venv happens to be
+# activated. Measured across the family: every hook failed on
+# ModuleNotFoundError rather than on a blocked term, which is a checkout that
+# has silently stopped being guarded.
+family=$(dirname "$primary")
+
 for candidate in \
     "$repo/.venv/Scripts/python.exe" \
     "$repo/.venv/bin/python" \
     "$primary/.venv/Scripts/python.exe" \
-    "$primary/.venv/bin/python"
+    "$primary/.venv/bin/python" \
+    "$family/.venv/Scripts/python.exe" \
+    "$family/.venv/bin/python"
 do
     if [ -x "$candidate" ]; then python="$candidate"; break; fi
 done
