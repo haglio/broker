@@ -7,13 +7,14 @@ import threading
 import time
 
 import serial
-
 from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
 
 from .activity import ActivityStamp
-from .ports import resolve_virtual_port, ensure_mfp_serial_port
+from .command_file import consume_command_file
+from .config import load_config
+from .ports import ensure_mfp_serial_port, resolve_virtual_port
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
 from .state_files import (
@@ -22,8 +23,6 @@ from .state_files import (
     read_genau_enabled,
     write_mode,
 )
-from .config import load_config
-from .command_file import consume_command_file
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
 

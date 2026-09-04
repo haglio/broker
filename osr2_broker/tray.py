@@ -8,12 +8,14 @@ from pathlib import Path
 
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
-
 from shared_ui.colors import BG_BUTTON, BG_TERTIARY, TEXT_MUTED, TEXT_PRIMARY
 
 from . import peer_watch
 from .single_instance import (
-    MUTEX_BROKER, MUTEX_TRAY, is_mutex_held, mutex_name_for_config,
+    MUTEX_BROKER,
+    MUTEX_TRAY,
+    is_mutex_held,
+    mutex_name_for_config,
     try_acquire_mutex,
 )
 
@@ -282,12 +284,11 @@ def _name_this_process() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _name_this_process()
+    from app_support.cli import preparse_config_path
+    from app_support.logging_utils import configure_logging, install_exception_logging
     from PyQt6.QtCore import QTimer
     from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import QApplication
-
-    from app_support.cli import preparse_config_path
-    from app_support.logging_utils import configure_logging, install_exception_logging
 
     from .config import load_config
     from .win32 import ICON_PATH, _set_app_user_model_id

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 class FakeSocket:
     def sendto(self, _data, _addr):
         return None
@@ -47,7 +48,7 @@ def make_fake_serial(open_ports: list[str], fail_once_on: tuple[str, type[Except
     return FakeSerial
 
 
-@pytest.fixture()
+@pytest.fixture
 def broker_app_module():
     """app.py, imported against a stand-in for pyserial.
 
@@ -125,6 +126,7 @@ def _start_monitor_with_fake_guard(broker_app_module, config, *, auto_active=Fal
 def test_shutdown_is_blocked_while_the_device_is_on(broker_app_module, cfg_path):
     """A fresh rx stamp means the OSR2 is still powered — Windows must wait."""
     import time as _time
+
     from osr2_broker.config import load_config
 
     config = load_config(str(cfg_path))
@@ -140,6 +142,7 @@ def test_shutdown_is_allowed_once_the_rx_stamp_goes_stale(broker_app_module, cfg
     With the fresh case above, this pins the comparison from both sides, so
     its sign cannot flip unseen (audit finding broker/all/tests/005)."""
     import time as _time
+
     from osr2_broker.config import load_config
 
     config = load_config(str(cfg_path))

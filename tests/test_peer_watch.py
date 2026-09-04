@@ -34,7 +34,7 @@ def qapp():
     yield app
 
 
-@pytest.fixture()
+@pytest.fixture
 def tray(qapp):
     from osr2_broker.tray import BrokerTray
 
@@ -59,7 +59,7 @@ class TestIsEvolverUp:
 
 
 class TestStartingEvolver:
-    @pytest.fixture()
+    @pytest.fixture
     def launcher(self, tmp_path):
         path = tmp_path / "launch_evolver.vbs"
         path.write_text("' launcher", encoding="utf-8")

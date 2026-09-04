@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import re
 import json
+import re
 from pathlib import Path
-
 
 RE_COM0COM_PORT = re.compile(r"COM0COM\\PORT\\(CNC[AB])(\d+)", re.IGNORECASE)
 

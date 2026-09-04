@@ -33,13 +33,21 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
     from PyQt6.QtCore import Qt
     from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import (
-        QApplication, QDialog, QHBoxLayout, QLabel,
-        QPushButton, QStyle, QVBoxLayout,
+        QApplication,
+        QDialog,
+        QHBoxLayout,
+        QLabel,
+        QPushButton,
+        QStyle,
+        QVBoxLayout,
     )
-
     from shared_ui.colors import (
-        BG_BUTTON, BG_KEYCAP, BG_TERTIARY, BORDER_SUBTLE,
-        TEXT_PRIMARY, TEXT_SECONDARY,
+        BG_BUTTON,
+        BG_KEYCAP,
+        BG_TERTIARY,
+        BORDER_SUBTLE,
+        TEXT_PRIMARY,
+        TEXT_SECONDARY,
     )
     from shared_ui.fonts import SIZE_BODY, make_font
     from shared_ui.spacing import GAP_MEDIUM, MARGIN_STANDARD

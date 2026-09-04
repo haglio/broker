@@ -12,9 +12,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from app_support.threading_utils import wait_until
+
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.protocol import BrokerAutoController
 from osr2_broker.session import BrokerSerialSession
