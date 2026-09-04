@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from unittest.mock import patch
+
 
 def pytest_collection_modifyitems(items):
     """Collect in a different order when asked, so a test that leans on the ones
@@ -77,6 +79,21 @@ def _no_test_may_keep_a_piece_of_the_process(request):
         f"{request.node.name} left {', '.join(kept)} behind — patch what "
         "installs it, the way tests/test_app.py does for the broker's main()"
     )
+
+
+@pytest.fixture(autouse=True)
+def stand_down_marker():
+    """Keep the real marker out of every run, and give tests a place to look.
+
+    It lives under LOCALAPPDATA, outside this checkout, and it is the file that
+    tells Evolver whether the broker on this machine was quit on purpose. This
+    suite runs on that machine, so a run that wrote one would leave the user's
+    broker down and a run that cleared one would put it back up. Gagged at
+    app_support's two calls rather than at ``osr2_broker.peer_watch``'s own, so
+    the broker's half stays real and a test can watch it being used.
+    """
+    with patch("app_support.peer_watch.stand_down") as wrote,          patch("app_support.peer_watch.clear_stand_down") as cleared:
+        yield wrote, cleared
 
 
 TMP_ROOT = Path(
