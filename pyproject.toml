@@ -21,6 +21,7 @@ dev = [
     "pytest",
     "pytest-timeout",
     "vulture",
+    "ruff==0.16.6",
 ]
 
 [tool.pytest.ini_options]
