@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from osr2_broker.monitor import (
     Action,

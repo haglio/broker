@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from enum import Enum, auto
 from pathlib import Path
-from typing import Callable
 
 IN_USE_THRESHOLD = 30.0
 
@@ -71,8 +71,7 @@ class MonitorState:
             if not self._alerted or (now - self._in_use_since) >= self._rearm_seconds:
                 self._alerted = False
             return None
-        else:
-            self._in_use_since = None
+        self._in_use_since = None
 
         # Device on but not in use
         if self._idle_since is None:

@@ -51,6 +51,7 @@ def test_the_status_line_reads_as_a_label_not_a_command(qapp):
 def test_the_item_under_the_cursor_lights_up(qapp):
     """Without an explicit rule the stylesheet flattens Qt's own highlight."""
     from shared_ui.colors import BG_BUTTON
+
     from osr2_broker.tray import BrokerTray
 
     tray = BrokerTray()
@@ -213,7 +214,7 @@ class FakeSupervisor:
         self.running = True
 
 
-@pytest.fixture()
+@pytest.fixture
 def tray(qapp):
     from osr2_broker.tray import BrokerTray
 

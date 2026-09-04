@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import logging
 import json
-from pathlib import Path
+import logging
 from unittest.mock import patch
 
 from osr2_broker.ports import (

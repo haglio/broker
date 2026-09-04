@@ -10,10 +10,9 @@ import sys
 import threading
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-
-from unittest.mock import patch
 
 
 def pytest_collection_modifyitems(items):
@@ -104,7 +103,7 @@ TMP_ROOT = Path(
 ).resolve()
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_path() -> Path:
     TMP_ROOT.mkdir(parents=True, exist_ok=True)
     path = (TMP_ROOT / f"case_{uuid.uuid4().hex}").resolve()
@@ -151,12 +150,12 @@ def _write_config(tmp_path: Path, overrides: dict | None = None) -> Path:
     return config_path
 
 
-@pytest.fixture()
+@pytest.fixture
 def cfg_path(tmp_path: Path) -> Path:
     return _write_config(tmp_path)
 
 
-@pytest.fixture()
+@pytest.fixture
 def cfg_factory(tmp_path: Path):
     def factory(overrides: dict | None = None) -> Path:
         return _write_config(tmp_path, overrides)
