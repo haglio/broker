@@ -26,93 +26,22 @@ def _set_app_user_model_id() -> None:
     _SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
 
 
-# --- Warning dialog (PyQt6, dark-themed via shared_ui) ---
+# --- Warning dialog ---
 
 def show_warning(title: str, message: str, button_text: str = "OK") -> None:
-    """Show a dark-themed foreground warning dialog. Blocks until dismissed."""
-    from PyQt6.QtCore import Qt
-    from PyQt6.QtGui import QIcon
-    from PyQt6.QtWidgets import (
-        QApplication,
-        QDialog,
-        QHBoxLayout,
-        QLabel,
-        QPushButton,
-        QStyle,
-        QVBoxLayout,
-    )
-    from shared_ui.colors import (
-        BG_BUTTON,
-        BG_KEYCAP,
-        BG_TERTIARY,
-        BORDER_SUBTLE,
-        TEXT_PRIMARY,
-        TEXT_SECONDARY,
-    )
-    from shared_ui.fonts import SIZE_BODY, make_font
-    from shared_ui.spacing import GAP_MEDIUM, MARGIN_STANDARD
+    """Show the family's warning dialog under the broker's own identity.
+
+    Blocks until dismissed.  The taskbar identity goes first: Windows reads it
+    when a window of this process first appears, and without one the dialog's
+    taskbar button wears the python host's icon rather than the broker's.
+    """
+    from shared_ui.alert import Level, show_alert
 
     _set_app_user_model_id()
-    app = QApplication.instance() or QApplication([])
-
-    dlg = QDialog()
-    dlg.setWindowTitle(title)
-    dlg.setWindowIcon(QIcon(str(ICON_PATH)))
-    dlg.setWindowFlags(
-        Qt.WindowType.Dialog
-        | Qt.WindowType.WindowTitleHint
-        | Qt.WindowType.WindowCloseButtonHint
-        | Qt.WindowType.WindowStaysOnTopHint
-        | Qt.WindowType.MSWindowsFixedSizeDialogHint
+    show_alert(
+        title, message,
+        level=Level.WARNING, icon=ICON_PATH, button_text=button_text,
     )
-
-    dlg.setStyleSheet(f"""
-        QDialog {{ background: {BG_TERTIARY.name()}; }}
-        QLabel {{ color: {TEXT_SECONDARY.name()}; }}
-        QPushButton {{
-            color: {TEXT_PRIMARY.name()};
-            background: {BG_BUTTON.name()};
-            border: 1px solid {BORDER_SUBTLE.name()};
-            padding: 4px 10px;
-            border-radius: 3px;
-        }}
-        QPushButton:hover {{ background: {BG_KEYCAP.name()}; }}
-        QPushButton:pressed {{ background: {BG_TERTIARY.name()}; }}
-    """)
-
-    body = QHBoxLayout()
-    body.setSpacing(GAP_MEDIUM * 2)
-
-    icon_lbl = QLabel()
-    icon_lbl.setPixmap(
-        dlg.style()
-        .standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
-        .pixmap(32, 32)
-    )
-    icon_lbl.setAlignment(Qt.AlignmentFlag.AlignTop)
-    body.addWidget(icon_lbl)
-
-    msg_lbl = QLabel(message)
-    msg_lbl.setFont(make_font(size=SIZE_BODY))
-    msg_lbl.setWordWrap(True)
-    body.addWidget(msg_lbl, stretch=1)
-
-    btn_row = QHBoxLayout()
-    btn_row.addStretch()
-    btn = QPushButton(button_text)
-    btn.setFont(make_font(size=SIZE_BODY))
-    btn.setDefault(True)
-    btn.clicked.connect(dlg.accept)
-    btn_row.addWidget(btn)
-
-    outer = QVBoxLayout(dlg)
-    m = MARGIN_STANDARD * 2
-    outer.setContentsMargins(m, m, m, m)
-    outer.setSpacing(GAP_MEDIUM * 2)
-    outer.addLayout(body)
-    outer.addLayout(btn_row)
-
-    dlg.exec()
 
 
 # --- Shutdown blocking via hidden window ---
