@@ -1,22 +1,6 @@
+# The family's merge gate, published once in haglio/.github; this file says only what
+# differs about this repo. The check the merge queue requires is `full-suite / suite`.
 name: merge gate (full suite)
-
-# The merge queue's required check. The queue builds the candidate merge of a PR
-# onto current main, runs the whole suite on that candidate, and fast-forwards
-# main only when this is green -- so a red tree can never land. Also runs on PRs
-# for early feedback and on push to main as a visible post-merge backstop.
-#
-# runs-on windows-latest: the broker wraps Windows-only serial/ctypes/subprocess
-# behaviour, and its Qt tray tests grab real pixels off a rendered menu. The
-# offscreen Qt platform paints that menu black and the palette assertion fails, so
-# we leave the runner's native "windows" platform in place (it has a desktop that
-# renders) rather than forcing QT_QPA_PLATFORM=offscreen.
-#
-# The broker imports two siblings that are not on PyPI -- app_support and
-# shared_ui. Both ship a standard nested package layout, so both editable-install
-# cleanly: they are checked out next to the broker and pip-installed before it
-# (siblings first, so the broker's own install finds them already satisfied).
-# shell: bash makes a failed sibling install abort the step -- Actions bash runs
-# with `set -eo pipefail`, whereas pwsh would sail past a non-zero pip.
 
 on:
   pull_request:
@@ -31,51 +15,8 @@ concurrency:
 
 jobs:
   full-suite:
-    runs-on: windows-latest
-    # About three times a green run, so it can only fire on a hang. A green job
-    # is ~64 s of checkout, two sibling checkouts and install, plus two ~11 s
-    # suite legs, so ~87 s. Without this, the queue's required check would sit
-    # on a hung run until GitHub's six-hour default and print nothing that named
-    # it.
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: broker
-      - uses: actions/checkout@v4
-        with:
-          repository: haglio/app_support
-          path: app_support
-      - uses: actions/checkout@v4
-        with:
-          repository: haglio/shared_ui
-          path: shared_ui
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install the siblings and the broker (editable, compat mode)
-        shell: bash
-        working-directory: broker
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ../shared_ui --config-settings editable_mode=compat
-          pip install -e ../app_support --config-settings editable_mode=compat
-          pip install -e ".[dev]" --config-settings editable_mode=compat
-      - name: Run the suite
-        shell: bash
-        working-directory: broker
-        run: python -m pytest -q
-      # Again, back to front. Reversing inverts every "this runs before that" the
-      # suite has, so a test that starts leaning on the one beside it -- a hook
-      # another test installed, a log handler left open -- goes red on the commit
-      # that introduces the lean rather than on some later rename.
-      # TEST_COLLECTION_ORDER=shuffle with TEST_COLLECTION_SEED is the deeper
-      # local check (see tests/conftest.py); the gate takes the deterministic one.
-      # Note this job deliberately does NOT set QT_QPA_PLATFORM (see the header):
-      # both legs run on the runner's native platform.
-      - name: Run the suite back to front
-        shell: bash
-        working-directory: broker
-        env:
-          TEST_COLLECTION_ORDER: reverse
-        run: python -m pytest -q
+    uses: haglio/.github/.github/workflows/merge-gate.yml@main
+    with:
+      siblings: "app_support shared_ui"
+      python-version: "3.12"
+      timeout-minutes: 5
