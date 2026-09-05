@@ -10,7 +10,7 @@ from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
-from shared_ui.colors import BG_BUTTON, BG_TERTIARY, TEXT_MUTED, TEXT_PRIMARY
+from shared_ui.chrome import menu_rules
 
 from . import peer_watch
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
@@ -38,27 +38,11 @@ def open_in_editor(path: Path) -> None:
     subprocess.Popen(["notepad.exe", str(path)])
 
 
-def menu_stylesheet() -> str:
-    """Qt style sheet painting a menu in the family's dark palette."""
-    return f"""
-        QMenu {{
-            background: {BG_TERTIARY.name()};
-            color: {TEXT_PRIMARY.name()};
-        }}
-        QMenu::item:selected {{
-            background: {BG_BUTTON.name()};
-        }}
-        QMenu::item:disabled {{
-            color: {TEXT_MUTED.name()};
-            background: transparent;
-        }}
-    """
-
-
 def build_menu() -> QMenu:
-    """Build the tray's right-click menu."""
+    """Build the tray's right-click menu, in the family's menu rules -- a tray
+    menu has no window to take them from."""
     menu = QMenu()
-    menu.setStyleSheet(menu_stylesheet())
+    menu.setStyleSheet(menu_rules())
     return menu
 
 
