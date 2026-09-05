@@ -159,6 +159,29 @@ def test_a_second_hold_replaces_the_one_still_waiting_out_its_delay():
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
+def test_the_same_hold_asked_for_again_keeps_the_deadline_it_has():
+    """A caller re-asking every tick -- what a regressed blanking write would
+    do -- must not push the write out forever, and must not be dropped as a
+    duplicate either: the second ask is absorbed, the first deadline stands
+    and the log hears of it once.  A different hold still replaces it, which
+    is the test above (bug 89)."""
+    clock = [10.0]
+    holds, logger = _build(clock)
+    real_port = MagicMock()
+    lock = threading.Lock()
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 10.5
+    holds.schedule(PARK, "OmniPause: park scheduled")
+
+    clock[0] = 11.0
+    holds.fire_due(real_port, lock, _nothing)
+
+    real_port.write.assert_called_once_with(b"L00000I500\n")
+    scheduled = [c.args[0] for c in logger.info.call_args_list]
+    assert scheduled.count("OmniPause: park scheduled") == 1
+
+
 def test_the_hold_is_written_under_the_caller_s_serial_lock():
     """Three threads write to the one serial port -- the MFP forwarder, the
     T-Code listener and this. The lock is what keeps a hold's ten bytes from
