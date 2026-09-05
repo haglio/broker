@@ -65,9 +65,12 @@ class HoldScheduler:
         feed's tail is swallowed before the device is told where to go.
         """
         with self._lock:
-            self._arm(hold)
+            armed = self._arm(hold)
+            # The mute is asked for afresh either way: what is absorbed is the
+            # deadline and the log line, never the caller's ask to be muted now.
             self._suppressed_since = self._monotonic()
-        self._logger.info(message)
+        if armed:
+            self._logger.info(message)
 
     def schedule_without_muting(self, hold: Hold, message: str) -> None:
         """Schedule *hold* and leave the MFP feed running to reach it.
@@ -76,13 +79,24 @@ class HoldScheduler:
         back, so there is nothing here to swallow.
         """
         with self._lock:
-            self._arm(hold)
+            if not self._arm(hold):
+                return
         self._logger.info(message)
 
-    def _arm(self, hold: Hold) -> None:
-        """Called with the lock held."""
+    def _arm(self, hold: Hold) -> bool:
+        """Called with the lock held; whether *hold* was newly scheduled.
+
+        The hold already pending is absorbed: asked for again inside its own
+        settle delay it keeps the deadline it has and is not logged again, so
+        a caller re-asking every tick cannot push the write out forever.  A different hold replaces it,
+        position and delay both -- RETRACT during PARK's delay is the emergency,
+        and a guard that dropped it as a duplicate would drop exactly that.
+        """
+        if self._pending_time is not None and hold == self._pending:
+            return False
         self._pending = hold
         self._pending_time = self._monotonic() + self.DELAY_SECONDS
+        return True
 
     def cancel(self) -> None:
         """Drop the pending write and let the mute go — what RESUME means."""
