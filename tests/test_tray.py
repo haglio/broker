@@ -20,12 +20,16 @@ def test_menu_is_painted_in_the_shared_dark_palette(qapp):
     """
     from osr2_broker.tray import BrokerTray
 
-    menu = BrokerTray().contextMenu()
+    tray = BrokerTray()
+    menu = tray.contextMenu()
     menu.resize(menu.sizeHint())
     image = menu.grab().toImage()
 
-    # Sample inside the menu body, clear of the rounded corners and border.
-    pixel = image.pixelColor(image.width() // 2, image.height() // 2)
+    # Inside a row, at its far end: clear of the border, and of the row's text
+    # whatever font the machine draws it in -- the middle of the menu landed on
+    # a glyph on the gate's runner.
+    row = menu.actionGeometry(tray.start_action)
+    pixel = image.pixelColor(row.right() - 2, row.center().y())
     assert pixel.name() == BG_TERTIARY.name()
 
 
