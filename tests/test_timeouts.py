@@ -21,9 +21,9 @@ WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
 
 _JOB = re.compile(r'  "?([A-Za-z0-9_-]+)"?:\s*(#.*)?')
 _CLOCK = re.compile(r'    "?timeout-minutes"?:\s*"?[1-9][0-9]*"?\s*(#.*)?')
-# A job that calls the family's gate is clocked by it: the clock is that workflow's
-# to declare, and a caller may not declare one of its own.
-_THE_FAMILYS_GATE = re.compile(r'    "?uses"?:\s*"?haglio/\.github/\.github/workflows/merge-gate\.yml@\S+"?\s*(#.*)?')
+# A job that calls one of the family's workflows is clocked by it: the clock is that
+# workflow's to declare, and a caller may not declare one of its own.
+_THE_FAMILYS_GATE = re.compile(r'    "?uses"?:\s*"?haglio/\.github/\.github/workflows/[a-z-]+\.yml@\S+"?\s*(#.*)?')
 
 
 def _jobs_without_a_clock(workflow: str) -> list[str]:
