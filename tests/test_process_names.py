@@ -7,20 +7,28 @@ takes what it shows about a process from the file it was started from, so each
 starts through a copy of the interpreter named, described and marked for its
 part.
 
-The two halves work differently and both are asserted here.  The broker is a
-child, so the tray names it outright as it launches it.  The tray cannot name
-itself on the way in -- writing the copy takes the very interpreter being named
--- so it prepares its own for the next launch and the launcher picks it up.
+The two halves work differently and both are asserted here, by running them.
+The broker is a child, so the tray names it outright as it launches it.  The
+tray cannot name itself on the way in -- writing the copy takes the very
+interpreter being named -- so it prepares its own for the next launch and the
+launcher picks it up; the launcher's side is read off the ``.vbs``, which really
+is a text file and really does contain the literal.
 """
 from __future__ import annotations
 
+import logging
 import re
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from app_support.process_identity_check import assert_the_app_names_its_process
 
 from osr2_broker.process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
+from osr2_broker.tray import BrokerSupervisor, _name_this_process, terminate_broker
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-TRAY_SOURCE = (PROJECT_DIR / "osr2_broker" / "tray.py").read_text(encoding="utf-8")
 LAUNCHER = (PROJECT_DIR / "launch_broker_tray.vbs").read_text(encoding="utf-8")
 
 
@@ -40,9 +48,13 @@ class TestWhatTheRowsSay:
 
 
 class TestTheTray:
-    def test_prepares_the_copy_its_launcher_will_use(self):
-        assert "_name_this_process()" in TRAY_SOURCE
-        assert "NAMER.prepare_launcher(TRAY_ROLE)" in TRAY_SOURCE
+    def test_prepares_the_copy_its_launcher_will_use(self, tmp_path: Path):
+        """From the windowed interpreter, which is what the launcher runs;
+        described as the app and its part; carrying the broker's mark; and never
+        taking the tray down when there is nothing to copy from."""
+        assert_the_app_names_its_process(
+            _name_this_process, tmp_path, app_name=APP_NAME, role=TRAY_ROLE,
+            interpreter="pythonw.exe", row=f"{APP_NAME} – Tray", icon=NAMER.icon)
 
     def test_the_launcher_prefers_that_copy(self):
         expected = NAMER.exe_name("pythonw.exe", TRAY_ROLE)
@@ -56,25 +68,32 @@ class TestTheTray:
         find.  That must cost the name and nothing else."""
         assert r'pythonExe = projectRoot & "\.venv\Scripts\pythonw.exe"' in LAUNCHER
 
-    def test_naming_never_takes_the_tray_down(self):
-        body = TRAY_SOURCE[TRAY_SOURCE.index("def _name_this_process"):]
-        body = body[:body.index("\ndef ", 1)]
-
-        assert "except Exception:" in body
-
 
 class TestTheBroker:
     def test_is_named_outright_when_the_tray_launches_it(self):
         """No one-launch delay for this one: the tray is holding the interpreter
-        that writes the copy, and is not the process being named."""
-        assert "NAMER.named_exe(sys.executable, BROKER_ROLE)" in TRAY_SOURCE
+        that writes the copy, and is not the process being named -- so the copy
+        is made from the running interpreter, and the launch goes through it."""
+        launched: list[list[str]] = []
+        supervisor = BrokerSupervisor(
+            SimpleNamespace(config_path=Path("C:/example/broker.json")),
+            launch=launched.append, terminate=lambda: None, is_held=lambda name: False)
+
+        with patch.object(NAMER, "named_exe", return_value="C:/example/Broker-Broker.exe") as named:
+            supervisor.start()
+
+        named.assert_called_once_with(sys.executable, BROKER_ROLE)
+        assert launched[0][:3] == ["C:/example/Broker-Broker.exe", "-m", "osr2_broker.app"]
 
     def test_the_sweep_that_kills_it_knows_the_name_it_runs_under(self):
         """A broker running under a name the sweep does not match is a broker
         nothing here can stop -- so the sweep reads its pattern from the same
         namer that decides what a broker is launched as, rather than restating
         it and drifting."""
-        assert "NAMER.process_name_pattern" in TRAY_SOURCE
+        with patch("osr2_broker.tray.subprocess.run") as run:
+            terminate_broker(logging.getLogger("test"))
+
+        assert NAMER.process_name_pattern in run.call_args.args[0][-1]
         assert re.match(NAMER.process_name_pattern,
                         NAMER.exe_name("pythonw.exe", BROKER_ROLE))
 
