@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from app_support import state_files
+from app_support.config_reader import read_json_config, require_path, require_typed, resolve_path
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_DIR / "osr2_broker_config.json"
@@ -64,38 +64,27 @@ class BrokerConfig:
         return self.state_dir / f"{name}.log"
 
 
-def _resolve_path(base: Path, raw: str) -> Path:
-    p = Path(raw)
-    if p.is_absolute():
-        return p
-    return (base / p).resolve()
-
-
 def load_config(config_path: str | Path | None = None) -> BrokerConfig:
-    path = Path(config_path).expanduser() if config_path else DEFAULT_CONFIG_PATH
-    if not path.is_absolute():
-        path = (PROJECT_DIR / path).resolve()
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-
-    with path.open("r", encoding="utf-8") as fp:
-        raw: dict = json.load(fp)
-
+    # Every required key is asked for by name, so a config short of one says
+    # which, and in which file, rather than a bare KeyError from a launcher
+    # with no console to raise into.
+    path, raw = read_json_config(Path(config_path) if config_path else DEFAULT_CONFIG_PATH,
+                                 default_dir=PROJECT_DIR)
     project_dir = path.parent
 
     return BrokerConfig(
         config_path=path,
         project_dir=project_dir,
-        state_dir=_resolve_path(project_dir, raw["state_dir"]),
-        virtual_port=str(raw["virtual_port"]),
-        real_port=str(raw["real_port"]),
-        baud=int(raw["baud"]),
-        udp_host=str(raw["udp_host"]),
-        udp_port=int(raw["udp_port"]),
-        auto_stale_timeout=float(raw["auto_stale_timeout"]),
+        state_dir=require_path(raw, "state_dir", path, base=project_dir),
+        virtual_port=require_typed(raw, "virtual_port", path, cast=str),
+        real_port=require_typed(raw, "real_port", path, cast=str),
+        baud=require_typed(raw, "baud", path, cast=int),
+        udp_host=require_typed(raw, "udp_host", path, cast=str),
+        udp_port=require_typed(raw, "udp_port", path, cast=int),
+        auto_stale_timeout=require_typed(raw, "auto_stale_timeout", path, cast=float),
         idle_minutes=float(raw.get("idle_minutes", 15.0)),
-        mfp_config_path=_resolve_path(project_dir, raw.get("mfp_config_path", "")),
+        mfp_config_path=resolve_path(project_dir, raw.get("mfp_config_path", "")),
         tcode_udp_port=int(raw.get("tcode_udp_port", 50557)),
-        evolver_launcher=_resolve_path(
+        evolver_launcher=resolve_path(
             project_dir, raw.get("evolver_launcher", DEFAULT_EVOLVER_LAUNCHER)),
     )
