@@ -269,17 +269,11 @@ def _guarded_tick(tray_app: BrokerTrayApp, logger) -> None:
 
 
 def _name_this_process() -> None:
-    """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker – Tray".
-
-    The tray is the one process here that cannot be named on the way in: writing
-    the copy takes the very interpreter being named.  So each run makes it for
-    the run after and the launcher picks it up, which costs one launch, once.
-    """
-    try:
-        from .process_names import NAMER, TRAY_ROLE
-        NAMER.prepare_launcher(TRAY_ROLE)
-    except Exception:
-        pass  # Cosmetic: costs a name in the task list, never a launch.
+    """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker – Tray"
+    next time.  Why it is one launch behind, and why it can never cost the
+    launch: :meth:`ProcessNamer.name_this_process`."""
+    from .process_names import NAMER, TRAY_ROLE
+    NAMER.name_this_process(TRAY_ROLE)
 
 
 def main(argv: list[str] | None = None) -> int:
