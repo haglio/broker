@@ -107,18 +107,25 @@ def test_handle_line_infers_auto_mode_from_stroke_message():
 
 
 def test_handle_line_sends_stroke_bpm_and_sync_messages():
+    """Every STROKE and BPM line says auto is on, and only the first is news.
+    Each used to rewrite the mode file and resend AUTO, SHOW and the seed BPM
+    -- ahead of the real tempo on the same line -- at the device's line rate
+    (bug 29)."""
+    writes: list[tuple[Path, str]] = []
     sends: list[str] = []
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
         udp_host="127.0.0.1",
         udp_port=9001,
         logger=MagicMock(),
-        write_mode=lambda _path, _value, _logger: None,
+        write_mode=lambda path, value, _logger: writes.append((path, value)),
         udp_send=lambda _sock, _host, _port, msg: sends.append(msg),
     )
 
     controller.handle_line(object(), "StrokeName: Pull, PatternDuration: 2.0 bpm 120, beats 4 continue StrokeName:")
+    controller.handle_line(object(), "bpm 121, beats 4")
 
+    assert writes == [(Path("mode.txt"), "1")]
     assert sends == [
         "AUTO 1",
         "SHOW",
@@ -126,12 +133,11 @@ def test_handle_line_sends_stroke_bpm_and_sync_messages():
         "STROKE Pull",
         "PATTERN 2.0",
         "SYNC",
-        "AUTO 1",
-        "SHOW",
-        "BPM 87",
         "BPM 120",
         "BEATS 4",
         "SYNC",
+        "BPM 121",
+        "BEATS 4",
     ]
 
 
