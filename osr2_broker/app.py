@@ -46,8 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     logger = configure_logging("osr2_broker", config.log_file("broker"))
     install_exception_logging(logger)
 
-    from .single_instance import MUTEX_BROKER, mutex_name_for_config, try_acquire_mutex
-    _mutex_handle = try_acquire_mutex(mutex_name_for_config(MUTEX_BROKER, config.config_path))
+    from app_support.win32 import mutex_name, try_acquire_mutex
+
+    from .single_instance import MUTEX_BROKER
+    _mutex_handle = try_acquire_mutex(mutex_name(MUTEX_BROKER, config.config_path))
     if _mutex_handle is None:
         logger.warning("Another broker instance is already running; exiting")
         return 0
