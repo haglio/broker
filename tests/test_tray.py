@@ -13,10 +13,14 @@ def qapp():
 
 
 def test_menu_is_painted_in_the_shared_dark_palette(qapp):
-    """The menu must render dark, not in Windows' default light chrome."""
-    from osr2_broker.tray import build_menu
+    """The menu must render dark, not in Windows' default light chrome.
 
-    menu = build_menu()
+    The tray's own menu, with its rows: under the family's rules an empty menu
+    has no width to sample.
+    """
+    from osr2_broker.tray import BrokerTray
+
+    menu = BrokerTray().contextMenu()
     menu.resize(menu.sizeHint())
     image = menu.grab().toImage()
 
@@ -49,8 +53,9 @@ def test_the_status_line_reads_as_a_label_not_a_command(qapp):
 
 
 def test_the_item_under_the_cursor_lights_up(qapp):
-    """Without an explicit rule the stylesheet flattens Qt's own highlight."""
-    from shared_ui.colors import BG_BUTTON
+    """Without an explicit rule the stylesheet flattens Qt's own highlight; the
+    family's rule lights the row in the blue every menu in the family uses."""
+    from shared_ui.colors import BLUE
 
     from osr2_broker.tray import BrokerTray
 
@@ -62,7 +67,7 @@ def test_the_item_under_the_cursor_lights_up(qapp):
 
     row = menu.actionGeometry(tray.start_action)
     fill = image.pixelColor(row.right() - 2, row.center().y())
-    assert fill.name() == BG_BUTTON.name()
+    assert fill.name() == BLUE.name()
 
 
 def test_tray_menu_offers_the_broker_controls(qapp):
