@@ -68,10 +68,13 @@ class BrokerAutoController:
             if changed and not value:
                 self._deactivated = True
 
+        # Only a change is news.  Every STROKE and BPM line the script feed
+        # produces says auto is on, and publishing each rewrote the mode file
+        # and resent the seed BPM ahead of the real tempo, at the line rate.
+        if not changed:
+            return
         self.publish_effective_state(sock)
-
-        if changed:
-            self.logger.info("AUTO %s", "ON" if value else "OFF")
+        self.logger.info("AUTO %s", "ON" if value else "OFF")
 
     def consume_deactivation(self) -> bool:
         with self._lock:

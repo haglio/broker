@@ -272,10 +272,11 @@ class TestStrokeAndBpmFromSerial:
         with _running(s):
             _wait_until(lambda: "BEATS 2" in s.udp_messages)
 
+        # The mode is published once, when the STROKE turned it on; the BPM
+        # half of the same line no longer resends AUTO, SHOW and the seed BPM.
         assert s.udp_messages == [
             "AUTO 1", "SHOW", "BPM 87",
             "STROKE Twist", "PATTERN 1.5", "SYNC",
-            "AUTO 1", "SHOW", "BPM 87",
             "BPM 90", "BEATS 2", "SYNC",
         ]
 
