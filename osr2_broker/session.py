@@ -197,8 +197,8 @@ class BrokerSerialSession:
                 return
 
     def tick_command_and_stale_timeout(self, udp_sock, *, real_port, serial_write_lock) -> None:
-        cmd = self.consume_command(self.broker_cmd_file)
-        self.handle_broker_command(cmd, udp_sock)
+        for cmd in self.consume_command(self.broker_cmd_file):
+            self.handle_broker_command(cmd, udp_sock)
         self.sync_genau_enabled(udp_sock)
         self.maybe_disable_stale_auto(udp_sock)
         if self.auto_mode.consume_deactivation():
@@ -237,7 +237,7 @@ class BrokerSerialSession:
         self.auto_mode.set_enabled(udp_sock, True)
 
     # The whole vocabulary, in one place. fun_time, genau and clipper write
-    # these into broker_cmd.txt; command_file.py upper-cases whatever it reads,
+    # these into broker_cmd.txt; the family's consumer upper-cases whatever it reads,
     # so the keys are the verbs as they arrive.
     _VERBS = MappingProxyType({
         "PAUSE": _pause,

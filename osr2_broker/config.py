@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from app_support import state_files
+
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_DIR / "osr2_broker_config.json"
 
@@ -32,27 +34,27 @@ class BrokerConfig:
 
     @property
     def genau_mode_file(self) -> Path:
-        return self.state_dir / "genau_mode.txt"
+        return self.state_dir / state_files.GENAU_MODE
 
     @property
     def genau_enabled_file(self) -> Path:
-        return self.state_dir / "genau_enabled.txt"
+        return self.state_dir / state_files.GENAU_ENABLED
 
     @property
     def broker_cmd_file(self) -> Path:
-        return self.state_dir / "broker_cmd.txt"
+        return self.state_dir / state_files.BROKER_CMD
 
     @property
     def broker_heartbeat_file(self) -> Path:
-        return self.state_dir / "broker_heartbeat.txt"
+        return self.state_dir / state_files.BROKER_HEARTBEAT
 
     @property
     def osr2_serial_rx_file(self) -> Path:
-        return self.state_dir / "osr2_serial_rx.txt"
+        return self.state_dir / state_files.OSR2_SERIAL_RX
 
     @property
     def osr2_serial_tx_file(self) -> Path:
-        return self.state_dir / "osr2_serial_tx.txt"
+        return self.state_dir / state_files.OSR2_SERIAL_TX
 
     @property
     def osr2_idle_state_file(self) -> Path:

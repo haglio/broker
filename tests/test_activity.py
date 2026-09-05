@@ -54,11 +54,13 @@ def test_a_failed_write_still_spends_the_interval(tmp_path: Path):
     that has gone away costs one stamp rather than turning the throttle off and
     putting a write attempt on every byte off the serial port until it comes
     back."""
-    path = tmp_path / "gone" / "osr2_serial_rx.txt"
+    path = tmp_path / "blocked" / "osr2_serial_rx.txt"
+    path.parent.write_text("", encoding="utf-8")  # a file where the directory should be
     now = [1711900000.0]
     stamp = ActivityStamp(path, wall_clock=lambda: now[0])
 
-    stamp.mark()  # the parent does not exist yet, so this one cannot land
+    stamp.mark()  # nothing can be made under a file, so this one cannot land
+    path.parent.unlink()
     path.parent.mkdir()
     now[0] += ActivityStamp.WRITE_INTERVAL_SECONDS - 0.1
     stamp.mark()
@@ -68,9 +70,10 @@ def test_a_failed_write_still_spends_the_interval(tmp_path: Path):
 
 def test_a_file_that_cannot_be_written_does_not_reach_the_forwarding_loop(tmp_path: Path):
     """The stamp is a courtesy to the monitor, and it is marked from inside the
-    two loops that carry the serial traffic. A state directory that has gone away
-    must cost a stamp, not the bridge."""
-    path = tmp_path / "gone" / "osr2_serial_rx.txt"  # the parent is never created
+    two loops that carry the serial traffic. A state directory that cannot be
+    written must cost a stamp, not the bridge."""
+    path = tmp_path / "blocked" / "osr2_serial_rx.txt"
+    path.parent.write_text("", encoding="utf-8")  # a file where the directory should be
     stamp = ActivityStamp(path, wall_clock=lambda: 1711900000.0)
 
     stamp.mark()

@@ -11,6 +11,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from app_support.file_channel import publish_stamp
+
 
 class ActivityStamp:
     WRITE_INTERVAL_SECONDS = 5.0
@@ -25,7 +27,4 @@ class ActivityStamp:
         if now - self._last_write < self.WRITE_INTERVAL_SECONDS:
             return
         self._last_write = now
-        try:
-            self._path.write_text(str(now), encoding="utf-8")
-        except OSError:
-            pass
+        publish_stamp(self._path, now)

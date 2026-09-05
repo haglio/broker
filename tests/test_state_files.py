@@ -1,10 +1,9 @@
 """The files the broker publishes itself through.
 
 Four names under the shared state directory, read by fun_time, genau, clipper
-and the tray. Nothing here had a test before: every suite that touched these
-functions substituted a lambda for them, so the mode file's exact contents, the
-BOM stripping, the missing-file defaults and the blank-file repair were all
-unpinned.
+and the tray.  The reading and the writing are app_support.file_channel's and
+pinned there, file by file; what is pinned here is the broker's side of each:
+what it writes, when, and what it does when it cannot.
 """
 from __future__ import annotations
 
@@ -50,13 +49,15 @@ class TestWriteMode:
 
         write_mode(tmp_path, "1", logger)  # a directory, so the write cannot land
 
-        logger.exception.assert_called_once()
+        logger.error.assert_called_once()
 
 
 class TestReadGenauEnabled:
+    """The family's flag reader with the broker's default: on until somebody
+    turns it off.  The reading itself -- the BOM, the blank, the torn file --
+    is pinned in app_support."""
+
     def test_a_file_that_is_not_there_reads_as_enabled(self, tmp_path: Path):
-        """Genau is on until someone turns it off; a missing file is nobody
-        having turned it off."""
         assert read_genau_enabled(tmp_path / "genau_enabled.txt") is True
 
     def test_a_zero_reads_as_disabled(self, tmp_path: Path):
@@ -64,33 +65,6 @@ class TestReadGenauEnabled:
         path.write_text("0", encoding="utf-8")
 
         assert read_genau_enabled(path) is False
-
-    def test_a_one_reads_as_enabled(self, tmp_path: Path):
-        path = tmp_path / "genau_enabled.txt"
-        path.write_text("1", encoding="utf-8")
-
-        assert read_genau_enabled(path) is True
-
-    def test_anything_that_is_not_a_zero_reads_as_enabled(self, tmp_path: Path):
-        """The test is for the off switch, not for the on switch: a file left
-        half-written, or holding something nobody here recognises, is not a
-        decision to turn Genau off."""
-        path = tmp_path / "genau_enabled.txt"
-        path.write_text("yes please", encoding="utf-8")
-
-        assert read_genau_enabled(path) is True
-
-    def test_a_bom_and_surrounding_whitespace_do_not_hide_the_zero(self, tmp_path: Path):
-        """PowerShell writes this file, and PowerShell leaves a BOM. Glued to
-        the value it would read as enabled and Genau would be on against the
-        user's wishes."""
-        path = tmp_path / "genau_enabled.txt"
-        path.write_bytes(b"\xef\xbb\xbf 0 \r\n")
-
-        assert read_genau_enabled(path) is False
-
-    def test_an_unreadable_file_reads_as_enabled(self, tmp_path: Path):
-        assert read_genau_enabled(tmp_path) is True  # a directory
 
 
 class TestEnsureGenauEnabledFile:
@@ -141,7 +115,7 @@ class TestHeartbeat:
     def test_the_heartbeat_is_the_wall_clock_as_text(self, tmp_path: Path):
         heartbeat_file = tmp_path / "state" / "broker_heartbeat.txt"
 
-        with patch("osr2_broker.state_files.time.time", return_value=123.45):
+        with patch("app_support.file_channel.time.time", return_value=123.45):
             write_heartbeat(heartbeat_file, LOGGER)
 
         assert heartbeat_file.read_text(encoding="utf-8") == "123.45"
