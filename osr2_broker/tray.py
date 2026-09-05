@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
@@ -250,7 +251,7 @@ def terminate_broker(logger) -> None:
             "-ErrorAction SilentlyContinue }",
         ],
         check=False,
-        creationflags=subprocess.CREATE_NO_WINDOW,
+        **hidden_subprocess_kwargs(),
     )
     logger.info("Terminated broker")
 
