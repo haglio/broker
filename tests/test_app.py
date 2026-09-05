@@ -298,6 +298,22 @@ class TestMainSurvivesMfpConfigTrouble:
         assert "COM4" in open_ports
 
 
+class TestMainConfiguredWithoutMfp:
+    def test_a_broker_without_an_mfp_config_leaves_mfp_alone(self, broker_app_module, cfg_factory):
+        """No MFP config named means nothing to read or point anywhere; the
+        start says so once rather than warning about the file it has not got
+        (bug 26)."""
+        cfg_path = cfg_factory({"mfp_config_path": ""})
+        FakeSerial = make_fake_serial([])
+
+        def stop_on_first_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        with _main_running(broker_app_module, fake_serial=FakeSerial, sleep=stop_on_first_sleep):
+            broker_app_module.main(["--config", str(cfg_path)])
+            broker_app_module.ensure_mfp_serial_port.assert_not_called()
+
+
 class TestBrokerSingleInstance:
     def test_exits_when_already_running(self, broker_app_module, cfg_path):
         logger = logging.getLogger("test.broker")

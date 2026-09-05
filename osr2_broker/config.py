@@ -28,7 +28,9 @@ class BrokerConfig:
     udp_port: int
     auto_stale_timeout: float
     idle_minutes: float
-    mfp_config_path: Path
+    # None when the config names no MFP config: there is then nothing to read
+    # the port from and nothing to point at ours.
+    mfp_config_path: Path | None
     tcode_udp_port: int
     evolver_launcher: Path
 
@@ -83,7 +85,8 @@ def load_config(config_path: str | Path | None = None) -> BrokerConfig:
         udp_port=require_typed(raw, "udp_port", path, cast=int),
         auto_stale_timeout=require_typed(raw, "auto_stale_timeout", path, cast=float),
         idle_minutes=float(raw.get("idle_minutes", 15.0)),
-        mfp_config_path=resolve_path(project_dir, raw.get("mfp_config_path", "")),
+        mfp_config_path=(resolve_path(project_dir, raw["mfp_config_path"])
+                         if raw.get("mfp_config_path") else None),
         tcode_udp_port=int(raw.get("tcode_udp_port", 50557)),
         evolver_launcher=resolve_path(
             project_dir, raw.get("evolver_launcher", DEFAULT_EVOLVER_LAUNCHER)),

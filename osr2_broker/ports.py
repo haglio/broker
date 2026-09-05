@@ -101,7 +101,7 @@ def collect_com0com_ports() -> dict[str, tuple[str, str]]:
     return ports
 
 
-def resolve_virtual_port(mfp_config_path: Path, configured_port: str, logger) -> str:
+def resolve_virtual_port(mfp_config_path: Path | None, configured_port: str, logger) -> str:
     normalized = configured_port.upper()
     com0com_ports = collect_com0com_ports()
     if normalized in com0com_ports:
@@ -111,7 +111,7 @@ def resolve_virtual_port(mfp_config_path: Path, configured_port: str, logger) ->
         logger.warning("Configured virtual port %s is missing and no com0com ports were detected", configured_port)
         return configured_port
 
-    mfp_selected = read_mfp_selected_serial_port(mfp_config_path)
+    mfp_selected = read_mfp_selected_serial_port(mfp_config_path) if mfp_config_path else None
     if mfp_selected:
         match = RE_COM0COM_PORT.search(mfp_selected)
         if match:
