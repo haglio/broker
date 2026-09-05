@@ -44,11 +44,12 @@ def test_tcode_udp_port_defaults_to_50557(tmp_path: Path):
     assert config.tcode_udp_port == 50557
 
 
-def test_mfp_config_path_defaults_to_the_config_s_own_directory(tmp_path: Path):
-    """The default is the empty string, which resolves against the config's
-    parent — pinned as it stands, so a change to the default is a decision."""
-    config = load_config(_write_minimal_config(tmp_path))
-    assert config.mfp_config_path == tmp_path.resolve()
+def test_mfp_config_path_is_none_when_the_config_names_none(tmp_path: Path):
+    """An omitted (or empty) key used to resolve to the config's own directory,
+    a path that names no file: every start then read a directory as MFP's
+    config and warned twice about a failure that was not one (bug 26)."""
+    assert load_config(_write_minimal_config(tmp_path)).mfp_config_path is None
+    assert load_config(_write_minimal_config(tmp_path, {"mfp_config_path": ""})).mfp_config_path is None
 
 
 def test_a_relative_state_dir_resolves_against_the_config_s_directory(tmp_path: Path):

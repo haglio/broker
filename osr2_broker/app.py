@@ -59,11 +59,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # Point MFP at our virtual port. A courtesy, not a prerequisite: MFP's config
     # lives under Program Files and MFP may hold it open, and being refused there
-    # must not stop us from bridging.
-    try:
-        ensure_mfp_serial_port(config.mfp_config_path, virtual_port, logger)
-    except Exception:
-        logger.exception("Could not update MFP serial port config")
+    # must not stop us from bridging.  A config that names no MFP config has
+    # nothing to point anywhere, which is not a failure.
+    if config.mfp_config_path is None:
+        logger.info("No mfp_config_path configured; leaving MFP's port alone")
+    else:
+        try:
+            ensure_mfp_serial_port(config.mfp_config_path, virtual_port, logger)
+        except Exception:
+            logger.exception("Could not update MFP serial port config")
 
     state_file = config.genau_mode_file
     genau_enabled_file = config.genau_enabled_file
