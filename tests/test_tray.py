@@ -105,8 +105,10 @@ def test_mode_text_is_unknown_when_the_broker_has_written_nothing(tmp_path):
 
 
 def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
+    from app_support.win32 import mutex_name
+
     from osr2_broker.config import load_config
-    from osr2_broker.single_instance import MUTEX_BROKER, mutex_name_for_config
+    from osr2_broker.single_instance import MUTEX_BROKER
     from osr2_broker.tray import BrokerSupervisor
 
     config = load_config(cfg_path)
@@ -119,7 +121,7 @@ def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
     )
 
     assert supervisor.is_running()
-    assert probed == [mutex_name_for_config(MUTEX_BROKER, config.config_path)]
+    assert probed == [mutex_name(MUTEX_BROKER, config.config_path)]
 
 
 def _supervisor(cfg_path, *, running=False):

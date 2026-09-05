@@ -32,7 +32,7 @@ def test_the_process_claims_its_taskbar_identity_before_the_dialog_appears():
 
     with (
         patch.object(
-            win32, "_SetCurrentProcessExplicitAppUserModelID",
+            win32, "set_app_user_model_id",
             side_effect=lambda aumid: order.append(aumid),
         ),
         patch("shared_ui.alert.show_alert", side_effect=lambda *a, **k: order.append("dialog")),

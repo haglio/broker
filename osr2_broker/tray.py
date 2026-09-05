@@ -6,18 +6,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 from shared_ui.colors import BG_BUTTON, BG_TERTIARY, TEXT_MUTED, TEXT_PRIMARY
 
 from . import peer_watch
-from .single_instance import (
-    MUTEX_BROKER,
-    MUTEX_TRAY,
-    is_mutex_held,
-    mutex_name_for_config,
-    try_acquire_mutex,
-)
+from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 
 # The numbers the broker writes to its mode file, in the words the menu shows.
 MODE_NAMES = {"0": "control", "1": "auto"}
@@ -76,7 +71,7 @@ class BrokerSupervisor:
 
     def __init__(self, config, *, launch, terminate, is_held=is_mutex_held):
         self._config = config
-        self._mutex_name = mutex_name_for_config(MUTEX_BROKER, config.config_path)
+        self._mutex_name = mutex_name(MUTEX_BROKER, config.config_path)
         self._launch = launch
         self._terminate = terminate
         self._is_held = is_held
@@ -285,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     from PyQt6.QtWidgets import QApplication
 
     from .config import load_config
-    from .win32 import ICON_PATH, _set_app_user_model_id
+    from .win32 import ICON_PATH, claim_taskbar_identity
 
     config = load_config(preparse_config_path(argv))
     logger = configure_logging("osr2_broker.tray", config.log_file("broker_tray"))
@@ -304,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     # deliberate start rather than every two minutes.
     peer_watch.clear_broker_stand_down()
 
-    _set_app_user_model_id()
+    claim_taskbar_identity()
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 

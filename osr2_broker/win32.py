@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes as wt
+import logging
+
+from app_support.win32 import set_app_user_model_id
 
 from .config import PROJECT_DIR
 
@@ -14,16 +17,18 @@ ICON_PATH = PROJECT_DIR / "broker_icon.ico"
 # (pythonw.exe); with it, Windows uses the window's own broker icon.
 APP_USER_MODEL_ID = "OSR2Broker"
 
-_SetCurrentProcessExplicitAppUserModelID = (
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
-)
-_SetCurrentProcessExplicitAppUserModelID.argtypes = [wt.LPCWSTR]
-_SetCurrentProcessExplicitAppUserModelID.restype = ctypes.c_long  # HRESULT
 
+def claim_taskbar_identity() -> None:
+    """Claim a stable taskbar identity so windows show the broker icon.
 
-def _set_app_user_model_id() -> None:
-    """Claim a stable taskbar identity so windows show the broker icon."""
-    _SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    Cosmetic: a window under the interpreter's icon is still a window, so a
+    refusal is logged and the launch goes on.
+    """
+    try:
+        set_app_user_model_id(APP_USER_MODEL_ID)
+    except OSError:
+        logging.getLogger(__name__).warning(
+            "Could not claim the taskbar identity", exc_info=True)
 
 
 # --- Warning dialog ---
@@ -37,7 +42,7 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
     """
     from shared_ui.alert import Level, show_alert
 
-    _set_app_user_model_id()
+    claim_taskbar_identity()
     show_alert(
         title, message,
         level=Level.WARNING, icon=ICON_PATH, button_text=button_text,

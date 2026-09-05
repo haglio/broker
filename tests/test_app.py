@@ -234,7 +234,7 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
         patch.object(broker_app_module, "configure_logging",
                      return_value=logging.getLogger("test.broker")),
         patch.object(broker_app_module, "install_exception_logging"),
-        patch("osr2_broker.single_instance.try_acquire_mutex", return_value=42),
+        patch("app_support.win32.try_acquire_mutex", return_value=42),
         patch.object(broker_app_module, "resolve_virtual_port",
                      side_effect=lambda _config, port, _logger: port),
         patch.object(broker_app_module, "ensure_mfp_serial_port",
@@ -304,7 +304,7 @@ class TestBrokerSingleInstance:
         mock_socket_mod = MagicMock()
         with patch.object(broker_app_module, "configure_logging", return_value=logger), \
              patch.object(broker_app_module, "install_exception_logging"), \
-             patch("osr2_broker.single_instance.try_acquire_mutex", return_value=None), \
+             patch("app_support.win32.try_acquire_mutex", return_value=None), \
              patch.object(broker_app_module, "socket", mock_socket_mod):
             result = broker_app_module.main(["--config", str(cfg_path)])
 
