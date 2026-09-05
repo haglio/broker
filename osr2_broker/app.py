@@ -8,11 +8,11 @@ import time
 
 import serial
 from app_support.cli import preparse_config_path
+from app_support.file_channel import consume_command_file
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
 
 from .activity import ActivityStamp
-from .command_file import consume_command_file
 from .config import load_config
 from .ports import ensure_mfp_serial_port, resolve_virtual_port
 from .protocol import BrokerAutoController
