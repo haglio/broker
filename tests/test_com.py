@@ -242,15 +242,15 @@ class TestAutoTransitionFromSerial:
         assert "AUTO 1" in s.udp_messages
 
 
-class TestStrokeAndBpmFromSerial:
-    def test_stroke_and_pattern_parsed_from_serial_data(self, tmp_path):
+class TestMotionAndBpmFromSerial:
+    def test_motion_and_pattern_parsed_from_serial_data(self, tmp_path):
         s = _build_stack(tmp_path)
         s.real_port.inject(b"StrokeName: Pull, PatternDuration: 2.0\r\n")
 
         with _running(s):
-            _wait_until(lambda: "STROKE Pull" in s.udp_messages)
+            _wait_until(lambda: "MOTION Pull" in s.udp_messages)
 
-        assert "STROKE Pull" in s.udp_messages
+        assert "MOTION Pull" in s.udp_messages
         assert "PATTERN 2.0" in s.udp_messages
         assert "SYNC" in s.udp_messages
 
@@ -264,7 +264,7 @@ class TestStrokeAndBpmFromSerial:
         assert "BPM 120" in s.udp_messages
         assert "BEATS 4" in s.udp_messages
 
-    def test_combined_stroke_and_bpm_on_one_line(self, tmp_path):
+    def test_combined_motion_and_bpm_on_one_line(self, tmp_path):
         s = _build_stack(tmp_path)
         line = b"StrokeName: Twist, PatternDuration: 1.5 bpm 90, beats 2 continue StrokeName:\r\n"
         s.real_port.inject(line)
@@ -272,11 +272,11 @@ class TestStrokeAndBpmFromSerial:
         with _running(s):
             _wait_until(lambda: "BEATS 2" in s.udp_messages)
 
-        # The mode is published once, when the STROKE turned it on; the BPM
+        # The mode is published once, when the MOTION turned it on; the BPM
         # half of the same line no longer resends AUTO, SHOW and the seed BPM.
         assert s.udp_messages == [
             "AUTO 1", "SHOW", "BPM 87",
-            "STROKE Twist", "PATTERN 1.5", "SYNC",
+            "MOTION Twist", "PATTERN 1.5", "SYNC",
             "BPM 90", "BEATS 2", "SYNC",
         ]
 
@@ -408,7 +408,7 @@ class TestMultiLineSerialBuffer:
         with _running(s):
             _wait_until(lambda: "BEATS 8" in s.udp_messages)
 
-        assert "STROKE Push" in s.udp_messages
+        assert "MOTION Push" in s.udp_messages
         assert "PATTERN 3.0" in s.udp_messages
         assert "BPM 60" in s.udp_messages
         assert "BEATS 8" in s.udp_messages
@@ -435,7 +435,7 @@ class TestAutoTransitionSequence:
         ]
         assert transitions == ["AUTO 1", "AUTO 0", "AUTO 1"]
 
-    def test_stroke_data_interleaved_with_auto_transitions(self, tmp_path):
+    def test_motion_data_interleaved_with_auto_transitions(self, tmp_path):
         s = _build_stack(tmp_path)
         s.real_port.inject(
             b"Auto mode is on!\r\n"
@@ -447,8 +447,8 @@ class TestAutoTransitionSequence:
             _wait_until(lambda: "BEATS 4" in s.udp_messages)
 
         assert "AUTO 1" in s.udp_messages
-        assert "STROKE Wave" in s.udp_messages
+        assert "MOTION Wave" in s.udp_messages
         assert "BPM 140" in s.udp_messages
         auto_idx = s.udp_messages.index("AUTO 1")
-        stroke_idx = s.udp_messages.index("STROKE Wave")
-        assert auto_idx < stroke_idx
+        motion_idx = s.udp_messages.index("MOTION Wave")
+        assert auto_idx < motion_idx
