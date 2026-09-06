@@ -64,7 +64,7 @@ class TestTheTray:
         assert LAUNCHER.rindex(expected) > LAUNCHER.index(r"\.venv\Scripts\pythonw.exe")
 
     def test_the_launcher_still_works_before_any_run_has_named_it(self):
-        """The naming runs one launch behind, so a fresh checkout has no copy to
+        """The naming runs one launch late, so a fresh checkout has no copy to
         find.  That must cost the name and nothing else."""
         assert r'pythonExe = projectRoot & "\.venv\Scripts\pythonw.exe"' in LAUNCHER
 
