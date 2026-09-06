@@ -297,7 +297,7 @@ def test_maybe_disable_stale_auto_turns_off_auto_when_stale():
 
 def test_maybe_disable_stale_auto_leaves_a_paused_broker_alone():
     """Paused means the user took over; even a genuinely stale rx must not
-    flip AUTO behind their back."""
+    flip AUTO without them knowing."""
     session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
     session.broker_paused.set()
     session.last_real_rx_time = 7.0  # stale: 3s old against a 2s timeout
