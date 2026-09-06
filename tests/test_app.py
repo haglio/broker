@@ -87,7 +87,7 @@ def test_the_module_fixture_puts_back_only_the_name_it_borrowed(broker_app_modul
 
     That is not hypothetical: it is how `test_a_second_tray_stands_down` came to
     run the tray's `main()` with its logging patches inert, leaving an
-    excepthook and an open log file behind for the rest of the session. It went
+    excepthook and an open log file for the rest of the session. It went
     unnoticed because a later test in this file happened to pull the evicted
     module back in before the tray tests ran.
     """

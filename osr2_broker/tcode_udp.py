@@ -1,4 +1,4 @@
-"""T-Code arriving over loopback UDP, and the mute a direct write leaves behind.
+"""T-Code arriving over loopback UDP, and the mute that outlasts a direct write.
 
 Genau sends the OSR2 its moves as datagrams, bypassing MFP entirely. A fired
 hold writes to the device the same way. Both are "someone drove the device
