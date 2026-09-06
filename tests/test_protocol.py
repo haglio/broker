@@ -88,7 +88,7 @@ def test_handle_line_infers_auto_mode_from_bpm_message():
     assert "SHOW" in sends
 
 
-def test_handle_line_infers_auto_mode_from_stroke_message():
+def test_handle_line_infers_auto_mode_from_motion_message():
     sends: list[str] = []
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
@@ -106,8 +106,8 @@ def test_handle_line_infers_auto_mode_from_stroke_message():
     assert "SHOW" in sends
 
 
-def test_handle_line_sends_stroke_bpm_and_sync_messages():
-    """Every STROKE and BPM line says auto is on, and only the first is news.
+def test_handle_line_sends_motion_bpm_and_sync_messages():
+    """Every MOTION and BPM line says auto is on, and only the first is news.
     Each used to rewrite the mode file and resend AUTO, SHOW and the seed BPM
     -- ahead of the real tempo on the same line -- at the device's line rate
     (bug 29)."""
@@ -130,7 +130,7 @@ def test_handle_line_sends_stroke_bpm_and_sync_messages():
         "AUTO 1",
         "SHOW",
         "BPM 87",
-        "STROKE Pull",
+        "MOTION Pull",
         "PATTERN 2.0",
         "SYNC",
         "BPM 120",
