@@ -65,7 +65,7 @@ class BrokerSupervisor:
         return self._is_held(self._mutex_name)
 
     def _broker_argv(self) -> list[str]:
-        # Named outright rather than one launch behind: the broker is a child,
+        # Named outright rather than one launch late: the broker is a child,
         # so the tray is holding the interpreter that writes the copy and is not
         # the process being named.  See osr2_broker.process_names.
         from .process_names import BROKER_ROLE, NAMER
@@ -250,7 +250,7 @@ def _guarded_tick(tray_app: BrokerTrayApp, logger) -> None:
 
 def _name_this_process() -> None:
     """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker – Tray"
-    next time.  Why it is one launch behind, and why it can never cost the
+    next time.  Why it is one launch late, and why it can never cost the
     launch: :meth:`ProcessNamer.name_this_process`."""
     from .process_names import NAMER, TRAY_ROLE
     NAMER.name_this_process(TRAY_ROLE)
