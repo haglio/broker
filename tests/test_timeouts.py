@@ -1,4 +1,4 @@
-"""A hung test has to die and name itself, not hold the merge queue for six hours.
+"""A stalled test has to die and name itself, not hold the merge queue for six hours.
 
 No repo in this family put a clock on a test, on suites that block on threads,
 sockets and child processes. A required check with no budget stalls until
