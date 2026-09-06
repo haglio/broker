@@ -84,7 +84,7 @@ def test_the_plugin_that_keeps_the_clock_is_declared_where_ci_installs_it():
     pytest rejects an option it does not recognise before it collects anything,
     so a `--timeout` in the config with no `pytest-timeout` in the dev extra is
     not a red test -- it is a usage error, and the required check goes red with
-    no suite behind it. It cannot happen locally either, because the shared
+    no suite backing it. It cannot happen locally either, because the shared
     development venv has the plugin whether this repo asks for it or not. So the
     declaration is checked here, where a run that works can still say it is
     missing.
