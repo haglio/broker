@@ -37,7 +37,7 @@ def _brightest_text_pixel(image, rect):
     """The lightest pixel in a menu row — its text, against the dark fill."""
     return max(
         max(image.pixelColor(x, y).getRgb()[:3])
-        for y in range(rect.top(), rect.bottom() + 1)
+        for y in range(rect.top(), rect.bottomLeft().y() + 1)
         for x in range(rect.left(), rect.right() + 1)
     )
 
