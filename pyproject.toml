@@ -30,8 +30,9 @@ dev = [
 # slowest on a runner: it returns early when no blocklist is reachable, and
 # the blocklist is git-ignored, so a fresh checkout has none. What CI does run
 # longest here is the session teardown-retry test at about a second.
-# --timeout-method=thread is the half that pays for itself: it dumps the hung
-# stack, which turns a stalled required check into a one-line diagnosis.
+# --timeout-method=thread is the half that pays for itself: it dumps the stack
+# of the test that stopped, which turns a stalled required check into a
+# one-line diagnosis.
 # tests/test_timeouts.py holds all three halves of it.
 addopts = "-p no:cacheprovider --timeout=60 --timeout-method=thread -p app_support.sanitize.pytest_plugin"
 testpaths = ["tests"]
