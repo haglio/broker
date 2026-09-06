@@ -159,7 +159,7 @@ def test_resume_cancels_pending_park():
 
 
 def test_retract_schedules_the_far_end_instead_of_home():
-    """RETRACT is PARK's antonym: same settle delay, opposite end of the stroke.
+    """RETRACT is PARK's antonym: same settle delay, opposite end of the travel.
 
     Park sends the device home (position 0); retract sends it as far away as it
     goes (9999), which is what the sensation emergency asks for.
