@@ -15,7 +15,7 @@ class Hold:
     """A fixed position the broker sends the device to and keeps it at.
 
     PARK is home, where a session's motion ends.  RETRACT is its antonym — the
-    far end of the stroke, for when the device has to be away from the user now.
+    far end of the travel, for when the device has to be away from the user now.
     The two differ only in where they land and in what the log calls it: both are
     one T-Code move, both wait out the same settle delay, and both mute the
     script feed around it so an in-flight tail cannot undo them.
