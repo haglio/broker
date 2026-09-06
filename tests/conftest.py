@@ -48,7 +48,7 @@ def _no_test_may_keep_a_piece_of_the_process(request):
     replaced by a hook writing into a state directory it is about to delete, and
     an open file handler on the logger it wrote through. From then on an
     exception on any thread goes there instead of to pytest's reporting, and on
-    Windows the open handle also leaves case_* trees behind under
+    Windows the open handle also leaves case_* trees under
     .tmp-pytest-local because rmtree cannot take them.
 
     Restoring quietly would only move the problem: the next such test would
@@ -75,7 +75,7 @@ def _no_test_may_keep_a_piece_of_the_process(request):
             handler.close()
 
     assert not kept, (
-        f"{request.node.name} left {', '.join(kept)} behind — patch what "
+        f"{request.node.name} left {', '.join(kept)} — patch what "
         "installs it, the way tests/test_app.py does for the broker's main()"
     )
 

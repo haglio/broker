@@ -1,4 +1,4 @@
-"""The T-Code UDP listener, and the window a direct write opens behind it.
+"""The T-Code UDP listener, and the window a direct write leaves open.
 
 Genau drives the OSR2 straight over a loopback datagram, bypassing MFP. So does
 a fired hold. Either way the device has just been told where to go, and MFP's
@@ -258,7 +258,7 @@ def test_a_forwarded_datagram_stamps_the_tx_activity_file(tmp_path):
     assert float(tx_file.read_text()) == 1711900000.0
 
 
-def test_a_forwarded_datagram_mutes_mfp_behind_it():
+def test_a_forwarded_datagram_mutes_mfp_after_it():
     """MFP and Genau both drive the same device. Whichever spoke last wins for
     the length of the window, and here that is the datagram."""
     port = _free_port()
