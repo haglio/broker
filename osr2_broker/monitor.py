@@ -25,9 +25,9 @@ class MonitorState:
         self._device_on = False
         self._device_on_since: float | None = None
         self._idle_since: float | None = idle_since
+        self._not_idle_since: float | None = None
         self._alerted = alerted
         self._warning_pending = False
-        self._in_use_since: float | None = None
 
     @property
     def device_on(self) -> bool:
@@ -57,23 +57,19 @@ class MonitorState:
 
         if not self._device_on:
             self._device_on_since = None
-            self._idle_since = None
-            self._in_use_since = None
-            return None
-
-        if not was_on:
+        elif not was_on:
             self._device_on_since = now
 
-        if in_use:
+        idle = self._device_on and not in_use
+        if not idle:
             self._idle_since = None
-            if self._in_use_since is None:
-                self._in_use_since = now
-            if not self._alerted or (now - self._in_use_since) >= self._rearm_seconds:
+            if self._not_idle_since is None:
+                self._not_idle_since = now
+            if (now - self._not_idle_since) >= self._rearm_seconds:
                 self._alerted = False
             return None
-        self._in_use_since = None
+        self._not_idle_since = None
 
-        # Device on but not in use
         if self._idle_since is None:
             on_since = self._device_on_since or now
             if last_tx is not None and last_tx > on_since:
