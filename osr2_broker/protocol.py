@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 RE_BPM = re.compile(r"\bbpm\s+(\d+),\s+beats\s+\d+", re.IGNORECASE)
-RE_MOTION = re.compile(r"StrokeName:\s*([^,]+),\s*PatternDuration:\s*[0-9.]+", re.IGNORECASE)
+RE_MOTION = re.compile(r"StrokeName:\s*[^,]+,\s*PatternDuration:\s*[0-9.]+", re.IGNORECASE)
 
 
 def parse_auto_transition(line: str) -> bool | None:
@@ -67,7 +67,7 @@ class BrokerAutoController:
             if changed and not value:
                 self._deactivated = True
 
-        # Only a change is news.  Every MOTION and BPM line the script feed
+        # Only a change is news.  Every motion and BPM line the script feed
         # produces says auto is on, and publishing each rewrote the mode file
         # and resent the seed BPM ahead of the real tempo, at the line rate.
         if not changed:
@@ -103,10 +103,8 @@ class BrokerAutoController:
         if auto_transition is False:
             self.set_auto(sock, False)
 
-        motion_match = RE_MOTION.search(line)
-        if motion_match:
+        if RE_MOTION.search(line):
             self.set_auto(sock, True)
-            self.udp_send(sock, self.udp_host, self.udp_port, f"MOTION {motion_match.group(1).strip()}")
             self.udp_send(sock, self.udp_host, self.udp_port, "SYNC")
 
         bpm_match = RE_BPM.search(line)

@@ -104,8 +104,8 @@ def test_handle_line_infers_auto_mode_from_motion_message():
     assert "AUTO 1" in sends
 
 
-def test_handle_line_sends_motion_bpm_and_sync_messages():
-    """Every MOTION and BPM line says auto is on, and only the first is news.
+def test_handle_line_sends_bpm_and_sync_messages():
+    """Every motion and BPM line says auto is on, and only the first is news.
     Each used to rewrite the mode file and resend AUTO and the seed BPM
     -- ahead of the real tempo on the same line -- at the device's line rate
     (bug 29)."""
@@ -127,7 +127,6 @@ def test_handle_line_sends_motion_bpm_and_sync_messages():
     assert sends == [
         "AUTO 1",
         "BPM 87",
-        "MOTION Pull",
         "SYNC",
         "BPM 120",
         "SYNC",
