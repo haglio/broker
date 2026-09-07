@@ -5,7 +5,7 @@ import socket
 import threading
 from pathlib import Path
 
-RE_BPM = re.compile(r"\bbpm\s+(\d+),\s+beats\s+(\d+)", re.IGNORECASE)
+RE_BPM = re.compile(r"\bbpm\s+(\d+),\s+beats\s+\d+", re.IGNORECASE)
 RE_MOTION = re.compile(r"StrokeName:\s*([^,]+),\s*PatternDuration:\s*([0-9.]+)", re.IGNORECASE)
 
 
@@ -114,7 +114,6 @@ class BrokerAutoController:
         if bpm_match:
             self.set_auto(sock, True)
             self.udp_send(sock, self.udp_host, self.udp_port, f"BPM {bpm_match.group(1)}")
-            self.udp_send(sock, self.udp_host, self.udp_port, f"BEATS {bpm_match.group(2)}")
 
         if "continue strokename:" in low or "start transition" in low:
             self.udp_send(sock, self.udp_host, self.udp_port, "SYNC")

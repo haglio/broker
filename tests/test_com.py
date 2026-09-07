@@ -252,7 +252,7 @@ class TestMotionAndBpmFromSerial:
         assert "PATTERN 2.0" in s.udp_messages
         assert "SYNC" in s.udp_messages
 
-    def test_bpm_and_beats_parsed_from_serial_data(self, tmp_path):
+    def test_bpm_parsed_from_serial_data(self, tmp_path):
         s = _build_stack(tmp_path)
         s.real_port.inject(b"bpm 120, beats 4\r\n")
 
@@ -260,7 +260,6 @@ class TestMotionAndBpmFromSerial:
             _wait_until(lambda: "BPM 120" in s.udp_messages)
 
         assert "BPM 120" in s.udp_messages
-        assert "BEATS 4" in s.udp_messages
 
     def test_combined_motion_and_bpm_on_one_line(self, tmp_path):
         s = _build_stack(tmp_path)
@@ -268,14 +267,14 @@ class TestMotionAndBpmFromSerial:
         s.real_port.inject(line)
 
         with _running(s):
-            _wait_until(lambda: "BEATS 2" in s.udp_messages)
+            _wait_until(lambda: s.udp_messages.count("SYNC") == 2)
 
         # The mode is published once, when the MOTION turned it on; the BPM
         # half of the same line no longer resends AUTO and the seed BPM.
         assert s.udp_messages == [
             "AUTO 1", "BPM 87",
             "MOTION Twist", "PATTERN 1.5", "SYNC",
-            "BPM 90", "BEATS 2", "SYNC",
+            "BPM 90", "SYNC",
         ]
 
 
@@ -403,12 +402,11 @@ class TestMultiLineSerialBuffer:
         )
 
         with _running(s):
-            _wait_until(lambda: "BEATS 8" in s.udp_messages)
+            _wait_until(lambda: "BPM 60" in s.udp_messages)
 
         assert "MOTION Push" in s.udp_messages
         assert "PATTERN 3.0" in s.udp_messages
         assert "BPM 60" in s.udp_messages
-        assert "BEATS 8" in s.udp_messages
 
 
 class TestAutoTransitionSequence:
@@ -441,7 +439,7 @@ class TestAutoTransitionSequence:
         )
 
         with _running(s):
-            _wait_until(lambda: "BEATS 4" in s.udp_messages)
+            _wait_until(lambda: "BPM 140" in s.udp_messages)
 
         assert "AUTO 1" in s.udp_messages
         assert "MOTION Wave" in s.udp_messages
