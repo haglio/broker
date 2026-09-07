@@ -131,10 +131,8 @@ def test_handle_line_sends_motion_bpm_and_sync_messages():
         "PATTERN 2.0",
         "SYNC",
         "BPM 120",
-        "BEATS 4",
         "SYNC",
         "BPM 121",
-        "BEATS 4",
     ]
 
 
