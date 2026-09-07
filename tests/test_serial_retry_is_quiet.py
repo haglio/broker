@@ -1,10 +1,10 @@
-"""The retry loop while the OSR2 is switched off.
+"""The retry loop while the OSR2's port is away.
 
-A device that is off takes its COM port away with it, and every open against a
-port Windows does not have raises the same SerialException.  Retried once a
-second with a traceback apiece, that wrote four megabytes into the broker log in
-forty minutes -- rolling it three times, so the outage erased every record that
-came before it and the one thing a reader came for was the one thing gone.
+Every open against a port Windows does not have raises the same
+SerialException.  Retried once a second with a traceback apiece, that wrote four
+megabytes into the broker log in forty minutes -- rolling it three times, so the
+outage erased every record that came before it and the one thing a reader came
+for was the one thing gone.
 
 These pin both halves of the answer: the loop waits on the port's return rather
 than hammering the open, and a run of identical failures is reported once and

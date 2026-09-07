@@ -159,14 +159,20 @@ def wait_for_real_port(
 ) -> bool:
     """Hold the retry loop while the OSR2's port is not enumerated at all.
 
-    A switched-off or unplugged OSR2 takes its COM port away with it, and
-    ``serial.Serial`` answers that expensively: an open that raises, a full
-    traceback logged, once a second, for as long as the device stays off.  Two
-    hours of that is the whole broker log, so the outage erases every record
-    that came before it.  Enumeration answers the same question for nothing, so
-    absence is said once, waited on quietly, and said once more when it ends --
-    and the wait ends the moment the port is back, which is sooner than any
-    fixed backoff would have retried.
+    A port Windows does not have can only fail to open, and ``serial.Serial``
+    says so expensively: a raise and a full traceback, once a second, for as
+    long as it stays away.  Three quarters of an hour of that is the whole
+    broker log, so an outage erases every record that came before it.
+    Enumeration asks the same question for nothing, so the absence is said
+    once, waited on quietly, and said once more when it ends -- and the wait
+    ends the moment the port is back, sooner than any fixed backoff.
+
+    Absence means the adapter is gone from the bus, not that the device is
+    switched off: the OSR2's USB cable normally stays plugged and its port
+    stays enumerated with the power off (docs/osr2_idle_monitor_notes.md in
+    fun_time).  Whenever it IS enumerated this returns at once and nothing
+    changes, leaving the collapsed reporting in ``BrokerSerialSession`` to
+    bound the rest.
 
     Returns whether the port is present now (False only when the broker is
     stopping), so a caller can tell "came back" from "gave up".  The clock and
@@ -176,7 +182,7 @@ def wait_for_real_port(
     if serial_port_present(real_port):
         return True
     logger.warning(
-        "%s is not there -- is the OSR2 switched on? Waiting for it to come back",
+        "%s is not enumerated -- is the OSR2 plugged in? Waiting for it to come back",
         real_port,
     )
     while not stop_event.is_set():

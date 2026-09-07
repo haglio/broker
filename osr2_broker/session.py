@@ -159,9 +159,9 @@ class BrokerSerialSession:
     def _report_failure(self, exc: BaseException) -> None:
         """Say a failed session once, then only count it.
 
-        Every attempt against a switched-off OSR2 raises the same
-        SerialException, and a traceback apiece wrote four megabytes in forty
-        minutes -- rolling the log three times and taking every earlier
+        Every attempt against a port that is gone, or held by something else,
+        raises the same error, and a traceback apiece wrote four megabytes in
+        forty minutes -- rolling the log three times and taking every earlier
         session's record with it, so the one thing a reader came for was the
         one thing gone.  The first of a run is the full traceback, because that
         is what a reader needs; the rest are a line every
