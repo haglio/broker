@@ -12,8 +12,9 @@ run. They bite on a hang and on nothing else.
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
+
+from app_support.dependencies import declared_dependencies
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
@@ -89,8 +90,4 @@ def test_the_plugin_that_keeps_the_clock_is_declared_where_ci_installs_it():
     declaration is checked here, where a run that works can still say it is
     missing.
     """
-    project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
-    dev = project["optional-dependencies"]["dev"]
-
-    assert "pytest-timeout" in {name.split(";")[0].strip().lower().replace("_", "-")
-                                for name in dev}
+    assert "pytest-timeout" in declared_dependencies(PYPROJECT)

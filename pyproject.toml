@@ -5,22 +5,26 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "osr2-broker"
 version = "0.1.0"
-requires-python = ">=3.10"
-# The shared siblings are NOT listed here — ../app_support (logging, threading
-# and CLI scaffolding) and ../shared_ui (the family's design tokens, which the
-# tray and the idle-warning dialog paint themselves with). Each is installed
-# editable from a local path and neither is published, so pip would go looking
-# for them on PyPI.
+# 3.12, not 3.10: every gate in the family runs 3.12 and nothing has ever
+# collected a suite on anything older, so >=3.10 was a promise no run backed.
+requires-python = ">=3.12"
+# The shared siblings are in [tool.haglio] below, not here: neither is published,
+# so pip would go looking for them on PyPI.
+#
+# Every requirement carries a ceiling. Without one each run installs whatever
+# PyPI served that morning, which is how this family's gates came to run a major
+# version of the imaging stack past the one the machines have. Floors are what
+# this repo's venv holds today.
 dependencies = [
-    "pyserial",
-    "PyQt6",
+    "pyserial>=3,<4",
+    "PyQt6>=6,<7",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-timeout",
-    "vulture",
+    "pytest>=9,<10",
+    "pytest-timeout>=2.4,<3",
+    "vulture>=2.16,<3",
     "ruff==0.16.6",
 ]
 
@@ -36,6 +40,15 @@ dev = [
 # tests/test_timeouts.py holds all three halves of it.
 addopts = "-p no:cacheprovider --timeout=60 --timeout-method=thread -p app_support.sanitize.pytest_plugin"
 testpaths = ["tests"]
+
+# The family checkouts this one is installed beside: app_support (logging,
+# threading and CLI scaffolding) and shared_ui (the design tokens the tray and
+# the idle-warning dialog paint themselves with). Neither is published, so
+# neither can go in [project.dependencies]; a comment was the record until it
+# decayed across the family, so this is the record, and
+# tests/test_dependencies.py holds it against the tree.
+[tool.haglio]
+siblings = ["app_support", "shared_ui"]
 
 [tool.setuptools.packages.find]
 include = ["osr2_broker*"]
