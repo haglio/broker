@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from app_support import state_files
+from app_support import ports, state_files
 from app_support.config_reader import read_json_config, require_path, require_typed, resolve_path
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -87,7 +87,7 @@ def load_config(config_path: str | Path | None = None) -> BrokerConfig:
         idle_minutes=float(raw.get("idle_minutes", 15.0)),
         mfp_config_path=(resolve_path(project_dir, raw["mfp_config_path"])
                          if raw.get("mfp_config_path") else None),
-        tcode_udp_port=int(raw.get("tcode_udp_port", 50557)),
+        tcode_udp_port=int(raw.get("tcode_udp_port", ports.TCODE_UDP)),
         evolver_launcher=resolve_path(
             project_dir, raw.get("evolver_launcher", DEFAULT_EVOLVER_LAUNCHER)),
     )
