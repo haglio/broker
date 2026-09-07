@@ -8,6 +8,7 @@ from types import MappingProxyType
 
 from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
+from .motion_log import HOLD, MFP, MotionLog
 from .power_on import PowerOnWatch
 from .tcode_udp import TCodeWriteWindow, UdpTCodeListener
 
@@ -71,6 +72,7 @@ class BrokerSerialSession:
         self._rx_activity = rx_activity
         self._tx_activity = tx_activity
         self._power_on = power_on
+        self._motion = MotionLog(logger=logger, monotonic=monotonic)
         self._holds = HoldScheduler(monotonic=monotonic, logger=logger)
         self._tcode_window = TCodeWriteWindow(monotonic=monotonic)
         # The open failure being reported, and how many times running it has
@@ -84,6 +86,7 @@ class BrokerSerialSession:
             is_retryable_error=self.is_retryable_error,
             window=self._tcode_window,
             tx_activity=tx_activity,
+            motion=self._motion,
         ) if tcode_udp_port else None
 
     @staticmethod
@@ -247,6 +250,7 @@ class BrokerSerialSession:
                         real.write(data)
                     if queued:
                         self._tx_activity.mark()
+                        self._motion.wrote(MFP)
             except Exception as exc:
                 self.logger.exception("VIRT->REAL error")
                 retry_state.value = self.is_retryable_error(exc)
@@ -258,9 +262,11 @@ class BrokerSerialSession:
             self.handle_broker_command(cmd, udp_sock)
         self.sync_genau_enabled(udp_sock)
         self.maybe_disable_stale_auto(udp_sock)
+        self._motion.tick()
         if self.auto_mode.consume_deactivation():
             self._holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
-        self._holds.fire_due(real_port, serial_write_lock, self._tcode_window.mark)
+        if self._holds.fire_due(real_port, serial_write_lock, self._tcode_window.mark):
+            self._motion.wrote(HOLD)
 
     def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
         """Act on one verb off the command file, or on nothing at all.
