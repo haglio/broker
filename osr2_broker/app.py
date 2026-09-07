@@ -14,7 +14,7 @@ from app_support.threading_utils import start_daemon_thread
 
 from .activity import ActivityStamp
 from .config import load_config
-from .ports import ensure_mfp_serial_port, resolve_virtual_port
+from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
 from .state_files import (
@@ -25,6 +25,10 @@ from .state_files import (
 )
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
+# How often the retry loop asks whether an absent OSR2 port has come back.  Short
+# enough that switching the device on reconnects while the hand is still on the
+# switch, and it costs one port enumeration -- no serial open, no log line.
+PORT_RETURN_POLL_SECONDS = 1.0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -135,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
                 break
             logger.warning("Retrying serial session in %.2fs", SERIAL_RETRY_DELAY_SECONDS)
             time.sleep(SERIAL_RETRY_DELAY_SECONDS)
+            wait_for_real_port(config.real_port, stop_event, logger)
     except KeyboardInterrupt:
         logger.info("Broker interrupted")
     finally:
@@ -143,6 +148,43 @@ def main(argv: list[str] | None = None) -> int:
         udp_sock.close()
 
     return 0
+
+
+def wait_for_real_port(
+    real_port: str,
+    stop_event: threading.Event,
+    logger: logging.Logger,
+    *,
+    poll_seconds: float = PORT_RETURN_POLL_SECONDS,
+) -> bool:
+    """Hold the retry loop while the OSR2's port is not enumerated at all.
+
+    A switched-off or unplugged OSR2 takes its COM port away with it, and
+    ``serial.Serial`` answers that expensively: an open that raises, a full
+    traceback logged, once a second, for as long as the device stays off.  Two
+    hours of that is the whole broker log, so the outage erases every record
+    that came before it.  Enumeration answers the same question for nothing, so
+    absence is said once, waited on quietly, and said once more when it ends --
+    and the wait ends the moment the port is back, which is sooner than any
+    fixed backoff would have retried.
+
+    Returns whether the port is present now (False only when the broker is
+    stopping), so a caller can tell "came back" from "gave up".  The clock and
+    the enumeration are read off this module rather than bound as defaults, so a
+    test can stand in for either.
+    """
+    if serial_port_present(real_port):
+        return True
+    logger.warning(
+        "%s is not there -- is the OSR2 switched on? Waiting for it to come back",
+        real_port,
+    )
+    while not stop_event.is_set():
+        time.sleep(poll_seconds)
+        if serial_port_present(real_port):
+            logger.info("%s is back; reconnecting", real_port)
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------

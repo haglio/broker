@@ -219,7 +219,7 @@ def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_p
 
 @contextmanager
 def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=None,
-                  retry_delay_seconds=None):
+                  retry_delay_seconds=None, port_present=True):
     """main(), with everything it installs process-wide held off.
 
     `configure_logging` and `install_exception_logging` replace both excepthooks
@@ -229,6 +229,11 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
     is a stand-in so no datagram leaves the machine. `sleep` is how a test ends
     the run loop -- raising KeyboardInterrupt out of it is main()'s ordinary
     shutdown path.
+
+    `serial_port_present` answers for the machine's real COM ports, which the
+    retry path asks about between attempts; it is answered here so a suite run
+    on a desk with no OSR2 plugged in does not sit in the wait.  A test about
+    that wait says `port_present=` for itself.
     """
     patches = [
         patch.object(broker_app_module, "configure_logging",
@@ -241,6 +246,9 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
                      side_effect=mfp_config_error),
         patch.object(broker_app_module.serial, "Serial", side_effect=fake_serial),
         patch.object(broker_app_module, "_start_monitor"),
+        patch.object(broker_app_module, "serial_port_present", side_effect=port_present)
+        if callable(port_present)
+        else patch.object(broker_app_module, "serial_port_present", return_value=port_present),
         patch.object(broker_app_module.time, "sleep", side_effect=sleep),
     ]
     if retry_delay_seconds is not None:

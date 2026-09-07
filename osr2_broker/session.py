@@ -17,6 +17,10 @@ class SessionRetryState:
 
 
 class BrokerSerialSession:
+    # How many identical failures pass between summary lines; see
+    # :meth:`_report_failure`.
+    FAILURE_SUMMARY_EVERY = 60
+
     def __init__(
         self,
         *,
@@ -66,6 +70,10 @@ class BrokerSerialSession:
         self._tx_activity = tx_activity
         self._holds = HoldScheduler(monotonic=monotonic, logger=logger)
         self._tcode_window = TCodeWriteWindow(monotonic=monotonic)
+        # The open failure being reported, and how many times running it has
+        # happened: see :meth:`_report_failure`.
+        self._failure: tuple[str, str] | None = None
+        self._failure_count = 0
         self._tcode_listener = UdpTCodeListener(
             port=tcode_udp_port,
             stop_event=stop_event,
@@ -99,6 +107,7 @@ class BrokerSerialSession:
             ) as real:
                 self.last_real_rx_time = 0.0
                 virt.write_timeout = 0.1
+                self._report_recovery()
                 self.connected_event.set()
                 try:
                     thread_real = self.start_thread(
@@ -140,12 +149,47 @@ class BrokerSerialSession:
                     if thread_tcode is not None:
                         thread_tcode.join(timeout=1.0)
         except Exception as exc:
-            self.logger.exception("Failed to open or run serial session")
+            self._report_failure(exc)
             retry_state.value = self.is_retryable_error(exc)
         finally:
             self.connected_event.clear()
 
         return peer_disconnected or retry_state.value
+
+    def _report_failure(self, exc: BaseException) -> None:
+        """Say a failed session once, then only count it.
+
+        Every attempt against a switched-off OSR2 raises the same
+        SerialException, and a traceback apiece wrote four megabytes in forty
+        minutes -- rolling the log three times and taking every earlier
+        session's record with it, so the one thing a reader came for was the
+        one thing gone.  The first of a run is the full traceback, because that
+        is what a reader needs; the rest are a line every
+        ``FAILURE_SUMMARY_EVERY`` attempts saying how many there have been.
+        A different failure starts a new run and gets its own traceback.
+        """
+        kind = (type(exc).__name__, str(exc))
+        if kind != self._failure:
+            self._failure = kind
+            self._failure_count = 1
+            self.logger.exception("Failed to open or run serial session")
+            return
+        self._failure_count += 1
+        if self._failure_count % self.FAILURE_SUMMARY_EVERY == 0:
+            self.logger.warning(
+                "Still failing to open or run the serial session (%d attempts): %s",
+                self._failure_count, exc,
+            )
+
+    def _report_recovery(self) -> None:
+        """Close out a run of failures, now that a session has the ports."""
+        if self._failure is None:
+            return
+        self.logger.info(
+            "Serial session opened after %d failed attempt(s)", self._failure_count
+        )
+        self._failure = None
+        self._failure_count = 0
 
     def forward_real_to_virtual(self, real, virt, udp_sock, session_stop, retry_state: SessionRetryState) -> None:
         buf = bytearray()
