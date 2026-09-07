@@ -20,3 +20,17 @@ jobs:
       siblings: "app_support shared_ui"
       python-version: "3.12"
       timeout-minutes: 5
+
+  # What the machine this is developed on would say. It runs 3.14 and the gate
+  # runs 3.12, and the two evaluate annotations differently (PEP 649), so a
+  # branch can be green here and fail to collect there. On `push` only: never on
+  # a pull request and never in the queue, so this reads without gating and
+  # nothing here can hold up a landing.
+  next-python:
+    if: github.event_name == 'push'
+    uses: haglio/.github/.github/workflows/merge-gate.yml@main
+    with:
+      siblings: "app_support shared_ui"
+      python-version: "3.14"
+      timeout-minutes: 5
+      reverse: false
