@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import socket
 
+from .motion_log import UDP
+
 
 class TCodeWriteWindow:
     """How recently T-Code went straight to the OSR2, bypassing MFP."""
@@ -29,13 +31,14 @@ class TCodeWriteWindow:
 
 class UdpTCodeListener:
     def __init__(self, *, port: int, stop_event, logger, is_retryable_error,
-                 window: TCodeWriteWindow, tx_activity):
+                 window: TCodeWriteWindow, tx_activity, motion=None):
         self.port = port
         self._stop_event = stop_event
         self._logger = logger
         self._is_retryable_error = is_retryable_error
         self._window = window
         self._tx_activity = tx_activity
+        self._motion = motion
 
     def run(self, real, session_stop, retry_state, serial_write_lock) -> None:
         udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -55,6 +58,8 @@ class UdpTCodeListener:
                     with serial_write_lock:
                         real.write((line + "\n").encode("ascii"))
                     self._tx_activity.mark()
+                    if self._motion is not None:
+                        self._motion.wrote(UDP)
         except Exception as exc:
             self._logger.exception("T-Code UDP listener error")
             retry_state.value = self._is_retryable_error(exc)
