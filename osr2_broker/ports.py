@@ -15,6 +15,28 @@ def iter_serial_ports():
     return list(list_ports.comports())
 
 
+def serial_port_present(name: str) -> bool:
+    """Whether Windows currently enumerates *name*.
+
+    Asked between failed opens, because "the port is not there" is not an
+    error to report over and over -- it is the ordinary state of a device that
+    is switched off, and retrying an open against it costs a full traceback a
+    second forever (see the wait in ``osr2_broker.app``).  Enumeration is the
+    cheap question ``serial.Serial`` answers expensively.
+
+    An empty enumeration says True rather than False -- pyserial missing and a
+    machine with no COM ports at all look identical from here, and a broker that
+    stopped retrying because it could not ask would never come back on its own.
+    The cost of being wrong is bounded by the collapsed reporting in
+    ``BrokerSerialSession``, not by this answer.
+    """
+    ports = iter_serial_ports()
+    if not ports:
+        return True
+    wanted = name.strip().upper()
+    return any(str(getattr(port, "device", "") or "").upper() == wanted for port in ports)
+
+
 def _read_mfp_config_payload(mfp_config_path: Path) -> dict | None:
     """Parsed MFP config; ``{}`` when there is no file, ``None`` when unreadable.
 
