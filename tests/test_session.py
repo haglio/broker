@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.hold import HoldScheduler
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
+from tests.conftest import FakePowerOn
 
 
 class NotActuallyRunning:
@@ -72,7 +73,7 @@ class FakeAutoMode:
 def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
                     rx_activity=None, tx_activity=None,
                     is_retryable_error=lambda _exc: False,
-                    tcode_udp_port: int = 0):
+                    tcode_udp_port: int = 0, power_on=None):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = MagicMock()
     session = BrokerSerialSession(
@@ -96,6 +97,7 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         connected_event=threading.Event(),
         is_retryable_error=is_retryable_error,
         tcode_udp_port=tcode_udp_port,
+        power_on=power_on or FakePowerOn(),
     )
     return session, auto_mode, logger
 
@@ -182,7 +184,11 @@ def test_retract_schedules_the_far_end_instead_of_home():
 
 def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
     """The log names the end the device went to, so a retract is never read back
-    as a park at position 0 when someone is tracing where the OSR2 went."""
+    as a park at position 0 when someone is tracing where the OSR2 went.
+
+    It names only that: the reason belongs to the line that scheduled the hold,
+    and several different reasons reach the same write, so a reason baked into it
+    misattributes all but one of them."""
     clock = [10.0]
     session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
     lock = threading.Lock()
@@ -193,8 +199,9 @@ def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
     session.tick_command_and_stale_timeout(sock, real_port=MagicMock(), serial_write_lock=lock)
 
     fired = [call.args[0] for call in logger.info.call_args_list]
-    assert any("retracting" in msg and "9999" in msg for msg in fired), fired
-    assert not any("parking" in msg for msg in fired), fired
+    assert any("Retracting" in msg and "9999" in msg for msg in fired), fired
+    assert not any("Parking" in msg for msg in fired), fired
+    assert "OmniPause" not in fired[-1], fired
 
 
 def test_auto_mode_deactivation_schedules_park():
@@ -870,3 +877,111 @@ def test_no_tcode_port_means_no_listener_thread():
     session, _auto_mode, _logger = _build_session(tcode_udp_port=0)
 
     assert _thread_names_started_by_one_run(session) == ["broker-real", "broker-virtual"]
+
+
+def test_the_osr2_speaking_after_a_silence_schedules_a_park():
+    """Switched on, the OSR2 comes up half way along its travel; the broker
+    sends it home so the user does not have to nudge it there a
+    button-press at a time."""
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(
+        monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),
+    )
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"hello\n"
+
+    class FakeVirt:
+        def write(self, data):
+            pass
+
+    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
+
+    real_port = MagicMock()
+    clock[0] = 12.0
+    session.tick_command_and_stale_timeout(
+        object(), real_port=real_port, serial_write_lock=threading.Lock(),
+    )
+    real_port.write.assert_called_once_with(b"L00000I500\n")
+
+
+def test_the_osr2_talking_on_without_a_silence_is_left_alone():
+    """Ordinary chatter is not a power-on, and parking on it would fight
+    whatever is driving the device."""
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(
+        monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=False),
+    )
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"hello\n"
+
+    class FakeVirt:
+        def write(self, data):
+            pass
+
+    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
+
+    real_port = MagicMock()
+    clock[0] = 12.0
+    session.tick_command_and_stale_timeout(
+        object(), real_port=real_port, serial_write_lock=threading.Lock(),
+    )
+    real_port.write.assert_not_called()
+
+
+def test_a_park_on_power_on_leaves_the_script_feed_running():
+    """A device that was switched off had nothing driving it, so there is no
+    in-flight tail to swallow -- and muting would only stall whatever picks the
+    device up now."""
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(
+        monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),
+    )
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def __init__(self):
+            self.writes: list[bytes] = []
+
+        def read(self, _size):
+            session_stop.set()
+            return b"hello\n"
+
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    feed_stop = threading.Event()
+
+    class FakeVirt:
+        in_waiting = 3
+
+        def read(self, _size):
+            feed_stop.set()
+            return b"L50"
+
+        def write(self, data):
+            pass
+
+    real = FakeReal()
+    session.forward_real_to_virtual(real, FakeVirt(), object(), session_stop, retry_state)
+    session.forward_virtual_to_real(
+        FakeVirt(), real, feed_stop, retry_state, threading.Lock(),
+    )
+
+    assert real.writes == [b"L50"]

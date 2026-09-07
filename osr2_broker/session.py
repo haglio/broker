@@ -8,6 +8,7 @@ from types import MappingProxyType
 
 from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
+from .power_on import PowerOnWatch
 from .tcode_udp import TCodeWriteWindow, UdpTCodeListener
 
 
@@ -42,6 +43,7 @@ class BrokerSerialSession:
         tx_activity: ActivityStamp,
         connected_event: threading.Event,
         is_retryable_error,
+        power_on: PowerOnWatch,
         monotonic=time.monotonic,
         sleep=time.sleep,
         tcode_udp_port: int = 0,
@@ -68,6 +70,7 @@ class BrokerSerialSession:
         self.poll_interval_seconds = 0.05
         self._rx_activity = rx_activity
         self._tx_activity = tx_activity
+        self._power_on = power_on
         self._holds = HoldScheduler(monotonic=monotonic, logger=logger)
         self._tcode_window = TCodeWriteWindow(monotonic=monotonic)
         # The open failure being reported, and how many times running it has
@@ -191,6 +194,17 @@ class BrokerSerialSession:
         self._failure = None
         self._failure_count = 0
 
+    def _note_the_device_spoke(self) -> None:
+        """Record the OSR2 having just spoken, and park it if that broke a silence.
+
+        A switched-on OSR2 comes up half way along its travel, so the first
+        thing it says is the cue to send it home.
+        """
+        self.last_real_rx_time = self.monotonic()
+        self._rx_activity.mark()
+        if self._power_on.rx_broke_the_silence():
+            self._holds.schedule_without_muting(PARK, "OSR2 powered on: park scheduled")
+
     def forward_real_to_virtual(self, real, virt, udp_sock, session_stop, retry_state: SessionRetryState) -> None:
         buf = bytearray()
         while not self.stop_event.is_set() and not session_stop.is_set():
@@ -199,8 +213,7 @@ class BrokerSerialSession:
                 if not data:
                     continue
 
-                self.last_real_rx_time = self.monotonic()
-                self._rx_activity.mark()
+                self._note_the_device_spoke()
                 try:
                     virt.write(data)
                 except OSError:

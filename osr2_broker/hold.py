@@ -1,8 +1,10 @@
 """Sending the OSR2 to a fixed position, and muting MFP while it goes there.
 
 A hold is one T-Code move written a settle delay after it is asked for. The
-delay exists so the mute can start first: MFP's script feed is swallowed across
-the gap, and the in-flight tail cannot immediately undo the move.
+delay is what lets a caller that wants the mute have it start first: MFP's
+script feed is swallowed across the gap, and the in-flight tail cannot
+immediately undo the move. A caller with nothing to swallow -- auto mode letting
+go, a device that was switched off -- schedules without it.
 """
 from __future__ import annotations
 
@@ -17,16 +19,16 @@ class Hold:
     PARK is home, where a session's motion ends.  RETRACT is its antonym — the
     far end of the travel, for when the device has to be away from the user now.
     The two differ only in where they land and in what the log calls it: both are
-    one T-Code move, both wait out the same settle delay, and both mute the
-    script feed around it so an in-flight tail cannot undo them.
+    one T-Code move and both wait out the same settle delay.  Neither carries a
+    reason, because several reach the same write.
     """
 
     tcode: bytes
     fired_message: str
 
 
-PARK = Hold(b"L00000I500\n", "OmniPause: parking OSR2 at position 0")
-RETRACT = Hold(b"L09999I500\n", "OmniPause: retracting OSR2 to position 9999")
+PARK = Hold(b"L00000I500\n", "Parking OSR2 at position 0")
+RETRACT = Hold(b"L09999I500\n", "Retracting OSR2 to position 9999")
 
 
 class HoldScheduler:

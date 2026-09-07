@@ -15,6 +15,7 @@ from app_support.threading_utils import start_daemon_thread
 from .activity import ActivityStamp
 from .config import load_config
 from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
+from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
 from .state_files import (
@@ -113,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
         tx_activity=ActivityStamp(config.osr2_serial_tx_file),
         connected_event=connected,
         tcode_udp_port=config.tcode_udp_port,
+        power_on=PowerOnWatch(rx_stamp_file=config.osr2_serial_rx_file,
+                              monotonic=time.monotonic),
     )
 
     write_mode(state_file, "0", logger)
