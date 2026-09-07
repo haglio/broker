@@ -132,6 +132,22 @@ class TestIdleAlert:
         action = state.update(now=3045.0, last_rx=3040.0, last_tx=998.0, auto_mode=False)
         assert action is None
 
+    def test_re_alert_after_the_device_is_switched_off(self):
+        """A power cycle ends the idle episode, so the alert that already fired
+        for the previous one must not silence this one."""
+        state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
+        state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
+        action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
+        assert action == Action.IDLE_ALERT
+        state.acknowledge()
+        # Switched off: RX stops for well over the re-arm window.
+        for t in range(2000, 2200, 10):
+            state.update(now=float(t), last_rx=1993.0, last_tx=998.0, auto_mode=False)
+        # Switched back on and left idle again.
+        state.update(now=2200.0, last_rx=2198.0, last_tx=998.0, auto_mode=False)
+        action = state.update(now=3200.0, last_rx=3195.0, last_tx=998.0, auto_mode=False)
+        assert action == Action.IDLE_ALERT
+
     def test_no_false_alert_when_last_tx_none_on_long_running_device(self):
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
