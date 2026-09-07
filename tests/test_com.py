@@ -216,7 +216,6 @@ class TestAutoTransitionFromSerial:
 
         assert s.state_file.read_text(encoding="utf-8") == "1"
         assert "AUTO 1" in s.udp_messages
-        assert "SHOW" in s.udp_messages
 
     def test_auto_off_line_deactivates_genau(self, tmp_path):
         s = _build_stack(tmp_path)
@@ -230,7 +229,6 @@ class TestAutoTransitionFromSerial:
 
         assert s.state_file.read_text(encoding="utf-8") == "0"
         assert "AUTO 0" in s.udp_messages
-        assert "HIDE" in s.udp_messages
 
     def test_freemode_line_activates(self, tmp_path):
         s = _build_stack(tmp_path)
@@ -273,9 +271,9 @@ class TestMotionAndBpmFromSerial:
             _wait_until(lambda: "BEATS 2" in s.udp_messages)
 
         # The mode is published once, when the MOTION turned it on; the BPM
-        # half of the same line no longer resends AUTO, SHOW and the seed BPM.
+        # half of the same line no longer resends AUTO and the seed BPM.
         assert s.udp_messages == [
-            "AUTO 1", "SHOW", "BPM 87",
+            "AUTO 1", "BPM 87",
             "MOTION Twist", "PATTERN 1.5", "SYNC",
             "BPM 90", "BEATS 2", "SYNC",
         ]
@@ -323,9 +321,8 @@ class TestGenauEnabledSuppression:
         assert s.controller.is_active is True
         assert s.state_file.read_text(encoding="utf-8") == "0"
         assert "AUTO 0" in s.udp_messages
-        assert "HIDE" in s.udp_messages
 
-    def test_reenabling_while_auto_active_restores_visibility(self, tmp_path):
+    def test_reenabling_while_auto_active_republishes_auto(self, tmp_path):
         s = _build_stack(tmp_path, enabled=False)
         sock = object()
         s.controller.set_auto(sock, True)
@@ -333,7 +330,7 @@ class TestGenauEnabledSuppression:
         s.controller.set_enabled(sock, True)
 
         assert s.state_file.read_text(encoding="utf-8") == "1"
-        assert s.udp_messages[-3:] == ["AUTO 1", "SHOW", "BPM 87"]
+        assert s.udp_messages[-2:] == ["AUTO 1", "BPM 87"]
 
 
 class TestBrokerCommands:
@@ -372,7 +369,7 @@ class TestBrokerCommands:
         s.session.handle_broker_command("GENAU_DISABLE", sock)
 
         assert s.state_file.read_text(encoding="utf-8") == "0"
-        assert "HIDE" in s.udp_messages
+        assert "AUTO 0" in s.udp_messages
 
 
 class TestMultiLineSerialBuffer:

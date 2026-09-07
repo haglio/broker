@@ -29,7 +29,7 @@ def test_set_auto_writes_mode_and_sends_udp_messages():
 
     assert controller.is_active is True
     assert writes == [(Path("mode.txt"), "1")]
-    assert sends == ["AUTO 1", "SHOW", "BPM 87"]
+    assert sends == ["AUTO 1", "BPM 87"]
     logger.info.assert_called_once_with("AUTO %s", "ON")
 
 
@@ -50,7 +50,7 @@ def test_set_auto_respects_initial_disabled_state():
 
     assert controller.is_active is True
     assert writes == [(Path("mode.txt"), "0")]
-    assert sends == ["AUTO 0", "HIDE"]
+    assert sends == ["AUTO 0"]
 
 
 def test_set_auto_skips_transition_log_when_value_is_unchanged():
@@ -85,7 +85,6 @@ def test_handle_line_infers_auto_mode_from_bpm_message():
 
     assert controller.is_active is True
     assert "AUTO 1" in sends
-    assert "SHOW" in sends
 
 
 def test_handle_line_infers_auto_mode_from_motion_message():
@@ -103,12 +102,11 @@ def test_handle_line_infers_auto_mode_from_motion_message():
 
     assert controller.is_active is True
     assert "AUTO 1" in sends
-    assert "SHOW" in sends
 
 
 def test_handle_line_sends_motion_bpm_and_sync_messages():
     """Every MOTION and BPM line says auto is on, and only the first is news.
-    Each used to rewrite the mode file and resend AUTO, SHOW and the seed BPM
+    Each used to rewrite the mode file and resend AUTO and the seed BPM
     -- ahead of the real tempo on the same line -- at the device's line rate
     (bug 29)."""
     writes: list[tuple[Path, str]] = []
@@ -128,7 +126,6 @@ def test_handle_line_sends_motion_bpm_and_sync_messages():
     assert writes == [(Path("mode.txt"), "1")]
     assert sends == [
         "AUTO 1",
-        "SHOW",
         "BPM 87",
         "MOTION Pull",
         "PATTERN 2.0",
@@ -155,7 +152,7 @@ def test_handle_line_applies_auto_transition():
     controller.handle_line(object(), "Auto mode is on!")
 
     assert controller.is_active is True
-    assert sends[:2] == ["AUTO 1", "SHOW"]
+    assert sends[:2] == ["AUTO 1", "BPM 87"]
 
 
 def test_set_auto_suppresses_genau_when_disabled():
@@ -178,10 +175,10 @@ def test_set_auto_suppresses_genau_when_disabled():
         (Path("mode.txt"), "0"),
         (Path("mode.txt"), "0"),
     ]
-    assert sends == ["AUTO 0", "HIDE", "AUTO 0", "HIDE"]
+    assert sends == ["AUTO 0", "AUTO 0"]
 
 
-def test_reenabling_genau_restores_auto_visibility_when_auto_is_active():
+def test_reenabling_genau_republishes_auto_when_auto_is_active():
     writes: list[tuple[Path, str]] = []
     sends: list[str] = []
     controller = BrokerAutoController(
@@ -199,4 +196,4 @@ def test_reenabling_genau_restores_auto_visibility_when_auto_is_active():
     controller.set_enabled(sock, True)
 
     assert writes[-1] == (Path("mode.txt"), "1")
-    assert sends[-3:] == ["AUTO 1", "SHOW", "BPM 87"]
+    assert sends[-2:] == ["AUTO 1", "BPM 87"]
