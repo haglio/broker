@@ -15,6 +15,22 @@ from unittest.mock import patch
 import pytest
 
 
+class FakePowerOn:
+    """Stands in for the PowerOnWatch a session is built with.
+
+    Its own silence arithmetic is pinned in tests/test_power_on.py, so a test
+    about anything else only has to say what verdict the watch is giving --
+    and every session the suite builds needs one, or an unrelated test would
+    schedule a park it never asked for.
+    """
+
+    def __init__(self, *, breaks_silence: bool = False):
+        self.breaks_silence = breaks_silence
+
+    def rx_broke_the_silence(self) -> bool:
+        return self.breaks_silence
+
+
 def pytest_collection_modifyitems(items):
     """Collect in a different order when asked, so a test that leans on the ones
     beside it fails on the commit that introduces the lean.
@@ -91,7 +107,10 @@ def stand_down_marker():
     app_support's two calls rather than at ``osr2_broker.peer_watch``'s own, so
     the broker's half stays real and a test can watch it being used.
     """
-    with patch("app_support.peer_watch.stand_down") as wrote,          patch("app_support.peer_watch.clear_stand_down") as cleared:
+    with (
+        patch("app_support.peer_watch.stand_down") as wrote,
+        patch("app_support.peer_watch.clear_stand_down") as cleared,
+    ):
         yield wrote, cleared
 
 

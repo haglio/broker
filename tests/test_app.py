@@ -362,3 +362,56 @@ class TestMainPublishesItsStateFiles:
 
         assert (config.state_dir / "genau_mode.txt").read_text(encoding="utf-8") == "0"
         assert (config.state_dir / "genau_enabled.txt").read_text(encoding="utf-8") == "1"
+
+
+class TestMainWatchesForThePowerOn:
+    """The session's power-on watch is judged against the OSR2's own RX stamp,
+    the file the idle monitor already reads to decide the device is on.
+
+    Nothing else here would notice the TX stamp being handed over instead: both
+    are stamp files under the same directory, and a watch seeded from that one
+    would park the device on any broker restart that followed a quiet MFP.
+    """
+
+    @staticmethod
+    def _watch_main_builds(broker_app_module, cfg_path):
+        FakeSerial = make_fake_serial([])
+
+        def stop_on_first_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        built = {}
+
+        def record(**kwargs):
+            built.update(kwargs)
+            return MagicMock()
+
+        with (
+            _main_running(broker_app_module, fake_serial=FakeSerial,
+                          sleep=stop_on_first_sleep),
+            patch.object(broker_app_module, "BrokerSerialSession", side_effect=record),
+        ):
+            broker_app_module.main(["--config", str(cfg_path)])
+        return built["power_on"]
+
+    def test_a_broker_starting_after_a_silence_treats_the_next_line_as_a_power_on(
+        self, broker_app_module, cfg_path,
+    ):
+        from osr2_broker.config import load_config
+
+        config = load_config(str(cfg_path))
+        config.osr2_serial_rx_file.write_text("1.0", encoding="utf-8")
+
+        assert self._watch_main_builds(broker_app_module, cfg_path).rx_broke_the_silence() is True
+
+    def test_a_broker_starting_while_the_device_talks_does_not(
+        self, broker_app_module, cfg_path,
+    ):
+        import time as real_time
+
+        from osr2_broker.config import load_config
+
+        config = load_config(str(cfg_path))
+        config.osr2_serial_rx_file.write_text(str(real_time.time()), encoding="utf-8")
+
+        assert self._watch_main_builds(broker_app_module, cfg_path).rx_broke_the_silence() is False
