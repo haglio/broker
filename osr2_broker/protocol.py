@@ -57,7 +57,6 @@ class BrokerAutoController:
 
         self.write_mode(self.state_file, "1" if effective_active else "0", self.logger)
         self.udp_send(sock, self.udp_host, self.udp_port, f"AUTO {1 if effective_active else 0}")
-        self.udp_send(sock, self.udp_host, self.udp_port, "SHOW" if effective_active else "HIDE")
         if effective_active:
             self.udp_send(sock, self.udp_host, self.udp_port, f"BPM {self._SEED_BPM}")
 
