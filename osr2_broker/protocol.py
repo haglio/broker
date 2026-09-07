@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 RE_BPM = re.compile(r"\bbpm\s+(\d+),\s+beats\s+\d+", re.IGNORECASE)
-RE_MOTION = re.compile(r"StrokeName:\s*([^,]+),\s*PatternDuration:\s*([0-9.]+)", re.IGNORECASE)
+RE_MOTION = re.compile(r"StrokeName:\s*([^,]+),\s*PatternDuration:\s*[0-9.]+", re.IGNORECASE)
 
 
 def parse_auto_transition(line: str) -> bool | None:
@@ -107,7 +107,6 @@ class BrokerAutoController:
         if motion_match:
             self.set_auto(sock, True)
             self.udp_send(sock, self.udp_host, self.udp_port, f"MOTION {motion_match.group(1).strip()}")
-            self.udp_send(sock, self.udp_host, self.udp_port, f"PATTERN {motion_match.group(2)}")
             self.udp_send(sock, self.udp_host, self.udp_port, "SYNC")
 
         bpm_match = RE_BPM.search(line)

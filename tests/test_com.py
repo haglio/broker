@@ -241,7 +241,7 @@ class TestAutoTransitionFromSerial:
 
 
 class TestMotionAndBpmFromSerial:
-    def test_motion_and_pattern_parsed_from_serial_data(self, tmp_path):
+    def test_motion_parsed_from_serial_data(self, tmp_path):
         s = _build_stack(tmp_path)
         s.real_port.inject(b"StrokeName: Pull, PatternDuration: 2.0\r\n")
 
@@ -249,7 +249,6 @@ class TestMotionAndBpmFromSerial:
             _wait_until(lambda: "MOTION Pull" in s.udp_messages)
 
         assert "MOTION Pull" in s.udp_messages
-        assert "PATTERN 2.0" in s.udp_messages
         assert "SYNC" in s.udp_messages
 
     def test_bpm_parsed_from_serial_data(self, tmp_path):
@@ -273,7 +272,7 @@ class TestMotionAndBpmFromSerial:
         # half of the same line no longer resends AUTO and the seed BPM.
         assert s.udp_messages == [
             "AUTO 1", "BPM 87",
-            "MOTION Twist", "PATTERN 1.5", "SYNC",
+            "MOTION Twist", "SYNC",
             "BPM 90", "SYNC",
         ]
 
@@ -405,7 +404,6 @@ class TestMultiLineSerialBuffer:
             _wait_until(lambda: "BPM 60" in s.udp_messages)
 
         assert "MOTION Push" in s.udp_messages
-        assert "PATTERN 3.0" in s.udp_messages
         assert "BPM 60" in s.udp_messages
 
 
