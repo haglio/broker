@@ -4,6 +4,7 @@ Each entry tells vulture the name is intentionally used, suppressing
 the corresponding report.  Only add names here that are *provably*
 called by a framework or accessed dynamically at runtime.
 """
+from __future__ import annotations
 
 # -- Win32 ctypes struct fields (WNDCLASSW) ----------------------------------
 # Required by RegisterClassW; ctypes reads them from the struct layout.

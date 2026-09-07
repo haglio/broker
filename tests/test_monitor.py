@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 from osr2_broker.monitor import (
     Action,
     MonitorState,
