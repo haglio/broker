@@ -104,5 +104,5 @@ class TestTheBroker:
                    for name in ("pythonw.exe", "python.exe", "py.exe"))
 
     def test_that_sweep_leaves_other_apps_alone(self):
-        for name in ("notepad.exe", "FunTime-Nau.exe", "mypythonw.exe"):
+        for name in ("notepad.exe", "FunTime-MainPlayer.exe", "mypythonw.exe"):
             assert not re.match(NAMER.process_name_pattern, name), name
