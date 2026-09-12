@@ -33,4 +33,3 @@ jobs:
       siblings: "app_support shared_ui"
       python-version: "3.14"
       timeout-minutes: 5
-      reverse: false
