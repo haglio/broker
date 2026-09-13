@@ -5,6 +5,8 @@ import socket
 import threading
 from pathlib import Path
 
+from .state_files import BrokerMode
+
 RE_BPM = re.compile(r"\bbpm\s+(\d+),\s+beats\s+\d+", re.IGNORECASE)
 RE_MOTION = re.compile(r"StrokeName:\s*[^,]+,\s*PatternDuration:\s*[0-9.]+", re.IGNORECASE)
 
@@ -55,7 +57,8 @@ class BrokerAutoController:
         with self._lock:
             effective_active = self._auto_active and self._enabled
 
-        self.write_mode(self.state_file, "1" if effective_active else "0", self.logger)
+        self.write_mode(self.state_file,
+                        BrokerMode.AUTO if effective_active else BrokerMode.CONTROL, self.logger)
         self.udp_send(sock, self.udp_host, self.udp_port, f"AUTO {1 if effective_active else 0}")
         if effective_active:
             self.udp_send(sock, self.udp_host, self.udp_port, f"BPM {self._SEED_BPM}")

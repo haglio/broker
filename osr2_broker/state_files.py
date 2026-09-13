@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from enum import StrEnum
 from pathlib import Path
 
 from app_support.file_channel import publish_stamp, publish_whole, read_flag
@@ -34,10 +35,22 @@ def _stripped_text(path: Path) -> str:
     return path.read_text(encoding="utf-8").replace(_BOM, "").strip()
 
 
-def write_mode(path: Path, value: str, logger: logging.Logger) -> None:
+class BrokerMode(StrEnum):
+    """What the broker is doing with the OSR2, as its mode file spells it: holding
+    the device under Fun Time's control, or running it itself in auto."""
+
+    CONTROL = "0"
+    AUTO = "1"
+
+    @property
+    def label(self) -> str:
+        return "control" if self is BrokerMode.CONTROL else "auto"
+
+
+def write_mode(path: Path, mode: BrokerMode, logger: logging.Logger) -> None:
     """Published whole: the orchestrator polls this, and a poller that caught a
     truncating write would read a blank it cannot tell from "controlled"."""
-    if not publish_whole(path, value):
+    if not publish_whole(path, str(mode)):
         logger.error("Failed to write mode file %s", path)
 
 
