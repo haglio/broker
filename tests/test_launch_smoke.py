@@ -37,7 +37,6 @@ from app_support.launch_smoke import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = "osr2_broker"
-LAUNCHER = REPO_ROOT / "launch_broker_tray.vbs"
 
 # ``-m osr2_broker.tray`` runs tray.py, which is both the entrypoint and the
 # module holding main(); it spawns the broker as ``-m osr2_broker.app``, whose
@@ -98,15 +97,3 @@ def test_a_launch_import_that_cannot_resolve_fails_here():
     assert_an_unresolvable_import_is_caught(
         _run_the_launchs_way, launch_imports(PACKAGE, LAUNCH_FILES),
         "osr2_broker.config")
-
-
-def test_the_launcher_runs_the_tray_from_this_repo_on_its_own_venv():
-    """A python off PATH misses the editable siblings the tray imports and dies
-    while importing -- which under pythonw is a launch that leaves no trace at
-    all. The working directory is what this test's ``cwd`` mirrors, so a
-    launcher that stopped setting it would leave this checking a fiction."""
-    text = LAUNCHER.read_text(encoding="utf-8", errors="replace")
-
-    assert ".venv\\Scripts\\pythonw.exe" in text
-    assert "-m osr2_broker.tray" in text
-    assert "shell.CurrentDirectory = projectRoot" in text

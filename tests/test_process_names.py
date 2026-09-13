@@ -11,8 +11,7 @@ The two halves work differently and both are asserted here, by running them.
 The broker is a child, so the tray names it outright as it launches it.  The
 tray cannot name itself on the way in -- writing the copy takes the very
 interpreter being named -- so it prepares its own for the next launch and the
-launcher picks it up; the launcher's side is read off the ``.vbs``, which really
-is a text file and really does contain the literal.
+launcher picks it up; the launcher's side is read off its spec.
 """
 from __future__ import annotations
 
@@ -23,13 +22,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from app_support.launcher import launchers
 from app_support.process_identity_check import assert_the_app_names_its_process
 
 from osr2_broker.process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from osr2_broker.tray import BrokerSupervisor, _name_this_process, terminate_broker
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-LAUNCHER = (PROJECT_DIR / "launch_broker_tray.vbs").read_text(encoding="utf-8")
+(LAUNCHER,) = launchers(PROJECT_DIR)
 
 
 class TestWhatTheRowsSay:
@@ -54,19 +54,14 @@ class TestTheTray:
         taking the tray down when there is nothing to copy from."""
         assert_the_app_names_its_process(
             _name_this_process, tmp_path, app_name=APP_NAME, role=TRAY_ROLE,
-            interpreter="pythonw.exe", row=f"{APP_NAME} – Tray", icon=NAMER.icon)
+            interpreter=LAUNCHER.interpreter, row=f"{APP_NAME} – Tray", icon=NAMER.icon)
 
     def test_the_launcher_prefers_that_copy(self):
-        expected = NAMER.exe_name("pythonw.exe", TRAY_ROLE)
+        assert LAUNCHER.named_interpreter == NAMER.exe_name(LAUNCHER.interpreter, TRAY_ROLE)
 
-        assert expected in LAUNCHER, f"the launcher does not look for {expected}"
-        # After the plain interpreter is chosen, so the swap wins.
-        assert LAUNCHER.rindex(expected) > LAUNCHER.index(r"\.venv\Scripts\pythonw.exe")
-
-    def test_the_launcher_still_works_before_any_run_has_named_it(self):
-        """The naming runs one launch late, so a fresh checkout has no copy to
-        find.  That must cost the name and nothing else."""
-        assert r'pythonExe = projectRoot & "\.venv\Scripts\pythonw.exe"' in LAUNCHER
+    def test_the_launcher_runs_the_windowed_interpreter(self):
+        """The tray is a GUI app and must not flash up a console."""
+        assert LAUNCHER.interpreter == "pythonw.exe"
 
 
 class TestTheBroker:
