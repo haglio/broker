@@ -50,6 +50,15 @@ testpaths = ["tests"]
 [tool.haglio]
 siblings = ["app_support", "shared_ui"]
 
+# What launch_broker_tray.vbs starts: the file the "OSR2 Broker" scheduled task,
+# the Start Menu shortcut and Fun Time all run. The launcher is rendered from
+# this by `python -m app_support.launcher --write`.
+[tool.haglio.launchers."launch_broker_tray.vbs"]
+app = "OSR2 Broker"
+interpreter = "pythonw.exe"
+named-interpreter = "Broker-Tray.exe"
+run = '-m osr2_broker.tray --config "{root}\osr2_broker_config.json"'
+
 [tool.setuptools.packages.find]
 include = ["osr2_broker*"]
 namespaces = false

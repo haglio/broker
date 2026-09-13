@@ -1,29 +1,62 @@
-' Starts the broker's tray icon, which in turn supervises the broker itself.
-' Launched by the "OSR2 Broker" scheduled task, by the Start Menu shortcut, and
-' by fun_time. The tray's own mutex makes a duplicate launch a no-op.
+' Rendered from [tool.haglio.launchers."launch_broker_tray.vbs"] in pyproject.toml.
+' Change the spec, then run  python -m app_support.launcher --write  in this
+' folder: the suite fails on a launcher that differs from its spec.
 
-Set shell = CreateObject("WScript.Shell")
+Option Explicit
+
+Dim fso, shell, root, app, interpreter, directory, arguments
+
 Set fso = CreateObject("Scripting.FileSystemObject")
-
-projectRoot = fso.GetParentFolderName(WScript.ScriptFullName)
-configPath = projectRoot & "\osr2_broker_config.json"
-
-' pythonw, not python: the tray is a GUI app and must not flash up a console.
-pythonExe = projectRoot & "\.venv\Scripts\pythonw.exe"
-
-' The copy a previous run left named for the tray, when there is one.  Windows
-' identifies a process by the file it was started from, so a bare interpreter
-' puts the tray and the broker it supervises in the task list as two identical
-' anonymous "Python" rows -- which is exactly the pair you need to tell apart
-' when one of them is stuck.  See osr2_broker.process_names.
-namedExe = projectRoot & "\.venv\Scripts\Broker-Tray.exe"
-If fso.FileExists(namedExe) Then
-    pythonExe = namedExe
-End If
-If Not fso.FileExists(pythonExe) Then
-    pythonExe = "pythonw.exe"
+Set shell = CreateObject("WScript.Shell")
+root = fso.GetParentFolderName(WScript.ScriptFullName)
+Decide
+If shell.Environment("Process").Item("HAGLIO_LAUNCHER_DRY_RUN") = "1" Then
+  Report
+Else
+  Launch
 End If
 
-shell.CurrentDirectory = projectRoot
-cmd = """" & pythonExe & """ -m osr2_broker.tray --config """ & configPath & """"
-shell.Run cmd, 0, False
+Sub Decide()
+  app = "OSR2 Broker"
+  arguments = "-m osr2_broker.tray --config """ & root & "\osr2_broker_config.json"""
+  interpreter = fso.BuildPath(root, ".venv\Scripts\pythonw.exe")
+  If fso.FileExists(fso.BuildPath(root, ".venv\Scripts\Broker-Tray.exe")) Then interpreter = fso.BuildPath(root, ".venv\Scripts\Broker-Tray.exe")
+  directory = root
+End Sub
+
+Sub Report()
+  WScript.Echo "app: " & app
+  WScript.Echo "interpreter: " & interpreter
+  WScript.Echo "directory: " & directory
+  WScript.Echo "arguments: " & arguments
+  WScript.Echo "command: " & Command()
+End Sub
+
+Sub Launch()
+  If Not fso.FileExists(interpreter) Then
+    Refuse app & "'s virtual environment is missing:" & vbCrLf & interpreter, vbCritical
+  End If
+  shell.CurrentDirectory = directory
+  shell.Run Command(), 0, False
+End Sub
+
+Function Command()
+  Command = Quote(interpreter) & " " & arguments
+End Function
+
+Function Quote(text)
+  Quote = Chr(34) & text & Chr(34)
+End Function
+
+Sub Tell(message, icon)
+  If LCase(fso.GetFileName(WScript.FullName)) = "cscript.exe" Then
+    WScript.Echo "dialog: " & message
+  Else
+    MsgBox message, icon, app
+  End If
+End Sub
+
+Sub Refuse(message, icon)
+  Tell message, icon
+  WScript.Quit 1
+End Sub
