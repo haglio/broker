@@ -101,7 +101,7 @@ def test_tray_menu_offers_the_broker_controls(qapp):
 def test_mode_text_names_the_mode_the_broker_wrote(tmp_path, written, expected):
     from osr2_broker.tray import mode_text
 
-    mode_file = tmp_path / "genau_mode.txt"
+    mode_file = tmp_path / "broker_mode.txt"
     mode_file.write_text(written, encoding="utf-8")
 
     assert mode_text(mode_file) == expected
@@ -110,7 +110,7 @@ def test_mode_text_names_the_mode_the_broker_wrote(tmp_path, written, expected):
 def test_mode_text_is_unknown_when_the_broker_has_written_nothing(tmp_path):
     from osr2_broker.tray import mode_text
 
-    assert mode_text(tmp_path / "genau_mode.txt") == "unknown"
+    assert mode_text(tmp_path / "broker_mode.txt") == "unknown"
 
 
 def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
@@ -374,7 +374,7 @@ def test_tick_shows_the_broker_s_state_in_the_menu(tray, cfg_path):
     from osr2_broker.tray import BrokerTrayApp
 
     config = load_config(cfg_path)
-    config.genau_mode_file.write_text("1", encoding="utf-8")
+    config.broker_mode_file.write_text("1", encoding="utf-8")
     app = BrokerTrayApp(config, FakeSupervisor(running=True), tray)
 
     app.tick()

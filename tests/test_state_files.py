@@ -22,7 +22,7 @@ class TestWriteMode:
         """The tray reads "0"/"1" straight out of this file and genau's own
         readers compare it as text, so nothing may be added around it -- no
         newline, no BOM."""
-        mode_file = tmp_path / "state" / "genau_mode.txt"
+        mode_file = tmp_path / "state" / "broker_mode.txt"
 
         write_mode(mode_file, "1", LOGGER)
 
@@ -30,7 +30,7 @@ class TestWriteMode:
 
     def test_the_state_directory_is_created_if_it_is_not_there(self, tmp_path: Path):
         """First run on a fresh machine: nothing has made state/ yet."""
-        mode_file = tmp_path / "state" / "genau_mode.txt"
+        mode_file = tmp_path / "state" / "broker_mode.txt"
 
         write_mode(mode_file, "0", LOGGER)
 

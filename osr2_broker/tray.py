@@ -164,7 +164,7 @@ class BrokerTrayApp:
     def refresh(self) -> None:
         self._tray.set_status(
             running=self._supervisor.is_running(),
-            mode=mode_text(self._config.genau_mode_file),
+            mode=mode_text(self._config.broker_mode_file),
         )
 
     def start_or_restart(self) -> None:

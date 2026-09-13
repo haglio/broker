@@ -359,7 +359,27 @@ class TestMainPublishesItsStateFiles:
                            sleep=stop_on_first_sleep):
             broker_app_module.main(["--config", str(cfg_path)])
 
-        assert (config.state_dir / "genau_mode.txt").read_text(encoding="utf-8") == "0"
+        assert (config.state_dir / "broker_mode.txt").read_text(encoding="utf-8") == "0"
+
+    def test_a_started_broker_takes_the_mode_file_out_from_under_its_old_name(
+        self, broker_app_module, cfg_path,
+    ):
+        from osr2_broker.config import load_config
+
+        config = load_config(str(cfg_path))
+        config.state_dir.mkdir(parents=True, exist_ok=True)
+        (config.state_dir / "genau_mode.txt").write_text("1", encoding="utf-8")
+        FakeSerial = make_fake_serial([])
+
+        def stop_on_first_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        with _main_running(broker_app_module, fake_serial=FakeSerial,
+                           sleep=stop_on_first_sleep):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        assert not (config.state_dir / "genau_mode.txt").exists()
+        assert (config.state_dir / "broker_mode.txt").read_text(encoding="utf-8") == "0"
 
 
 class TestMainWatchesForThePowerOn:

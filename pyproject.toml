@@ -21,8 +21,8 @@ requires-python = ">=3.14"
 # other half had not landed turned all of them red at once. Moving to a newer
 # one is this repo's own commit, with its own suite to answer for it.
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.153",
-    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.127",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.155",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.128",
     "pyserial>=3,<4",
     "PyQt6>=6,<7",
 ]
