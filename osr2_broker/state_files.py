@@ -21,6 +21,7 @@ import time
 from enum import StrEnum
 from pathlib import Path
 
+from app_support import state_files
 from app_support.file_channel import publish_stamp, publish_whole
 
 
@@ -41,6 +42,28 @@ def write_mode(path: Path, mode: BrokerMode, logger: logging.Logger) -> None:
     truncating write would read a blank it cannot tell from "controlled"."""
     if not publish_whole(path, str(mode)):
         logger.error("Failed to write mode file %s", path)
+
+
+# What the mode file was called while it was named after Genau, which never read it.
+_LAST_SESSIONS_MODE_FILE = "genau_mode.txt"
+
+
+def rename_last_sessions_mode_file(state_dir: Path, logger: logging.Logger) -> bool:
+    """Move the mode file a broker of last session's left to today's name, once,
+    where the broker starts; one already under today's name wins and the old one
+    goes.  Returns whether it renamed."""
+    old, new = state_dir / _LAST_SESSIONS_MODE_FILE, state_dir / state_files.BROKER_MODE
+    try:
+        if not old.exists():
+            return False
+        if new.exists():
+            old.unlink()
+            return False
+        old.replace(new)
+    except OSError:
+        logger.exception("Could not rename %s to %s", old, new)
+        return False
+    return True
 
 
 def write_heartbeat(path: Path, logger: logging.Logger) -> None:

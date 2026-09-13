@@ -18,7 +18,7 @@ from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_pre
 from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
-from .state_files import heartbeat_loop, write_mode
+from .state_files import heartbeat_loop, rename_last_sessions_mode_file, write_mode
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
 # How often the retry loop asks whether an absent OSR2 port has come back.  Short
@@ -69,7 +69,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             logger.exception("Could not update MFP serial port config")
 
-    state_file = config.genau_mode_file
+    rename_last_sessions_mode_file(config.state_dir, logger)
+    state_file = config.broker_mode_file
     broker_cmd_file = config.broker_cmd_file
     heartbeat_file = config.broker_heartbeat_file
     stop_event = threading.Event()

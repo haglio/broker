@@ -124,7 +124,7 @@ def _wait_until(predicate) -> None:
 
 
 def _build_stack(tmp_path: Path):
-    state_file = tmp_path / "state" / "genau_mode.txt"
+    state_file = tmp_path / "state" / "broker_mode.txt"
     state_file.parent.mkdir(parents=True, exist_ok=True)
     broker_cmd_file = tmp_path / "state" / "broker_cmd.txt"
 
