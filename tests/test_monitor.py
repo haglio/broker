@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from osr2_broker.monitor import (
-    Action,
+    MonitorOutcome,
     MonitorState,
     load_idle_state,
     read_timestamp,
@@ -46,13 +46,13 @@ class TestIdleAlert:
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
 
     def test_no_re_alert_after_first(self):
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
         action = state.update(now=2050.0, last_rx=2045.0, last_tx=998.0, auto_mode=False)
         assert action is None
 
@@ -67,7 +67,7 @@ class TestIdleAlert:
             state.update(now=float(t), last_rx=float(t - 5), last_tx=float(t - 1), auto_mode=False)
         # Activity stops, device idle again
         action = state.update(now=3100.0, last_rx=3095.0, last_tx=2079.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
 
     def test_backdate_to_last_tx_when_recent(self):
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
@@ -75,7 +75,7 @@ class TestIdleAlert:
         action = state.update(now=1200.0, last_rx=1195.0, last_tx=1100.0, auto_mode=False)
         assert action is None
         action = state.update(now=2000.0, last_rx=1995.0, last_tx=1100.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
 
     def test_device_off_clears_idle_state(self):
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
@@ -97,7 +97,7 @@ class TestIdleAlert:
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
         state.update(now=2000.0, last_rx=1995.0, last_tx=1999.0, auto_mode=False)
         action = state.update(now=3000.0, last_rx=2995.0, last_tx=1999.0, auto_mode=False)
         assert action is None
@@ -107,7 +107,7 @@ class TestIdleAlert:
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
         state.acknowledge()
         # Brief TX blip (single poll with in_use=True)
         state.update(now=2000.0, last_rx=1995.0, last_tx=1999.0, auto_mode=False)
@@ -122,7 +122,7 @@ class TestIdleAlert:
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
         state.acknowledge()
         # RX goes stale — device appears off
         state.update(now=2040.0, last_rx=2000.0, last_tx=998.0, auto_mode=False)
@@ -140,7 +140,7 @@ class TestIdleAlert:
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
         state.update(now=1000.0, last_rx=995.0, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, last_rx=1993.0, last_tx=998.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
         state.acknowledge()
         # Switched off: RX stops for well over the re-arm window.
         for t in range(2000, 2200, 10):
@@ -148,7 +148,7 @@ class TestIdleAlert:
         # Switched back on and left idle again.
         state.update(now=2200.0, last_rx=2198.0, last_tx=998.0, auto_mode=False)
         action = state.update(now=3200.0, last_rx=3195.0, last_tx=998.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
 
     def test_no_false_alert_when_last_tx_none_on_long_running_device(self):
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0)
@@ -164,7 +164,7 @@ class TestRestartPersistence:
         idle_since, not re-anchor it to 'now' (which would reset the 15-min clock)."""
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0, idle_since=1000.0)
         action = state.update(now=1950.0, last_rx=1945.0, last_tx=500.0, auto_mode=False)
-        assert action == Action.IDLE_ALERT
+        assert action == MonitorOutcome.IDLE_ALERT
 
     def test_seeded_alerted_suppresses_realert_across_restart(self):
         """If the alert already fired before a restart, seeding alerted=True must
