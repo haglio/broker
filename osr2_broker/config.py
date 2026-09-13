@@ -35,12 +35,12 @@ class BrokerConfig:
     evolver_launcher: Path
 
     @property
-    def genau_mode_file(self) -> Path:
-        return self.state_dir / state_files.GENAU_MODE
+    def broker_mode_file(self) -> Path:
+        return self.state_dir / state_files.BROKER_MODE
 
     @property
-    def genau_enabled_file(self) -> Path:
-        return self.state_dir / state_files.GENAU_ENABLED
+    def broker_auto_enabled_file(self) -> Path:
+        return self.state_dir / state_files.BROKER_AUTO_ENABLED
 
     @property
     def broker_cmd_file(self) -> Path:

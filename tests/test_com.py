@@ -124,9 +124,9 @@ def _wait_until(predicate) -> None:
 
 
 def _build_stack(tmp_path: Path, *, enabled: bool = True):
-    state_file = tmp_path / "state" / "genau_mode.txt"
+    state_file = tmp_path / "state" / "broker_mode.txt"
     state_file.parent.mkdir(parents=True, exist_ok=True)
-    rh_enabled_file = tmp_path / "state" / "genau_enabled.txt"
+    rh_enabled_file = tmp_path / "state" / "broker_auto_enabled.txt"
     broker_cmd_file = tmp_path / "state" / "broker_cmd.txt"
 
     writes: list[tuple[Path, str]] = []
@@ -169,7 +169,7 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         real_port="COM4",
         baud=115200,
         broker_cmd_file=broker_cmd_file,
-        genau_enabled_file=rh_enabled_file,
+        broker_auto_enabled_file=rh_enabled_file,
         auto_stale_timeout=2.0,
         stop_event=stop_event,
         broker_paused=broker_paused,
@@ -177,7 +177,7 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         logger=logger,
         start_thread=_start_real_thread,
         consume_command=lambda _path: [],
-        read_genau_enabled=lambda _path: enabled,
+        read_broker_auto_enabled=lambda _path: enabled,
         rx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_rx.txt"),
         tx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_tx.txt"),
         connected_event=threading.Event(),

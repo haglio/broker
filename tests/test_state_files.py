@@ -13,9 +13,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from osr2_broker.state_files import (
-    ensure_genau_enabled_file,
+    ensure_broker_auto_enabled_file,
     heartbeat_loop,
-    read_genau_enabled,
+    read_broker_auto_enabled,
     write_heartbeat,
     write_mode,
 )
@@ -28,7 +28,7 @@ class TestWriteMode:
         """The tray reads "0"/"1" straight out of this file and genau's own
         readers compare it as text, so nothing may be added around it -- no
         newline, no BOM."""
-        mode_file = tmp_path / "state" / "genau_mode.txt"
+        mode_file = tmp_path / "state" / "broker_mode.txt"
 
         write_mode(mode_file, "1", LOGGER)
 
@@ -36,7 +36,7 @@ class TestWriteMode:
 
     def test_the_state_directory_is_created_if_it_is_not_there(self, tmp_path: Path):
         """First run on a fresh machine: nothing has made state/ yet."""
-        mode_file = tmp_path / "state" / "genau_mode.txt"
+        mode_file = tmp_path / "state" / "broker_mode.txt"
 
         write_mode(mode_file, "0", LOGGER)
 
@@ -58,55 +58,55 @@ class TestReadGenauEnabled:
     is pinned in app_support."""
 
     def test_a_file_that_is_not_there_reads_as_enabled(self, tmp_path: Path):
-        assert read_genau_enabled(tmp_path / "genau_enabled.txt") is True
+        assert read_broker_auto_enabled(tmp_path / "broker_auto_enabled.txt") is True
 
     def test_a_zero_reads_as_disabled(self, tmp_path: Path):
-        path = tmp_path / "genau_enabled.txt"
+        path = tmp_path / "broker_auto_enabled.txt"
         path.write_text("0", encoding="utf-8")
 
-        assert read_genau_enabled(path) is False
+        assert read_broker_auto_enabled(path) is False
 
 
 class TestEnsureGenauEnabledFile:
     def test_a_missing_file_is_seeded_enabled(self, tmp_path: Path):
-        path = tmp_path / "state" / "genau_enabled.txt"
+        path = tmp_path / "state" / "broker_auto_enabled.txt"
 
-        ensure_genau_enabled_file(path, LOGGER)
+        ensure_broker_auto_enabled_file(path, LOGGER)
 
         assert path.read_bytes() == b"1"
 
     def test_a_blank_file_is_repaired(self, tmp_path: Path):
         """A half-written file, or one a writer truncated and did not refill."""
-        path = tmp_path / "genau_enabled.txt"
+        path = tmp_path / "broker_auto_enabled.txt"
         path.write_text("  \r\n", encoding="utf-8")
 
-        ensure_genau_enabled_file(path, LOGGER)
+        ensure_broker_auto_enabled_file(path, LOGGER)
 
         assert path.read_bytes() == b"1"
 
     def test_a_file_holding_only_a_bom_counts_as_blank(self, tmp_path: Path):
         """A writer that opened the file, stamped the BOM and got no further."""
-        path = tmp_path / "genau_enabled.txt"
+        path = tmp_path / "broker_auto_enabled.txt"
         path.write_bytes(b"\xef\xbb\xbf")
 
-        ensure_genau_enabled_file(path, LOGGER)
+        ensure_broker_auto_enabled_file(path, LOGGER)
 
         assert path.read_bytes() == b"1"
 
     def test_a_deliberate_zero_is_left_exactly_as_it_was(self, tmp_path: Path):
         """The one case that must not be touched: seeding over a user's "0"
         would switch Genau back on at every broker start."""
-        path = tmp_path / "genau_enabled.txt"
+        path = tmp_path / "broker_auto_enabled.txt"
         path.write_text("0", encoding="utf-8")
 
-        ensure_genau_enabled_file(path, LOGGER)
+        ensure_broker_auto_enabled_file(path, LOGGER)
 
         assert path.read_bytes() == b"0"
 
     def test_a_failure_is_logged_and_swallowed(self, tmp_path: Path):
         logger = MagicMock()
 
-        ensure_genau_enabled_file(tmp_path, logger)  # a directory
+        ensure_broker_auto_enabled_file(tmp_path, logger)  # a directory
 
         logger.exception.assert_called_once()
 
