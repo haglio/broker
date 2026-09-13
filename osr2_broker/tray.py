@@ -14,9 +14,7 @@ from shared_ui.chrome import menu_rules
 
 from . import peer_watch
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
-
-# The numbers the broker writes to its mode file, in the words the menu shows.
-MODE_NAMES = {"0": "control", "1": "auto"}
+from .state_files import BrokerMode
 
 # How often the watchdog checks the broker is still there.
 WATCHDOG_INTERVAL_MS = 5_000
@@ -29,8 +27,11 @@ def mode_text(mode_file: Path) -> str:
     except OSError:
         return "unknown"
 
-    mode = raw.replace("﻿", "").strip()
-    return MODE_NAMES.get(mode, f"mode={mode}")
+    written = raw.replace("﻿", "").strip()
+    try:
+        return BrokerMode(written).label
+    except ValueError:
+        return f"mode={written}"
 
 
 def open_in_editor(path: Path) -> None:
