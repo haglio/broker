@@ -360,8 +360,8 @@ class TestMainPublishesItsStateFiles:
                            sleep=stop_on_first_sleep):
             broker_app_module.main(["--config", str(cfg_path)])
 
-        assert (config.state_dir / "genau_mode.txt").read_text(encoding="utf-8") == "0"
-        assert (config.state_dir / "genau_enabled.txt").read_text(encoding="utf-8") == "1"
+        assert (config.state_dir / "broker_mode.txt").read_text(encoding="utf-8") == "0"
+        assert (config.state_dir / "broker_auto_enabled.txt").read_text(encoding="utf-8") == "1"
 
 
 class TestMainWatchesForThePowerOn:

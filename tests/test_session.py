@@ -82,7 +82,7 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         real_port="COM4",
         baud=115200,
         broker_cmd_file=Path("broker.cmd"),
-        genau_enabled_file=Path("genau_enabled.txt"),
+        broker_auto_enabled_file=Path("broker_auto_enabled.txt"),
         auto_stale_timeout=2.0,
         stop_event=threading.Event(),
         broker_paused=threading.Event(),
@@ -90,7 +90,7 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         logger=logger,
         start_thread=MagicMock(),
         consume_command=lambda _path: [],
-        read_genau_enabled=lambda _path: True,
+        read_broker_auto_enabled=lambda _path: True,
         monotonic=monotonic,
         rx_activity=rx_activity or StampSpy(),
         tx_activity=tx_activity or StampSpy(),
@@ -283,10 +283,10 @@ def test_an_empty_tick_with_no_command_is_a_no_op():
 
 def test_sync_genau_enabled_reads_shared_file_state():
     session, auto_mode, _logger = _build_session()
-    session.read_genau_enabled = lambda _path: False
+    session.read_broker_auto_enabled = lambda _path: False
     sock = object()
 
-    session.sync_genau_enabled(sock)
+    session.sync_broker_auto_enabled(sock)
 
     assert auto_mode.set_enabled_calls == [(sock, False)]
 
