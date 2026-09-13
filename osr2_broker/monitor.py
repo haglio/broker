@@ -8,7 +8,9 @@ from pathlib import Path
 IN_USE_THRESHOLD = 30.0
 
 
-class Action(Enum):
+class MonitorOutcome(Enum):
+    """What a tick of the idle monitor asks its caller to do, when it asks anything."""
+
     IDLE_ALERT = auto()
 
 
@@ -50,7 +52,7 @@ class MonitorState:
         last_rx: float | None,
         last_tx: float | None,
         auto_mode: bool,
-    ) -> Action | None:
+    ) -> MonitorOutcome | None:
         was_on = self._device_on
         self._device_on = last_rx is not None and (now - last_rx) < self._rx_stale_threshold
         in_use = auto_mode or (last_tx is not None and (now - last_tx) < IN_USE_THRESHOLD)
@@ -82,7 +84,7 @@ class MonitorState:
         if not self._alerted and not self._warning_pending and (now - self._idle_since) >= self._idle_threshold:
             self._alerted = True
             self._warning_pending = True
-            return Action.IDLE_ALERT
+            return MonitorOutcome.IDLE_ALERT
 
         return None
 
@@ -96,12 +98,12 @@ def run_monitor_poll(
     auto_active: bool,
     idle_state_file: Path,
     on_alert: Callable[[], None],
-) -> Action | None:
+) -> MonitorOutcome | None:
     """Advance the monitor one tick, persist the idle state so the 15-min
     countdown survives a broker restart, and dispatch the idle alert."""
     action = state.update(now, last_rx, last_tx, auto_active)
     save_idle_state(idle_state_file, state.idle_since, state.alerted)
-    if action == Action.IDLE_ALERT:
+    if action == MonitorOutcome.IDLE_ALERT:
         on_alert()
     return action
 
