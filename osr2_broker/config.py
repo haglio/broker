@@ -39,10 +39,6 @@ class BrokerConfig:
         return self.state_dir / state_files.GENAU_MODE
 
     @property
-    def genau_enabled_file(self) -> Path:
-        return self.state_dir / state_files.GENAU_ENABLED
-
-    @property
     def broker_cmd_file(self) -> Path:
         return self.state_dir / state_files.BROKER_CMD
 

@@ -123,10 +123,9 @@ def _wait_until(predicate) -> None:
     wait_until(predicate, timeout=2.0, interval=0.02)
 
 
-def _build_stack(tmp_path: Path, *, enabled: bool = True):
+def _build_stack(tmp_path: Path):
     state_file = tmp_path / "state" / "genau_mode.txt"
     state_file.parent.mkdir(parents=True, exist_ok=True)
-    rh_enabled_file = tmp_path / "state" / "genau_enabled.txt"
     broker_cmd_file = tmp_path / "state" / "broker_cmd.txt"
 
     writes: list[tuple[Path, str]] = []
@@ -149,7 +148,6 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         logger=logger,
         write_mode=capture_write,
         udp_send=capture_udp,
-        enabled=enabled,
     )
 
     real_port = FakeSerialPort()
@@ -169,7 +167,6 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         real_port="COM4",
         baud=115200,
         broker_cmd_file=broker_cmd_file,
-        genau_enabled_file=rh_enabled_file,
         auto_stale_timeout=2.0,
         stop_event=stop_event,
         broker_paused=broker_paused,
@@ -177,7 +174,6 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         logger=logger,
         start_thread=_start_real_thread,
         consume_command=lambda _path: [],
-        read_genau_enabled=lambda _path: enabled,
         rx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_rx.txt"),
         tx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_tx.txt"),
         connected_event=threading.Event(),
@@ -199,7 +195,6 @@ def _build_stack(tmp_path: Path, *, enabled: bool = True):
         stop_event=stop_event,
         broker_paused=broker_paused,
         state_file=state_file,
-        rh_enabled_file=rh_enabled_file,
         broker_cmd_file=broker_cmd_file,
         writes=writes,
         udp_messages=udp_messages,
@@ -308,29 +303,6 @@ class TestSerialForwarding:
             _wait_until(lambda: s.virt_port.in_waiting == 0)
 
         assert s.real_port.tx_data == b""
-
-
-class TestGenauEnabledSuppression:
-    def test_disabled_genau_suppresses_state_file(self, tmp_path):
-        s = _build_stack(tmp_path, enabled=False)
-        s.real_port.inject(b"Auto mode is on!\r\n")
-
-        with _running(s):
-            _wait_until(lambda: s.controller.is_active)
-
-        assert s.controller.is_active is True
-        assert s.state_file.read_text(encoding="utf-8") == "0"
-        assert "AUTO 0" in s.udp_messages
-
-    def test_reenabling_while_auto_active_republishes_auto(self, tmp_path):
-        s = _build_stack(tmp_path, enabled=False)
-        sock = object()
-        s.controller.set_auto(sock, True)
-
-        s.controller.set_enabled(sock, True)
-
-        assert s.state_file.read_text(encoding="utf-8") == "1"
-        assert s.udp_messages[-2:] == ["AUTO 1", "BPM 87"]
 
 
 class TestBrokerCommands:

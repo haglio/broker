@@ -55,7 +55,6 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
         real_port="COM4",
         baud=115200,
         broker_cmd_file=cmd,
-        genau_enabled_file=tmp_path / "genau_enabled.txt",
         auto_stale_timeout=2.0,
         stop_event=threading.Event(),
         broker_paused=threading.Event(),
@@ -63,7 +62,6 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
         logger=logger,
         start_thread=MagicMock(),
         consume_command=consume_command_file,
-        read_genau_enabled=lambda _path: True,
         rx_activity=ActivityStamp(tmp_path / "osr2_serial_rx.txt"),
         tx_activity=ActivityStamp(tmp_path / "osr2_serial_tx.txt"),
         connected_event=threading.Event(),
@@ -103,10 +101,10 @@ def test_two_verbs_queued_between_ticks_are_both_acted_on_in_order(tmp_path: Pat
     logger = MagicMock()
     session = BrokerSerialSession(
         serial_factory=MagicMock(), virtual_port="COM15", real_port="COM4", baud=115200,
-        broker_cmd_file=cmd, genau_enabled_file=tmp_path / "genau_enabled.txt",
+        broker_cmd_file=cmd,
         auto_stale_timeout=2.0, stop_event=threading.Event(), broker_paused=threading.Event(),
         auto_mode=auto_mode, logger=logger, start_thread=MagicMock(),
-        consume_command=consume_command_file, read_genau_enabled=lambda _path: True,
+        consume_command=consume_command_file,
         rx_activity=ActivityStamp(tmp_path / "osr2_serial_rx.txt"),
         tx_activity=ActivityStamp(tmp_path / "osr2_serial_tx.txt"),
         connected_event=threading.Event(), is_retryable_error=lambda _exc: False,
