@@ -92,7 +92,8 @@ def _free_port() -> int:
     return port
 
 
-def _build_listener(port: int, *, tx_activity=None, window=None):
+def _build_listener(port: int, *, tx_activity=None, window=None,
+                    device_drives_itself=lambda: False):
     return UdpTCodeListener(
         port=port,
         stop_event=threading.Event(),
@@ -100,6 +101,7 @@ def _build_listener(port: int, *, tx_activity=None, window=None):
         is_retryable_error=lambda _exc: False,
         window=window or TCodeWriteWindow(monotonic=lambda: 10.0),
         tx_activity=tx_activity or _StampSpy(),
+        device_drives_itself=device_drives_itself,
     )
 
 
@@ -155,6 +157,49 @@ def test_a_datagram_reaches_the_serial_port():
 
     sender.close()
     assert real.writes == [b"L05000I33\n"]
+
+
+def test_a_datagram_arriving_while_the_device_drives_itself_is_dropped_whole():
+    """Auto mode is the OSR2 on its own firmware, and it wins over everything
+    here: a funscript, a FunTimeVR player, an Origenerator video.  So what they
+    send meanwhile is neither written nor counted as sent.
+
+    Proved positively rather than by waiting a datagram out: the same line is
+    re-offered until one is written, and the device drives itself only for the
+    first.  A listener that ignored the question writes that first one and never
+    asks a second time; one that asked and wrote anyway asks only once too.
+    """
+    port = _free_port()
+    asked = []
+
+    def device_drives_itself() -> bool:
+        asked.append(True)
+        return len(asked) == 1
+
+    tx_activity = _StampSpy()
+    window = TCodeWriteWindow(monotonic=lambda: 10.0)
+    listener = _build_listener(port, tx_activity=tx_activity, window=window,
+                               device_drives_itself=device_drives_itself)
+    session_stop = threading.Event()
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+
+        def write(self, data: bytes):
+            self.writes.append(data)
+            session_stop.set()
+
+    real = FakeReal()
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    _offer_until_taken(sender, port, b"L05000I33", session_stop)
+
+    listener.run(real, session_stop, SessionRetryState(), threading.Lock())
+
+    sender.close()
+    assert len(asked) == 2
+    assert real.writes == [b"L05000I33\n"]
+    assert tx_activity.marks == 1
 
 
 def test_the_datagram_is_written_under_the_caller_s_serial_lock():
