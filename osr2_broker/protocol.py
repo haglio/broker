@@ -33,7 +33,6 @@ class BrokerAutoController:
         logger,
         write_mode,
         udp_send,
-        enabled: bool = True,
     ):
         self.state_file = state_file
         self.udp_host = udp_host
@@ -43,7 +42,6 @@ class BrokerAutoController:
         self.udp_send = udp_send
         self._lock = threading.Lock()
         self._auto_active = False
-        self._enabled = enabled
         self._deactivated = False
 
     @property
@@ -53,14 +51,11 @@ class BrokerAutoController:
 
     _SEED_BPM = 87
 
-    def publish_effective_state(self, sock: socket.socket) -> None:
-        with self._lock:
-            effective_active = self._auto_active and self._enabled
-
+    def _publish(self, sock: socket.socket, active: bool) -> None:
         self.write_mode(self.state_file,
-                        BrokerMode.AUTO if effective_active else BrokerMode.CONTROL, self.logger)
-        self.udp_send(sock, self.udp_host, self.udp_port, f"AUTO {1 if effective_active else 0}")
-        if effective_active:
+                        BrokerMode.AUTO if active else BrokerMode.CONTROL, self.logger)
+        self.udp_send(sock, self.udp_host, self.udp_port, f"AUTO {1 if active else 0}")
+        if active:
             self.udp_send(sock, self.udp_host, self.udp_port, f"BPM {self._SEED_BPM}")
 
     def set_auto(self, sock: socket.socket, value: bool) -> None:
@@ -75,7 +70,7 @@ class BrokerAutoController:
         # and resent the seed BPM ahead of the real tempo, at the line rate.
         if not changed:
             return
-        self.publish_effective_state(sock)
+        self._publish(sock, value)
         self.logger.info("AUTO %s", "ON" if value else "OFF")
 
     def consume_deactivation(self) -> bool:
@@ -84,17 +79,6 @@ class BrokerAutoController:
                 self._deactivated = False
                 return True
             return False
-
-    def set_enabled(self, sock: socket.socket, value: bool) -> None:
-        with self._lock:
-            changed = self._enabled != value
-            self._enabled = value
-
-        if not changed:
-            return
-
-        self.publish_effective_state(sock)
-        self.logger.info("Genau %s", "ENABLED" if value else "DISABLED")
 
     def handle_line(self, sock: socket.socket, line: str) -> None:
         low = line.lower()

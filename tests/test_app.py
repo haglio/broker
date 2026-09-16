@@ -337,16 +337,15 @@ class TestBrokerSingleInstance:
 
 
 class TestMainPublishesItsStateFiles:
-    def test_a_started_broker_leaves_the_mode_and_enable_files_where_the_family_looks(
+    def test_a_started_broker_leaves_the_mode_file_where_the_family_looks(
         self, broker_app_module, cfg_path,
     ):
-        """The two files main() writes before it starts bridging, under the two
-        names the rest of the family opens by hand.
+        """The file main() writes before it starts bridging, under the name the
+        rest of the family opens by hand.
 
         Nothing else in the suite reads a state file after main(): the writers
         are all substituted in the tests below this one. So the wiring -- which
-        config property feeds which of the two names -- could shift without a red
-        anywhere.
+        config property feeds that name -- could shift without a red anywhere.
         """
         from osr2_broker.config import load_config
 
@@ -361,7 +360,6 @@ class TestMainPublishesItsStateFiles:
             broker_app_module.main(["--config", str(cfg_path)])
 
         assert (config.state_dir / "genau_mode.txt").read_text(encoding="utf-8") == "0"
-        assert (config.state_dir / "genau_enabled.txt").read_text(encoding="utf-8") == "1"
 
 
 class TestMainWatchesForThePowerOn:

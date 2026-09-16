@@ -43,7 +43,6 @@ class FakeAutoMode:
         self.active = active
         self.handle_line_calls: list[str] = []
         self.set_auto_calls: list[tuple[object, bool]] = []
-        self.set_enabled_calls: list[tuple[object, bool]] = []
         self._deactivated = False
 
     @property
@@ -59,9 +58,6 @@ class FakeAutoMode:
         self.active = value
         if was_active and not value:
             self._deactivated = True
-
-    def set_enabled(self, sock, value: bool) -> None:
-        self.set_enabled_calls.append((sock, value))
 
     def consume_deactivation(self) -> bool:
         if self._deactivated:
@@ -82,7 +78,6 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         real_port="COM4",
         baud=115200,
         broker_cmd_file=Path("broker.cmd"),
-        genau_enabled_file=Path("genau_enabled.txt"),
         auto_stale_timeout=2.0,
         stop_event=threading.Event(),
         broker_paused=threading.Event(),
@@ -90,7 +85,6 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         logger=logger,
         start_thread=MagicMock(),
         consume_command=lambda _path: [],
-        read_genau_enabled=lambda _path: True,
         monotonic=monotonic,
         rx_activity=rx_activity or StampSpy(),
         tx_activity=tx_activity or StampSpy(),
@@ -248,11 +242,10 @@ def test_a_verb_the_broker_does_not_know_is_ignored():
     """The command file is a shared channel: fun_time, genau and clipper all
     write into it, and one of them growing a verb this broker has no handler for
     must be a no-op, not a crash inside the 50 ms tick."""
-    session, auto_mode, logger = _build_session()
+    session, _auto_mode, logger = _build_session()
 
     session.handle_broker_command("TELEPORT", object())
 
-    assert auto_mode.set_enabled_calls == []
     assert not session.broker_paused.is_set()
     logger.info.assert_not_called()
     logger.warning.assert_not_called()
@@ -261,23 +254,12 @@ def test_a_verb_the_broker_does_not_know_is_ignored():
 def test_an_empty_tick_with_no_command_is_a_no_op():
     """Almost every tick reads no command at all -- twenty times a second, all
     session long -- so `None` has to fall through the whole table quietly."""
-    session, auto_mode, logger = _build_session()
+    session, _auto_mode, logger = _build_session()
 
     session.handle_broker_command(None, object())
 
-    assert auto_mode.set_enabled_calls == []
     assert not session.broker_paused.is_set()
     logger.info.assert_not_called()
-
-
-def test_sync_genau_enabled_reads_shared_file_state():
-    session, auto_mode, _logger = _build_session()
-    session.read_genau_enabled = lambda _path: False
-    sock = object()
-
-    session.sync_genau_enabled(sock)
-
-    assert auto_mode.set_enabled_calls == [(sock, False)]
 
 
 def test_maybe_disable_stale_auto_turns_off_auto_when_stale():

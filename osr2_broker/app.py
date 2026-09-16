@@ -18,12 +18,7 @@ from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_pre
 from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
-from .state_files import (
-    ensure_genau_enabled_file,
-    heartbeat_loop,
-    read_genau_enabled,
-    write_mode,
-)
+from .state_files import heartbeat_loop, write_mode
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
 # How often the retry loop asks whether an absent OSR2 port has come back.  Short
@@ -75,11 +70,8 @@ def main(argv: list[str] | None = None) -> int:
             logger.exception("Could not update MFP serial port config")
 
     state_file = config.genau_mode_file
-    genau_enabled_file = config.genau_enabled_file
     broker_cmd_file = config.broker_cmd_file
     heartbeat_file = config.broker_heartbeat_file
-    ensure_genau_enabled_file(genau_enabled_file, logger)
-    genau_enabled = read_genau_enabled(genau_enabled_file)
     stop_event = threading.Event()
     broker_paused = threading.Event()
     connected = threading.Event()
@@ -90,7 +82,6 @@ def main(argv: list[str] | None = None) -> int:
         logger=logger,
         write_mode=write_mode,
         udp_send=udp_send,
-        enabled=genau_enabled,
     )
     session = BrokerSerialSession(
         serial_factory=serial.Serial,
@@ -98,7 +89,6 @@ def main(argv: list[str] | None = None) -> int:
         real_port=config.real_port,
         baud=config.baud,
         broker_cmd_file=broker_cmd_file,
-        genau_enabled_file=genau_enabled_file,
         auto_stale_timeout=config.auto_stale_timeout,
         stop_event=stop_event,
         broker_paused=broker_paused,
@@ -106,7 +96,6 @@ def main(argv: list[str] | None = None) -> int:
         logger=logger,
         start_thread=start_daemon_thread,
         consume_command=consume_command_file,
-        read_genau_enabled=read_genau_enabled,
         monotonic=time.monotonic,
         sleep=time.sleep,
         is_retryable_error=is_retryable_serial_error,

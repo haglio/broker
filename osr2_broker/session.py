@@ -31,7 +31,6 @@ class BrokerSerialSession:
         real_port: str,
         baud: int,
         broker_cmd_file: Path,
-        genau_enabled_file: Path,
         auto_stale_timeout: float,
         stop_event,
         broker_paused,
@@ -39,7 +38,6 @@ class BrokerSerialSession:
         logger,
         start_thread,
         consume_command,
-        read_genau_enabled,
         rx_activity: ActivityStamp,
         tx_activity: ActivityStamp,
         connected_event: threading.Event,
@@ -54,7 +52,6 @@ class BrokerSerialSession:
         self.real_port = real_port
         self.baud = baud
         self.broker_cmd_file = broker_cmd_file
-        self.genau_enabled_file = genau_enabled_file
         self.auto_stale_timeout = auto_stale_timeout
         self.stop_event = stop_event
         self.broker_paused = broker_paused
@@ -62,7 +59,6 @@ class BrokerSerialSession:
         self.logger = logger
         self.start_thread = start_thread
         self.consume_command = consume_command
-        self.read_genau_enabled = read_genau_enabled
         self.monotonic = monotonic
         self.sleep = sleep
         self.is_retryable_error = is_retryable_error
@@ -261,7 +257,6 @@ class BrokerSerialSession:
     def tick_command_and_stale_timeout(self, udp_sock, *, real_port, serial_write_lock) -> None:
         for cmd in self.consume_command(self.broker_cmd_file):
             self.handle_broker_command(cmd, udp_sock)
-        self.sync_genau_enabled(udp_sock)
         self.maybe_disable_stale_auto(udp_sock)
         self._motion.tick()
         if self.auto_mode.consume_deactivation():
@@ -296,20 +291,13 @@ class BrokerSerialSession:
 
     # The whole vocabulary, in one place. fun_time, genau and clipper write
     # these into broker_cmd.txt; the family's consumer upper-cases whatever it reads,
-    # so the keys are the verbs as they arrive.  Whether Genau may have the
-    # device is not among them: that is genau_enabled.txt, read every tick by
-    # sync_genau_enabled below, which would overwrite a verb's answer inside the
-    # same tick anyway.
+    # so the keys are the verbs as they arrive.
     _VERBS = MappingProxyType({
         "PAUSE": _pause,
         "RESUME": _resume,
         "PARK": _park,
         "RETRACT": _retract,
     })
-
-    def sync_genau_enabled(self, udp_sock) -> None:
-        enabled = self.read_genau_enabled(self.genau_enabled_file)
-        self.auto_mode.set_enabled(udp_sock, enabled)
 
     def maybe_disable_stale_auto(self, udp_sock) -> None:
         if not self.auto_mode.is_active:

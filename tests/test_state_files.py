@@ -1,6 +1,6 @@
 """The files the broker publishes itself through.
 
-Four names under the shared state directory, read by fun_time, genau, clipper
+Three names under the shared state directory, read by fun_time, genau, clipper
 and the tray.  The reading and the writing are app_support.file_channel's and
 pinned there, file by file; what is pinned here is the broker's side of each:
 what it writes, when, and what it does when it cannot.
@@ -12,13 +12,7 @@ import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from osr2_broker.state_files import (
-    ensure_genau_enabled_file,
-    heartbeat_loop,
-    read_genau_enabled,
-    write_heartbeat,
-    write_mode,
-)
+from osr2_broker.state_files import heartbeat_loop, write_heartbeat, write_mode
 
 LOGGER = logging.getLogger("test.broker")
 
@@ -50,65 +44,6 @@ class TestWriteMode:
         write_mode(tmp_path, "1", logger)  # a directory, so the write cannot land
 
         logger.error.assert_called_once()
-
-
-class TestReadGenauEnabled:
-    """The family's flag reader with the broker's default: on until somebody
-    turns it off.  The reading itself -- the BOM, the blank, the torn file --
-    is pinned in app_support."""
-
-    def test_a_file_that_is_not_there_reads_as_enabled(self, tmp_path: Path):
-        assert read_genau_enabled(tmp_path / "genau_enabled.txt") is True
-
-    def test_a_zero_reads_as_disabled(self, tmp_path: Path):
-        path = tmp_path / "genau_enabled.txt"
-        path.write_text("0", encoding="utf-8")
-
-        assert read_genau_enabled(path) is False
-
-
-class TestEnsureGenauEnabledFile:
-    def test_a_missing_file_is_seeded_enabled(self, tmp_path: Path):
-        path = tmp_path / "state" / "genau_enabled.txt"
-
-        ensure_genau_enabled_file(path, LOGGER)
-
-        assert path.read_bytes() == b"1"
-
-    def test_a_blank_file_is_repaired(self, tmp_path: Path):
-        """A half-written file, or one a writer truncated and did not refill."""
-        path = tmp_path / "genau_enabled.txt"
-        path.write_text("  \r\n", encoding="utf-8")
-
-        ensure_genau_enabled_file(path, LOGGER)
-
-        assert path.read_bytes() == b"1"
-
-    def test_a_file_holding_only_a_bom_counts_as_blank(self, tmp_path: Path):
-        """A writer that opened the file, stamped the BOM and got no further."""
-        path = tmp_path / "genau_enabled.txt"
-        path.write_bytes(b"\xef\xbb\xbf")
-
-        ensure_genau_enabled_file(path, LOGGER)
-
-        assert path.read_bytes() == b"1"
-
-    def test_a_deliberate_zero_is_left_exactly_as_it_was(self, tmp_path: Path):
-        """The one case that must not be touched: seeding over a user's "0"
-        would switch Genau back on at every broker start."""
-        path = tmp_path / "genau_enabled.txt"
-        path.write_text("0", encoding="utf-8")
-
-        ensure_genau_enabled_file(path, LOGGER)
-
-        assert path.read_bytes() == b"0"
-
-    def test_a_failure_is_logged_and_swallowed(self, tmp_path: Path):
-        logger = MagicMock()
-
-        ensure_genau_enabled_file(tmp_path, logger)  # a directory
-
-        logger.exception.assert_called_once()
 
 
 class TestHeartbeat:
