@@ -1,10 +1,13 @@
 """T-Code arriving over loopback UDP, and the mute that outlasts a direct write.
 
-Genau sends the OSR2 its moves as datagrams, bypassing MFP entirely. A fired
-hold writes to the device the same way. Both are "someone drove the device
-directly just now", which is what MFP's forwarder has to know: two writers
-fighting over one serial port make the device stutter between them, so the
-window says whose turn it is not.
+Genau sends the OSR2 its moves as datagrams, bypassing MFP entirely, and so do
+the video players and Origenerator. A fired hold writes to the device the same
+way. Both are "someone drove the device directly just now", which is what MFP's
+forwarder has to know: two writers fighting over one serial port make the device
+stutter between them, so the window says whose turn it is not.
+
+While the device is running its own auto mode, none of these datagrams is
+anybody's turn: auto wins over every sender, as it already does over MFP.
 """
 from __future__ import annotations
 
@@ -31,13 +34,15 @@ class TCodeWriteWindow:
 
 class UdpTCodeListener:
     def __init__(self, *, port: int, stop_event, logger, is_retryable_error,
-                 window: TCodeWriteWindow, tx_activity, motion=None):
+                 window: TCodeWriteWindow, tx_activity, device_drives_itself,
+                 motion=None):
         self.port = port
         self._stop_event = stop_event
         self._logger = logger
         self._is_retryable_error = is_retryable_error
         self._window = window
         self._tx_activity = tx_activity
+        self._device_drives_itself = device_drives_itself
         self._motion = motion
 
     def run(self, real, session_stop, retry_state, serial_write_lock) -> None:
@@ -52,7 +57,7 @@ class UdpTCodeListener:
                     continue
                 for line in data.decode("ascii", errors="replace").split("\n"):
                     line = line.strip()
-                    if not line:
+                    if not line or self._device_drives_itself():
                         continue
                     self._window.mark()
                     with serial_write_lock:

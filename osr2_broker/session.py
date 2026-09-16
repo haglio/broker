@@ -86,6 +86,7 @@ class BrokerSerialSession:
             is_retryable_error=self.is_retryable_error,
             window=self._tcode_window,
             tx_activity=tx_activity,
+            device_drives_itself=lambda: self.auto_mode.is_active,
             motion=self._motion,
         ) if tcode_udp_port else None
 

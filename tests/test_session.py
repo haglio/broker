@@ -860,6 +860,23 @@ def test_a_configured_tcode_port_gets_a_listener_thread():
     ]
 
 
+def test_the_listener_asks_the_session_s_own_auto_mode(monkeypatch):
+    """What drops every sender's datagrams while the OSR2 runs itself is the
+    listener's question, and the answer has to be this session's own device --
+    asked afresh each time, since auto comes and goes under a running listener."""
+    from osr2_broker import session as session_module
+
+    handed = {}
+    monkeypatch.setattr(session_module, "UdpTCodeListener",
+                        lambda **kwargs: handed.update(kwargs))
+    _session, auto_mode, _logger = _build_session(tcode_udp_port=50557)
+    ask = handed["device_drives_itself"]
+
+    assert ask() is False
+    auto_mode.active = True
+    assert ask() is True
+
+
 def test_no_tcode_port_means_no_listener_thread():
     """Port 0 is how the listener is turned off; binding it would take an
     ephemeral port nobody can address and spin a thread on nothing."""
