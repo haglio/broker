@@ -244,17 +244,6 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
-def test_handle_broker_command_toggles_genau_enablement():
-    session, auto_mode, logger = _build_session()
-    sock = object()
-
-    session.handle_broker_command("GENAU_DISABLE", sock)
-    session.handle_broker_command("GENAU_ENABLE", sock)
-
-    assert auto_mode.set_enabled_calls == [(sock, False), (sock, True)]
-    logger.info.assert_not_called()
-
-
 def test_a_verb_the_broker_does_not_know_is_ignored():
     """The command file is a shared channel: fun_time, genau and clipper all
     write into it, and one of them growing a verb this broker has no handler for

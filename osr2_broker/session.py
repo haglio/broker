@@ -293,22 +293,17 @@ class BrokerSerialSession:
     def _retract(self, _udp_sock) -> None:
         self._holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
-    def _genau_disable(self, udp_sock) -> None:
-        self.auto_mode.set_enabled(udp_sock, False)
-
-    def _genau_enable(self, udp_sock) -> None:
-        self.auto_mode.set_enabled(udp_sock, True)
-
     # The whole vocabulary, in one place. fun_time, genau and clipper write
     # these into broker_cmd.txt; the family's consumer upper-cases whatever it reads,
-    # so the keys are the verbs as they arrive.
+    # so the keys are the verbs as they arrive.  Whether Genau may have the
+    # device is not among them: that is genau_enabled.txt, read every tick by
+    # sync_genau_enabled below, which would overwrite a verb's answer inside the
+    # same tick anyway.
     _VERBS = MappingProxyType({
         "PAUSE": _pause,
         "RESUME": _resume,
         "PARK": _park,
         "RETRACT": _retract,
-        "GENAU_DISABLE": _genau_disable,
-        "GENAU_ENABLE": _genau_enable,
     })
 
     def sync_genau_enabled(self, udp_sock) -> None:
