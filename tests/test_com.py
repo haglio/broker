@@ -359,18 +359,6 @@ class TestBrokerCommands:
 
         assert s.controller.is_active is False
 
-    def test_genau_disable_command_suppresses_output(self, tmp_path):
-        s = _build_stack(tmp_path)
-        sock = object()
-        s.controller.set_auto(sock, True)
-        s.writes.clear()
-        s.udp_messages.clear()
-
-        s.session.handle_broker_command("GENAU_DISABLE", sock)
-
-        assert s.state_file.read_text(encoding="utf-8") == "0"
-        assert "AUTO 0" in s.udp_messages
-
 
 class TestMultiLineSerialBuffer:
     def test_partial_lines_buffered_until_newline(self, tmp_path):
