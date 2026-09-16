@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "osr2-broker"
 version = "0.1.0"
-# 3.12, not 3.10: every gate in the family runs 3.12 and nothing has ever
-# collected a suite on anything older, so >=3.10 was a promise no run backed.
-requires-python = ">=3.12"
+# The version every gate runs, and the one the family's machine runs: a floor
+# lower than what a run proves is a promise nothing backs.
+requires-python = ">=3.14"
 # The shared siblings are in [tool.haglio] below, not here: neither is published,
 # so pip would go looking for them on PyPI.
 #
