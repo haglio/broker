@@ -15,6 +15,7 @@ from app_support.dependencies import (
     assert_every_dependency_is_bounded,
     assert_every_import_is_declared,
     assert_every_sibling_is_declared,
+    assert_every_sibling_is_pinned,
     assert_the_declared_floor_is_the_one_the_gate_runs,
 )
 
@@ -34,6 +35,10 @@ def test_every_requirement_has_an_upper_bound():
 
 def test_every_sibling_this_repo_needs_is_declared():
     assert_every_sibling_is_declared(ROOT, TREES, ROOT / "pyproject.toml")
+
+
+def test_every_sibling_is_named_at_a_tag():
+    assert_every_sibling_is_pinned(ROOT / "pyproject.toml")
 
 
 def test_the_declared_floor_is_the_one_the_gate_runs():
