@@ -1,0 +1,16 @@
+[run]
+source =
+    .
+omit =
+    # the repo's own tests
+    tests/*
+    # names that quiet the dead-code scan, not code that runs
+    vulture_whitelist.py
+relative_files = true
+
+[report]
+precision = 2
+fail_under = 92.4
+exclude_also =
+    if TYPE_CHECKING:
+    if __name__ == "__main__":
