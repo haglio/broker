@@ -208,10 +208,10 @@ class TestIdleStatePersistence:
         save_idle_state(p, idle_since=None, alerted=False)
         assert load_idle_state(p) == (None, False)
 
-    def test_load_missing_returns_defaults(self, tmp_path):
+    def test_a_first_run_with_nothing_saved_starts_the_countdown_fresh(self, tmp_path):
         assert load_idle_state(tmp_path / "nonexistent.txt") == (None, False)
 
-    def test_load_garbage_returns_defaults(self, tmp_path):
+    def test_an_unreadable_saved_countdown_starts_fresh_rather_than_failing(self, tmp_path):
         p = tmp_path / "idle_state.txt"
         p.write_text("not json at all")
         assert load_idle_state(p) == (None, False)
