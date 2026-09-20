@@ -40,7 +40,9 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
     when a window of this process first appears, and without one the dialog's
     taskbar button wears the python host's icon rather than the broker's.
     """
-    from shared_ui.alert import Level, show_alert
+    # Local: shared_ui.alert is Qt, and the broker process imports this module
+    # without ever wanting a toolkit unless a warning actually has to be shown.
+    from shared_ui.alert import Level, show_alert  # noqa: PLC0415
 
     claim_taskbar_identity()
     show_alert(

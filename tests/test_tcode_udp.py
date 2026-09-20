@@ -11,6 +11,7 @@ import threading
 import time
 from unittest.mock import MagicMock
 
+from osr2_broker.activity import ActivityStamp
 from osr2_broker.session import SessionRetryState
 from osr2_broker.tcode_udp import TCodeWriteWindow, UdpTCodeListener
 
@@ -280,7 +281,6 @@ def test_blank_lines_around_a_command_are_dropped_and_it_is_not():
 
 
 def test_a_forwarded_datagram_stamps_the_tx_activity_file(tmp_path):
-    from osr2_broker.activity import ActivityStamp
 
     port = _free_port()
     tx_file = tmp_path / "osr2_serial_tx.txt"

@@ -11,14 +11,18 @@ from app_support.cli import preparse_config_path
 from app_support.file_channel import consume_command_file
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
+from app_support.win32 import mutex_name, try_acquire_mutex
 
 from .activity import ActivityStamp
 from .config import load_config
+from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
 from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
 from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
+from .single_instance import MUTEX_BROKER
 from .state_files import heartbeat_loop, rename_last_sessions_mode_file, write_mode
+from .win32 import ShutdownGuard, show_warning
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
 # How often the retry loop asks whether an absent OSR2 port has come back.  Short
@@ -46,9 +50,6 @@ def main(argv: list[str] | None = None) -> int:
     logger = configure_logging("osr2_broker", config.log_file("broker"))
     install_exception_logging(logger)
 
-    from app_support.win32 import mutex_name, try_acquire_mutex
-
-    from .single_instance import MUTEX_BROKER
     _mutex_handle = try_acquire_mutex(mutex_name(MUTEX_BROKER, config.config_path))
     if _mutex_handle is None:
         logger.warning("Another broker instance is already running; exiting")
@@ -195,8 +196,6 @@ MONITOR_POLL_INTERVAL_MS = 10_000
 
 
 def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
-    from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
-    from .win32 import ShutdownGuard, show_warning
 
     idle_threshold = config.idle_minutes * 60.0
     rx_file = config.osr2_serial_rx_file

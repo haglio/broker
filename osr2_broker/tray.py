@@ -6,15 +6,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app_support.cli import preparse_config_path
+from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
-from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
+from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from shared_ui.chrome import menu_rules
 
 from . import peer_watch
+from .config import load_config
+from .process_names import BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 from .state_files import BrokerMode
+from .win32 import ICON_PATH, claim_taskbar_identity
 
 # How often the watchdog checks the broker is still there.
 WATCHDOG_INTERVAL_MS = 5_000
@@ -69,7 +75,6 @@ class BrokerSupervisor:
         # Named outright rather than one launch late: the broker is a child,
         # so the tray is holding the interpreter that writes the copy and is not
         # the process being named.  See osr2_broker.process_names.
-        from .process_names import BROKER_ROLE, NAMER
         return [
             NAMER.named_exe(sys.executable, BROKER_ROLE), "-m", "osr2_broker.app",
             "--config", str(self._config.config_path),
@@ -225,7 +230,6 @@ def terminate_broker(logger) -> None:
     launched under, because the two cannot be allowed to drift: a broker running
     under a name this sweep does not know is a broker nothing here can stop.
     """
-    from .process_names import NAMER
     subprocess.run(
         [
             "powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
@@ -253,20 +257,12 @@ def _name_this_process() -> None:
     """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker – Tray"
     next time.  Why it is one launch late, and why it can never cost the
     launch: :meth:`ProcessNamer.name_this_process`."""
-    from .process_names import NAMER, TRAY_ROLE
     NAMER.name_this_process(TRAY_ROLE)
 
 
 def main(argv: list[str] | None = None) -> int:
     _name_this_process()
-    from app_support.cli import preparse_config_path
-    from app_support.logging_utils import configure_logging, install_exception_logging
-    from PyQt6.QtCore import QTimer
-    from PyQt6.QtGui import QIcon
-    from PyQt6.QtWidgets import QApplication
 
-    from .config import load_config
-    from .win32 import ICON_PATH, claim_taskbar_identity
 
     config = load_config(preparse_config_path(argv))
     logger = configure_logging("osr2_broker.tray", config.log_file("broker_tray"))

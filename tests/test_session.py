@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from osr2_broker import session as session_module
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.hold import HoldScheduler
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
@@ -846,7 +847,6 @@ def test_the_listener_asks_the_session_s_own_auto_mode(monkeypatch):
     """What drops every sender's datagrams while the OSR2 runs itself is the
     listener's question, and the answer has to be this session's own device --
     asked afresh each time, since auto comes and goes under a running listener."""
-    from osr2_broker import session as session_module
 
     handed = {}
     monkeypatch.setattr(session_module, "UdpTCodeListener",

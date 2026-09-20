@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 from app_support.file_channel import consume_command_file
 
 from osr2_broker.activity import ActivityStamp
+from osr2_broker.session import BrokerSerialSession
 from tests.conftest import FakePowerOn
 
 
@@ -39,7 +40,6 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
     consumed on the next tick and scheduled once — the claim takes the queue
     away, so the ticks after it see nothing, and the hold's clock is never
     pushed back."""
-    from osr2_broker.session import BrokerSerialSession
 
     clock = [10.0]
     cmd = tmp_path / "broker_cmd.txt"
@@ -91,7 +91,6 @@ def test_two_verbs_queued_between_ticks_are_both_acted_on_in_order(tmp_path: Pat
     """The defect the broker's own consumer had: two verbs read together came
     back as one word matching neither, and a verb written into the truncate
     was erased unread.  A park then a resume now parks and then resumes."""
-    from osr2_broker.session import BrokerSerialSession
 
     cmd = tmp_path / "broker_cmd.txt"
     cmd.write_text("park\nresume\n", encoding="utf-8")

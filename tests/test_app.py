@@ -2,13 +2,20 @@
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 import sys
+import threading
+import time as _time
+import time as real_time
 import types
 from contextlib import ExitStack, contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+import osr2_broker.monitor as monitor_mod
+from osr2_broker.config import load_config
 
 
 class FakeSocket:
@@ -114,7 +121,7 @@ def _start_monitor_with_fake_guard(broker_app_module, config, *, auto_active=Fal
         def run(self):
             return None
 
-    with patch("osr2_broker.win32.ShutdownGuard", FakeShutdownGuard), \
+    with patch.object(broker_app_module, "ShutdownGuard", FakeShutdownGuard), \
          patch.object(broker_app_module, "start_daemon_thread"):
         broker_app_module._start_monitor(
             config, types.SimpleNamespace(is_active=auto_active),
@@ -125,9 +132,7 @@ def _start_monitor_with_fake_guard(broker_app_module, config, *, auto_active=Fal
 
 def test_shutdown_is_blocked_while_the_device_is_on(broker_app_module, cfg_path):
     """A fresh rx stamp means the OSR2 is still powered — Windows must wait."""
-    import time as _time
 
-    from osr2_broker.config import load_config
 
     config = load_config(str(cfg_path))
     config.osr2_serial_rx_file.write_text(str(_time.time()), encoding="utf-8")
@@ -141,9 +146,7 @@ def test_shutdown_is_allowed_once_the_rx_stamp_goes_stale(broker_app_module, cfg
     """Past RX_STALE_THRESHOLD the device counts as off — shutdown proceeds.
     With the fresh case above, this pins the comparison from both sides, so
     its sign cannot flip unseen (audit finding broker/all/tests/005)."""
-    import time as _time
 
-    from osr2_broker.config import load_config
 
     config = load_config(str(cfg_path))
     stale = _time.time() - (broker_app_module.RX_STALE_THRESHOLD + 10.0)
@@ -155,7 +158,6 @@ def test_shutdown_is_allowed_once_the_rx_stamp_goes_stale(broker_app_module, cfg
 
 
 def test_shutdown_is_allowed_when_the_device_has_never_reported(broker_app_module, cfg_path):
-    from osr2_broker.config import load_config
 
     config = load_config(str(cfg_path))
 
@@ -168,12 +170,7 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
     """The idle state seeded from osr2_idle_state.txt must feed the poll: a
     countdown that had already elapsed before the restart alerts on the first
     beat instead of starting the 15 minutes over."""
-    import json
-    import threading
-    import time as _time
 
-    import osr2_broker.monitor as monitor_mod
-    from osr2_broker.config import load_config
 
     config = load_config(str(cfg_path))
     now = _time.time()
@@ -184,7 +181,8 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
     config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # device on
 
     warned = threading.Event()
-    with patch("osr2_broker.win32.show_warning", side_effect=lambda *a, **kw: warned.set()):
+    with patch.object(broker_app_module, "show_warning",
+               side_effect=lambda *a, **kw: warned.set()):
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
         captured["poll_fn"]()
 
@@ -194,12 +192,6 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
 
 
 def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_path):
-    import json
-    import time as _time
-
-    import osr2_broker.monitor as monitor_mod
-    from osr2_broker.config import load_config
-
     config = load_config(str(cfg_path))
     now = _time.time()
     monitor_mod.save_idle_state(
@@ -208,7 +200,8 @@ def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_p
     config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")
 
     warned = []
-    with patch("osr2_broker.win32.show_warning", side_effect=lambda *a, **kw: warned.append(True)):
+    with patch.object(broker_app_module, "show_warning",
+               side_effect=lambda *a, **kw: warned.append(True)):
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
         captured["poll_fn"]()
 
@@ -239,7 +232,7 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
         patch.object(broker_app_module, "configure_logging",
                      return_value=logging.getLogger("test.broker")),
         patch.object(broker_app_module, "install_exception_logging"),
-        patch("app_support.win32.try_acquire_mutex", return_value=42),
+        patch.object(broker_app_module, "try_acquire_mutex", return_value=42),
         patch.object(broker_app_module, "resolve_virtual_port",
                      side_effect=lambda _config, port, _logger: port),
         patch.object(broker_app_module, "ensure_mfp_serial_port",
@@ -328,7 +321,7 @@ class TestBrokerSingleInstance:
         mock_socket_mod = MagicMock()
         with patch.object(broker_app_module, "configure_logging", return_value=logger), \
              patch.object(broker_app_module, "install_exception_logging"), \
-             patch("app_support.win32.try_acquire_mutex", return_value=None), \
+             patch.object(broker_app_module, "try_acquire_mutex", return_value=None), \
              patch.object(broker_app_module, "socket", mock_socket_mod):
             result = broker_app_module.main(["--config", str(cfg_path)])
 
@@ -347,7 +340,6 @@ class TestMainPublishesItsStateFiles:
         are all substituted in the tests below this one. So the wiring -- which
         config property feeds that name -- could shift without a red anywhere.
         """
-        from osr2_broker.config import load_config
 
         config = load_config(str(cfg_path))
         FakeSerial = make_fake_serial([])
@@ -364,7 +356,6 @@ class TestMainPublishesItsStateFiles:
     def test_a_started_broker_takes_the_mode_file_out_from_under_its_old_name(
         self, broker_app_module, cfg_path,
     ):
-        from osr2_broker.config import load_config
 
         config = load_config(str(cfg_path))
         config.state_dir.mkdir(parents=True, exist_ok=True)
@@ -415,7 +406,6 @@ class TestMainWatchesForThePowerOn:
     def test_a_broker_starting_after_a_silence_treats_the_next_line_as_a_power_on(
         self, broker_app_module, cfg_path,
     ):
-        from osr2_broker.config import load_config
 
         config = load_config(str(cfg_path))
         config.osr2_serial_rx_file.write_text("1.0", encoding="utf-8")
@@ -425,10 +415,6 @@ class TestMainWatchesForThePowerOn:
     def test_a_broker_starting_while_the_device_talks_does_not(
         self, broker_app_module, cfg_path,
     ):
-        import time as real_time
-
-        from osr2_broker.config import load_config
-
         config = load_config(str(cfg_path))
         config.osr2_serial_rx_file.write_text(str(real_time.time()), encoding="utf-8")
 
