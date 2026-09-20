@@ -15,7 +15,7 @@ from osr2_broker.ports import (
 
 
 class TestResolveVirtualPort:
-    def test_returns_configured_port_when_present(self, tmp_path):
+    def test_the_configured_port_is_kept_when_its_partner_is_plugged_in(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
 
@@ -217,7 +217,7 @@ class TestResolveMfpSerialPort:
 
 
 class TestResolveVirtualPortFallbacks:
-    def test_returns_configured_port_when_multiple_cncb_and_no_match(self, tmp_path):
+    def test_several_candidate_pairs_and_no_match_leaves_the_configured_port_alone(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         with patch(
@@ -247,7 +247,7 @@ class TestResolveMfpSerialPortFallbacks:
             result = resolve_mfp_serial_port(mfp_config, "COM15", logger)
         assert result == "COM0COM\\PORT\\CNCA1"
 
-    def test_returns_selected_port_when_no_com0com_ports(self, tmp_path):
+    def test_with_no_virtual_pair_present_the_port_the_player_already_chose_stands(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         with patch("osr2_broker.ports.collect_com0com_ports", return_value={}), \
@@ -258,13 +258,13 @@ class TestResolveMfpSerialPortFallbacks:
 
 
 class TestEnsureMfpSerialPortEdgeCases:
-    def test_returns_none_when_resolved_is_none(self, tmp_path):
+    def test_a_port_that_cannot_be_worked_out_is_not_written_to_the_players_config(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         with patch("osr2_broker.ports.resolve_mfp_serial_port", return_value=None):
             assert ensure_mfp_serial_port(mfp_config, "COM15", logger) is None
 
-    def test_returns_current_when_already_matches(self, tmp_path):
+    def test_a_player_already_pointed_at_the_right_port_is_left_untouched(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         with patch("osr2_broker.ports.resolve_mfp_serial_port", return_value="COM7"), \
@@ -274,17 +274,17 @@ class TestEnsureMfpSerialPortEdgeCases:
 
 
 class TestMfpConfigEdgeCases:
-    def test_read_mfp_config_returns_empty_when_file_missing(self, tmp_path):
+    def test_a_player_config_that_is_not_there_reads_as_holding_no_settings(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         assert _read_mfp_config_payload(mfp_config) == {}
 
-    def test_read_mfp_config_returns_none_for_invalid_json(self, tmp_path):
+    def test_a_player_config_that_will_not_parse_is_left_alone_rather_than_rewritten(self, tmp_path):
         # None, not {} -- {} reads as "no settings" and invites a clobbering rewrite.
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         mfp_config.write_text("NOT JSON", encoding="utf-8")
         assert _read_mfp_config_payload(mfp_config) is None
 
-    def test_read_mfp_selected_serial_port_returns_none_when_missing(self, tmp_path):
+    def test_a_player_config_that_is_not_there_names_no_chosen_port(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         assert read_mfp_selected_serial_port(mfp_config) is None
 
