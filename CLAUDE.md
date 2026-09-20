@@ -36,6 +36,8 @@ The monitor runs on a dedicated daemon thread with its own Win32 message pump (S
 
 No Python import dependency. Communication is file-based IPC (heartbeat, activity timestamps, command files) + process management via PowerShell. The fun_time orchestrator detects and starts the broker as a sibling project.
 
+Because it cannot import this package, it reads `broker_contract.json` beside the launcher for the names its process management needs: the label the processes wear, this package's directory, the two module paths, the tray launcher. `osr2_broker/contract.py` derives them from the package and writes that file (`python -m osr2_broker.contract`); `tests/test_contract.py` fails on a copy that no longer matches, which is what a rename here used to break silently over there.
+
 ## Test fixtures must be fabricated, never copied from the real library
 
 Every fixture value that stands in for library data — a video title, a filename,
