@@ -1,9 +1,20 @@
 """Tests for the broker's system tray icon and its watchdog."""
 from __future__ import annotations
 
+import logging
+import sys
+from unittest.mock import patch
+
 import pytest
+from app_support.win32 import mutex_name
 from PyQt6.QtWidgets import QApplication
-from shared_ui.colors import BG_TERTIARY
+from shared_ui.colors import BG_TERTIARY, BLUE
+
+from osr2_broker import tray as tray_module
+from osr2_broker.config import load_config
+from osr2_broker.process_names import BROKER_ROLE, NAMER
+from osr2_broker.single_instance import MUTEX_BROKER
+from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, _guarded_tick, mode_text
 
 
 @pytest.fixture(scope="module")
@@ -18,7 +29,6 @@ def test_menu_is_painted_in_the_shared_dark_palette(qapp):
     The tray's own menu, with its rows: under the family's rules an empty menu
     has no width to sample.
     """
-    from osr2_broker.tray import BrokerTray
 
     tray = BrokerTray()
     menu = tray.contextMenu()
@@ -44,7 +54,6 @@ def _brightest_text_pixel(image, rect):
 
 def test_the_status_line_reads_as_a_label_not_a_command(qapp):
     """It is disabled, so it must look dimmer than the items you can click."""
-    from osr2_broker.tray import BrokerTray
 
     tray = BrokerTray()
     menu = tray.contextMenu()
@@ -59,9 +68,7 @@ def test_the_status_line_reads_as_a_label_not_a_command(qapp):
 def test_the_item_under_the_cursor_lights_up(qapp):
     """Without an explicit rule the stylesheet flattens Qt's own highlight; the
     family's rule lights the row in the blue every menu in the family uses."""
-    from shared_ui.colors import BLUE
 
-    from osr2_broker.tray import BrokerTray
 
     tray = BrokerTray()
     menu = tray.contextMenu()
@@ -75,7 +82,6 @@ def test_the_item_under_the_cursor_lights_up(qapp):
 
 
 def test_tray_menu_offers_the_broker_controls(qapp):
-    from osr2_broker.tray import BrokerTray
 
     tray = BrokerTray()
 
@@ -99,7 +105,6 @@ def test_tray_menu_offers_the_broker_controls(qapp):
     ],
 )
 def test_mode_text_names_the_mode_the_broker_wrote(tmp_path, written, expected):
-    from osr2_broker.tray import mode_text
 
     mode_file = tmp_path / "broker_mode.txt"
     mode_file.write_text(written, encoding="utf-8")
@@ -108,18 +113,11 @@ def test_mode_text_names_the_mode_the_broker_wrote(tmp_path, written, expected):
 
 
 def test_mode_text_is_unknown_when_the_broker_has_written_nothing(tmp_path):
-    from osr2_broker.tray import mode_text
 
     assert mode_text(tmp_path / "broker_mode.txt") == "unknown"
 
 
 def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
-    from app_support.win32 import mutex_name
-
-    from osr2_broker.config import load_config
-    from osr2_broker.single_instance import MUTEX_BROKER
-    from osr2_broker.tray import BrokerSupervisor
-
     config = load_config(cfg_path)
     probed = []
     supervisor = BrokerSupervisor(
@@ -135,8 +133,6 @@ def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
 
 def _supervisor(cfg_path, *, running=False):
     """A supervisor over a real config, with its launch/kill seams recorded."""
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerSupervisor
 
     calls = {"launched": [], "terminated": 0}
 
@@ -153,10 +149,6 @@ def _supervisor(cfg_path, *, running=False):
 
 
 def test_start_runs_the_broker_module_against_our_config(cfg_path):
-    import sys
-
-    from osr2_broker.process_names import BROKER_ROLE, NAMER
-
     supervisor, calls = _supervisor(cfg_path, running=False)
 
     supervisor.start()
@@ -227,14 +219,11 @@ class FakeSupervisor:
 
 @pytest.fixture
 def tray(qapp):
-    from osr2_broker.tray import BrokerTray
 
     return BrokerTray()
 
 
 def test_watchdog_revives_a_dead_broker(tray, cfg_path):
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp
 
     supervisor = FakeSupervisor(running=False)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
@@ -246,8 +235,6 @@ def test_watchdog_revives_a_dead_broker(tray, cfg_path):
 
 def test_watchdog_leaves_a_paused_broker_dead(tray, cfg_path):
     """Pause must survive the next tick, or the tray fights the user."""
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp
 
     supervisor = FakeSupervisor(running=True)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
@@ -260,8 +247,6 @@ def test_watchdog_leaves_a_paused_broker_dead(tray, cfg_path):
 
 
 def test_starting_by_hand_clears_the_pause(tray, cfg_path):
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp
 
     supervisor = FakeSupervisor(running=False)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
@@ -278,8 +263,6 @@ def test_restart_from_the_menu_replaces_a_live_broker(tray, cfg_path):
     because start() is idempotent, collapsing the restart branch into start()
     turns the menu item into a silent no-op — and until this test, nothing
     noticed (audit finding broker/all/tests/013)."""
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp
 
     supervisor = FakeSupervisor(running=True)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
@@ -292,10 +275,7 @@ def test_restart_from_the_menu_replaces_a_live_broker(tray, cfg_path):
 
 def test_a_failed_beat_does_not_stop_the_watchdog(tray, cfg_path):
     """The tray is the broker's only supervisor; one bad tick must not end it."""
-    import logging
 
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp, _guarded_tick
 
     class ExplodingSupervisor(FakeSupervisor):
         def is_running(self):
@@ -310,8 +290,6 @@ def test_a_failed_beat_does_not_stop_the_watchdog(tray, cfg_path):
 
 
 def test_opening_the_log_creates_it_first_so_the_editor_has_something(tray, cfg_path):
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp
 
     config = load_config(cfg_path)
     opened = []
@@ -328,8 +306,6 @@ def test_opening_the_log_creates_it_first_so_the_editor_has_something(tray, cfg_
 
 def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
     """A surviving broker would be unsupervised — nothing left to restart it."""
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp
 
     supervisor = FakeSupervisor(running=True)
     quit_calls = []
@@ -344,12 +320,8 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
 
 def test_a_second_tray_stands_down(cfg_path):
     """The scheduled task relaunches the tray every couple of minutes."""
-    import logging
-    from unittest.mock import patch
 
-    from app_support import logging_utils
 
-    from osr2_broker import tray as tray_module
 
     # main() installs its process-wide scaffolding before it reaches the mutex
     # check, and none of it belongs to the rest of the session: both excepthooks
@@ -357,11 +329,10 @@ def test_a_second_tray_stands_down(cfg_path):
     # handler on that logger pointed inside a state directory this test is about
     # to delete, and -- on Windows -- pythonw.exe copied into the live .venv and
     # stamped. tests/test_app.py patches the same three for the broker's own
-    # main(); main() imports these two inside the function, so they are patched
-    # where they are defined.
-    with patch.object(logging_utils, "configure_logging",
+    # main().
+    with patch.object(tray_module, "configure_logging",
                       return_value=logging.getLogger("test.tray")), \
-         patch.object(logging_utils, "install_exception_logging"), \
+         patch.object(tray_module, "install_exception_logging"), \
          patch.object(tray_module, "_name_this_process"), \
          patch.object(tray_module, "try_acquire_mutex", return_value=None) as acquire:
         assert tray_module.main(["--config", str(cfg_path)]) == 0
@@ -370,8 +341,6 @@ def test_a_second_tray_stands_down(cfg_path):
 
 
 def test_tick_shows_the_broker_s_state_in_the_menu(tray, cfg_path):
-    from osr2_broker.config import load_config
-    from osr2_broker.tray import BrokerTrayApp
 
     config = load_config(cfg_path)
     config.broker_mode_file.write_text("1", encoding="utf-8")
@@ -383,7 +352,6 @@ def test_tick_shows_the_broker_s_state_in_the_menu(tray, cfg_path):
 
 
 def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
-    from osr2_broker.tray import BrokerTray
 
     tray = BrokerTray()
     tray.set_status(running=True, mode="auto")
@@ -395,7 +363,6 @@ def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
 
 
 def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
-    from osr2_broker.tray import BrokerTray
 
     tray = BrokerTray()
     tray.set_status(running=False, mode="unknown")

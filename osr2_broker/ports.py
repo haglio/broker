@@ -9,7 +9,9 @@ RE_COM0COM_PORT = re.compile(r"COM0COM\\PORT\\(CNC[AB])(\d+)", re.IGNORECASE)
 
 def iter_serial_ports():
     try:
-        from serial.tools import list_ports
+        # Local, and guarded: pyserial's port scanner is optional, and a
+        # machine without it lists no ports rather than failing to import.
+        from serial.tools import list_ports  # noqa: PLC0415
     except Exception:
         return []
     return list(list_ports.comports())

@@ -13,8 +13,13 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt6.QtWidgets import QApplication
 
 from osr2_broker import peer_watch
+from osr2_broker import tray as tray_module
+from osr2_broker.config import load_config
+from osr2_broker.tray import BrokerTray, BrokerTrayApp
+from tests.conftest import _write_config
 
 from .test_tray import FakeSupervisor
 
@@ -28,7 +33,6 @@ def qapp():
     A QApplication nothing refers to is collected the moment it is built, and the
     next QSystemTrayIcon then faults the interpreter rather than raising.
     """
-    from PyQt6.QtWidgets import QApplication
 
     app = QApplication.instance() or QApplication([])
     yield app
@@ -36,7 +40,6 @@ def qapp():
 
 @pytest.fixture
 def tray(qapp):
-    from osr2_broker.tray import BrokerTray
 
     return BrokerTray()
 
@@ -102,7 +105,6 @@ class TestStartingEvolver:
 
 class TestTheWatch:
     def _watch(self, cfg_path):
-        from osr2_broker.config import load_config
 
         return peer_watch.watch_evolver(load_config(cfg_path), LOG)
 
@@ -122,7 +124,6 @@ class TestTheWatch:
         launch.assert_called_once()
 
     def test_it_starts_the_launcher_the_config_names(self, cfg_path):
-        from osr2_broker.config import load_config
 
         with patch.object(peer_watch, "evolver_is_up", return_value=False), \
              patch("app_support.peer_watch.is_stood_down", return_value=False), \
@@ -153,7 +154,6 @@ class TestTheWatch:
 
 class TestWhereTheLauncherComesFrom:
     def test_it_defaults_to_the_sibling_checkout(self, cfg_path):
-        from osr2_broker.config import load_config
 
         launcher = load_config(cfg_path).evolver_launcher
 
@@ -161,8 +161,6 @@ class TestWhereTheLauncherComesFrom:
         assert launcher.parent.name == "evolver"
 
     def test_a_config_may_name_another(self, tmp_path):
-        from osr2_broker.config import load_config
-        from tests.conftest import _write_config
 
         elsewhere = tmp_path / "somewhere" / "launch_evolver.vbs"
         config_path = _write_config(tmp_path, {"evolver_launcher": str(elsewhere)})
@@ -172,8 +170,6 @@ class TestWhereTheLauncherComesFrom:
 
 class TestTheTrayKeepsTheWatch:
     def _app(self, cfg_path, tray, *, peer=None, stand_down=None, running=True):
-        from osr2_broker.config import load_config
-        from osr2_broker.tray import BrokerTrayApp
 
         kwargs = {"peer": peer}
         if stand_down is not None:
@@ -218,8 +214,6 @@ class TestTheTrayKeepsTheWatch:
         supervisor = FakeSupervisor(running=True)
         supervisor.stop = lambda: order.append("stopped")
 
-        from osr2_broker.config import load_config
-        from osr2_broker.tray import BrokerTrayApp
 
         app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
                             stand_down=lambda: order.append("marked"))
@@ -242,11 +236,9 @@ class TestStartingTheTray:
         """The scheduled task relaunches this every couple of minutes, and each
         relaunch exits at the mutex. If those cleared the marker, quitting the
         tray would stand the broker down for two minutes and no longer."""
-        from app_support import logging_utils
 
-        from osr2_broker import tray as tray_module
 
-        with patch.object(logging_utils, "configure_logging", return_value=LOG),              patch.object(logging_utils, "install_exception_logging"),              patch.object(tray_module, "_name_this_process"),              patch.object(tray_module, "try_acquire_mutex", return_value=None):
+        with patch.object(tray_module, "configure_logging", return_value=LOG),              patch.object(tray_module, "install_exception_logging"),              patch.object(tray_module, "_name_this_process"),              patch.object(tray_module, "try_acquire_mutex", return_value=None):
             assert tray_module.main(["--config", str(cfg_path)]) == 0
 
         _, cleared = stand_down_marker
