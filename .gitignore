@@ -1,19 +1,33 @@
+# The family's baseline block, byte-identical in every checkout that carries it,
+# so what a routine editable install or test run drops is ignored in the repo
+# that drops it. The eleven files were written independently and covered
+# different subsets of the same artifacts, which left several trees dirty after
+# a plain `pip install -e .` -- and a dirty tree here blocks every agent's merge.
+# This repo's own entries go under the marker below, never in here.
 __pycache__/
-*.pyc
-*.egg-info/
+*.py[cod]
 .venv/
-# Caches pytest drops in whatever directory it runs from.
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
 .hypothesis/
-.tmp-pytest-local/
-
-# Private overlays — real values live here and never get published; each has a
-# committed *.example.* template documenting its shape.
-/osr2_broker_config.json
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tmp-pytest-*/
 
 # Windows shortcuts are machine-specific and embed the real install path.
 *.lnk
 
-# pCloud conflict copies (this dir syncs via pCloud). Never our files;
-# an untracked one dirties main and blocks every agent's merge.
+# pCloud conflict copies (this dir syncs via pCloud). Never our files; an
+# untracked one dirties main and blocks merges. '[' escaped to match literally.
 *\[conflicted*
-.coverage
+
+# --- broker's own ---
+
+# Private overlays — real values live here and never get published; each has a
+# committed *.example.* template documenting its shape.
+/osr2_broker_config.json
