@@ -33,6 +33,18 @@ TRAY_MODULE = f"{__package__}.tray"
 #: The file that starts the tray, which starts the broker.
 TRAY_LAUNCHER = "launch_broker_tray.vbs"
 
+#: Where this app's six state files sit, as a path under the checkout named
+#: here rather than under this one.  Three apps meet at that directory -- this
+#: one writes the files, a session and Origenerator read them -- and only one of
+#: the three is always running, which is why they live in the orchestrator's
+#: state directory and this app is configured to write there.  A session and
+#: this app are each told the path outright; Origenerator has no such key and
+#: walked to that checkout in its own source, so one app's directory layout was
+#: a fact written down inside another, where a change to it would be found by
+#: nobody and the only symptom is a device reading as switched off.
+STATE_DIR_CHECKOUT = "fun_time"
+STATE_DIR_NAME = "state"
+
 
 def declaration() -> dict[str, str]:
     """The published document, as a supervisor reads it."""
@@ -42,6 +54,7 @@ def declaration() -> dict[str, str]:
         "broker_module": BROKER_MODULE,
         "tray_module": TRAY_MODULE,
         "tray_launcher": TRAY_LAUNCHER,
+        "state_dir": {"checkout": STATE_DIR_CHECKOUT, "name": STATE_DIR_NAME},
     }
 
 

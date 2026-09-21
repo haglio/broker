@@ -3,5 +3,9 @@
   "package_dir": "osr2_broker",
   "broker_module": "osr2_broker.app",
   "tray_module": "osr2_broker.tray",
-  "tray_launcher": "launch_broker_tray.vbs"
+  "tray_launcher": "launch_broker_tray.vbs",
+  "state_dir": {
+    "checkout": "fun_time",
+    "name": "state"
+  }
 }
