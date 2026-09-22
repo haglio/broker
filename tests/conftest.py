@@ -4,14 +4,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-import shutil
 import sys
 import threading
-import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+from tests.scratch import scratch_dir
 
 
 class FakePowerOn:
@@ -100,13 +100,8 @@ TMP_ROOT = Path(
 
 @pytest.fixture
 def tmp_path() -> Path:
-    TMP_ROOT.mkdir(parents=True, exist_ok=True)
-    path = (TMP_ROOT / f"case_{uuid.uuid4().hex}").resolve()
-    path.mkdir()
-    try:
+    with scratch_dir(TMP_ROOT) as path:
         yield path
-    finally:
-        shutil.rmtree(path, ignore_errors=True)
 
 
 @pytest.fixture(autouse=True, scope="session")
