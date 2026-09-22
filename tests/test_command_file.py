@@ -29,9 +29,12 @@ def test_an_undecodable_file_reads_as_no_command(tmp_path: Path):
 
 def test_an_unreadable_path_logs_and_reads_as_no_command(tmp_path: Path):
     logger = MagicMock()
+    # A directory at the queue's path cannot be read as text, on any platform.
+    # Never tmp_path itself: the claim renames it, out from under its teardown.
+    cmd = tmp_path / "broker_cmd.txt"
+    cmd.mkdir()
 
-    # A directory exists but cannot be claimed and read as text, on any platform.
-    assert consume_command_file(tmp_path, logger=logger) == []
+    assert consume_command_file(cmd, logger=logger) == []
     logger.exception.assert_called_once()
 
 
