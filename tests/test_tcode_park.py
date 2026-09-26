@@ -18,22 +18,26 @@ from pathlib import Path
 import pytest
 from app_support.siblings import sibling_checkout
 
-from osr2_broker.hold import PARK
+from osr2_broker.hold import PARK, HoldScheduler
 
 
-def _published_park_command() -> str:
+def _published(module: str, name: str):
     try:
         checkout = sibling_checkout("player_core", near=Path(__file__))
     except RuntimeError:
-        pytest.skip("no player_core checkout beside this one to read the format from")
-    tree = ast.parse((checkout / "player_core" / "tcode.py").read_text(encoding="utf-8"))
+        pytest.skip("no player_core checkout beside this one to read the family's numbers from")
+    tree = ast.parse((checkout / "player_core" / module).read_text(encoding="utf-8"))
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "PARK_COMMAND" for target in node.targets
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
         ):
             return node.value.value
-    raise AssertionError("player_core.tcode publishes no PARK_COMMAND")
+    raise AssertionError(f"player_core/{module} publishes no {name}")
 
 
 def test_the_broker_parks_with_the_familys_park_command():
-    assert PARK.tcode == (_published_park_command() + "\n").encode("ascii")
+    assert PARK.tcode == (_published("tcode.py", "PARK_COMMAND") + "\n").encode("ascii")
+
+
+def test_the_broker_holds_the_device_as_late_as_genau_pictures_it_held():
+    assert _published("device_walk.py", "BROKER_HOLD_DELAY_MS") == HoldScheduler.DELAY_SECONDS * 1000
