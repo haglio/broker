@@ -279,8 +279,8 @@ def _name_this_process() -> None:
     NAMER.name_this_process(TRAY_ROLE)
 
 
-def start_the_tray(config, logger, claim: int, *, quit_app):
-    tray = BrokerTray(branch_session.app_name())
+def start_the_tray(config, logger, claim: int, *, preview: bool, quit_app):
+    tray = BrokerTray(branch_session.app_name(preview))
     tray.setIcon(QIcon(str(ICON_PATH)))
 
     supervisor = BrokerSupervisor(
@@ -288,7 +288,6 @@ def start_the_tray(config, logger, claim: int, *, quit_app):
         launch=lambda argv_: launch_broker(argv_, config, logger),
         terminate=lambda: terminate_broker(logger),
     )
-    preview = branch_session.is_one()
     tray_app = BrokerTrayApp(
         config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger),
         hand_back=(lambda: branch_session.hand_back(config, claim)) if preview else None)
@@ -299,7 +298,7 @@ def start_the_tray(config, logger, claim: int, *, quit_app):
 
 
 def main(argv: list[str] | None = None) -> int:
-    preview = branch_session.is_one()
+    preview = branch_session.take_the_flag()
     if not preview:
         _name_this_process()
 
@@ -329,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setQuitOnLastWindowClosed(False)
 
     tray, tray_app, _hand_back_timer = start_the_tray(
-        config, logger, _mutex_handle, quit_app=app.quit)
+        config, logger, _mutex_handle, preview=preview, quit_app=app.quit)
 
     timer = QTimer()
     timer.setInterval(WATCHDOG_INTERVAL_MS)

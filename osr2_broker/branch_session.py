@@ -24,8 +24,8 @@ _close_handle.argtypes = [ctypes.c_void_p]
 _close_handle.restype = wintypes.BOOL
 
 
-def is_one() -> bool:
-    return os.environ.get(FLAG) == "1"
+def take_the_flag() -> bool:
+    return os.environ.pop(FLAG, None) == "1"
 
 
 def branch() -> str:
@@ -35,8 +35,8 @@ def branch() -> str:
     return done.stdout.strip() or PROJECT_DIR.name
 
 
-def app_name() -> str:
-    return f"OSR2 Broker — preview of {branch()}" if is_one() else "OSR2 Broker"
+def app_name(preview: bool) -> str:
+    return f"OSR2 Broker — preview of {branch()}" if preview else "OSR2 Broker"
 
 
 def take_the_tray_over(*, claim=try_acquire_mutex, end_the_other_trays,

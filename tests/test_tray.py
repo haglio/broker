@@ -407,7 +407,6 @@ def test_a_preview_takes_the_tray_over_and_leaves_the_everyday_interpreter_unnam
 
 
 def test_a_preview_s_tray_names_its_branch_and_hands_the_tray_back(qapp, cfg_path, monkeypatch):
-    monkeypatch.setenv(branch_session.FLAG, "1")
     monkeypatch.setattr(branch_session, "branch", lambda: "claude/example")
     handed_back, quits = [], []
     monkeypatch.setattr(branch_session, "hand_back",
@@ -415,7 +414,7 @@ def test_a_preview_s_tray_names_its_branch_and_hands_the_tray_back(qapp, cfg_pat
 
     tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        quit_app=lambda: quits.append(True))
+        preview=True, quit_app=lambda: quits.append(True))
     tray.set_status(running=False, mode="unknown")
     tray.quit_action.trigger()
 
@@ -425,11 +424,10 @@ def test_a_preview_s_tray_names_its_branch_and_hands_the_tray_back(qapp, cfg_pat
     assert hand_back_timer.interval() == branch_session.HAND_BACK_AFTER_MINUTES * 60_000
 
 
-def test_the_usual_tray_never_hands_itself_back(qapp, cfg_path, monkeypatch):
-    monkeypatch.delenv(branch_session.FLAG, raising=False)
-
-    tray, tray_app, hand_back_timer = tray_module.start_the_tray(
-        load_config(cfg_path), logging.getLogger("test.tray"), 42, quit_app=lambda: None)
+def test_the_usual_tray_never_hands_itself_back(qapp, cfg_path):
+    tray, _, hand_back_timer = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), 42,
+        preview=False, quit_app=lambda: None)
 
     assert hand_back_timer is None
     tray.set_status(running=False, mode="unknown")

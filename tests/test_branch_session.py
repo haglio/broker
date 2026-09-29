@@ -21,17 +21,29 @@ def qapp():
     yield app
 
 
-def test_a_preview_names_the_branch_it_runs(monkeypatch):
+def test_reading_the_flag_keeps_it_from_everything_the_preview_starts(monkeypatch):
+    """The broker it restarts and the Evolver it revives would otherwise carry
+    it, and an Evolver carrying it hands it to the next usual tray it starts."""
     monkeypatch.setenv(branch_session.FLAG, "1")
-    monkeypatch.setattr(branch_session, "branch", lambda: "claude/example")
 
-    assert branch_session.app_name() == "OSR2 Broker — preview of claude/example"
+    assert branch_session.take_the_flag() is True
+    assert branch_session.FLAG not in os.environ
 
 
-def test_the_usual_tray_is_just_the_broker(monkeypatch):
+def test_a_tray_launched_without_the_flag_is_the_usual_one(monkeypatch):
     monkeypatch.delenv(branch_session.FLAG, raising=False)
 
-    assert branch_session.app_name() == "OSR2 Broker"
+    assert branch_session.take_the_flag() is False
+
+
+def test_a_preview_names_the_branch_it_runs(monkeypatch):
+    monkeypatch.setattr(branch_session, "branch", lambda: "claude/example")
+
+    assert branch_session.app_name(preview=True) == "OSR2 Broker — preview of claude/example"
+
+
+def test_the_usual_tray_is_just_the_broker():
+    assert branch_session.app_name(preview=False) == "OSR2 Broker"
 
 
 def test_a_preview_takes_the_tray_over_by_ending_the_one_running():
