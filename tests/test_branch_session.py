@@ -92,7 +92,10 @@ def test_handing_back_lets_go_of_the_tray_before_starting_the_usual_one(cfg_path
     assert happened == [("let go of", 42), ("started", config)]
 
 
-def test_ending_the_other_trays_spares_this_one():
+def test_ending_the_other_trays_spares_this_one_and_its_launcher():
+    """A venv's pythonw starts the real interpreter as its child, with this very
+    command line, and takes it down when it is ended: sparing only this
+    process ended the preview along with the tray it came to replace."""
     with patch.object(branch_session.subprocess, "run") as run:
         branch_session.end_the_other_trays()
 
@@ -100,6 +103,7 @@ def test_ending_the_other_trays_spares_this_one():
     assert NAMER.process_name_pattern in sweep
     assert r"-match 'osr2_broker\.tray'" in sweep
     assert f"$_.ProcessId -ne {os.getpid()}" in sweep
+    assert f"$_.ProcessId -ne {os.getppid()}" in sweep
     assert "Stop-Process" in sweep
 
 
