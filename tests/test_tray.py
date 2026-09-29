@@ -7,8 +7,11 @@ from unittest.mock import patch
 
 import pytest
 from app_support.win32 import mutex_name
+from PyQt6.QtCore import QSize
+from PyQt6.QtGui import QIcon, QImage
 from PyQt6.QtWidgets import QApplication
-from shared_ui.colors import BG_TERTIARY, BLUE
+from shared_ui.colors import BG_TERTIARY, BLUE, TEXT_SECONDARY
+from shared_ui.icons import glyph_pixmap
 
 from osr2_broker import tray as tray_module
 from osr2_broker.config import load_config
@@ -81,18 +84,43 @@ def test_the_item_under_the_cursor_lights_up(qapp):
     assert fill.name() == BLUE.name()
 
 
-def test_tray_menu_offers_the_broker_controls(qapp):
+def test_tray_menu_offers_the_broker_controls_laid_out_as_the_evolver_s_are(qapp):
+    """Its status ruled off above the commands, and the commands in the
+    Evolver's capitals."""
 
     tray = BrokerTray()
 
-    labels = [a.text() for a in tray.contextMenu().actions() if not a.isSeparator()]
-    assert labels == [
+    rows = ["---" if a.isSeparator() else a.text() for a in tray.contextMenu().actions()]
+    assert rows == [
         "Broker status: unknown",
-        "Start broker",
-        "Pause broker",
-        "Open broker log",
+        "---",
+        "Start Broker",
+        "Pause Broker",
+        "Open Broker Log",
+        "---",
         "Quit",
     ]
+
+
+def _drawn(icon: QIcon) -> QImage:
+    return icon.pixmap(QSize(48, 48), QIcon.Mode.Normal).toImage()
+
+
+def _family_mark(name: str) -> QImage:
+    return glyph_pixmap(name, 48, TEXT_SECONDARY).toImage()
+
+
+def test_each_command_wears_the_family_s_mark_as_the_evolver_s_menu_does(qapp):
+    """The two menus sit side by side in the tray, and the Evolver's marks every
+    command it offers; the status line, which cannot be clicked, carries none."""
+
+    tray = BrokerTray()
+
+    assert tray.status_action.icon().isNull()
+    assert _drawn(tray.start_action.icon()) == _family_mark("play")
+    assert _drawn(tray.pause_action.icon()) == _family_mark("pause")
+    assert _drawn(tray.log_action.icon()) == _family_mark("log")
+    assert _drawn(tray.quit_action.icon()) == _family_mark("power")
 
 
 @pytest.mark.parametrize(
@@ -259,7 +287,7 @@ def test_starting_by_hand_clears_the_pause(tray, cfg_path):
 
 
 def test_restart_from_the_menu_replaces_a_live_broker(tray, cfg_path):
-    """On a running broker the menu says 'Restart broker', and it must mean it:
+    """On a running broker the menu says 'Restart Broker', and it must mean it:
     because start() is idempotent, collapsing the restart branch into start()
     turns the menu item into a silent no-op — and until this test, nothing
     noticed (audit finding broker/all/tests/013)."""
@@ -357,7 +385,8 @@ def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
     tray.set_status(running=True, mode="auto")
 
     assert tray.status_action.text() == "Broker status: running (auto)"
-    assert tray.start_action.text() == "Restart broker"
+    assert tray.start_action.text() == "Restart Broker"
+    assert _drawn(tray.start_action.icon()) == _family_mark("restart")
     assert tray.pause_action.isEnabled()
     assert tray.toolTip() == "OSR2 Broker: running (auto)"
 
@@ -368,6 +397,7 @@ def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
     tray.set_status(running=False, mode="unknown")
 
     assert tray.status_action.text() == "Broker status: stopped"
-    assert tray.start_action.text() == "Start broker"
+    assert tray.start_action.text() == "Start Broker"
+    assert _drawn(tray.start_action.icon()) == _family_mark("play")
     assert not tray.pause_action.isEnabled()
     assert tray.toolTip() == "OSR2 Broker: stopped"
