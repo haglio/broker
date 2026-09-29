@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import QApplication
 from shared_ui.colors import BG_TERTIARY, BLUE, TEXT_SECONDARY
 from shared_ui.icons import glyph_pixmap
 
+from osr2_broker import branch_session
 from osr2_broker import tray as tray_module
 from osr2_broker.config import load_config
 from osr2_broker.process_names import BROKER_ROLE, NAMER
@@ -346,6 +347,26 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
     assert quit_calls == [True]
 
 
+def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
+    """The usual tray takes the broker over again: stopping it would take the
+    device away, and standing it down would stop Evolver bringing that tray
+    back."""
+
+    supervisor = FakeSupervisor(running=True)
+    stood_down, handed_back, quit_calls = [], [], []
+    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
+                        stand_down=lambda: stood_down.append(True),
+                        hand_back=lambda: handed_back.append(True))
+
+    app.quit(quit_app=lambda: quit_calls.append(True))
+
+    assert handed_back == [True]
+    assert stood_down == []
+    assert supervisor.stops == 0
+    assert not tray.isVisible()
+    assert quit_calls == [True]
+
+
 def test_a_second_tray_stands_down(cfg_path):
     """The scheduled task relaunches the tray every couple of minutes."""
 
@@ -366,6 +387,53 @@ def test_a_second_tray_stands_down(cfg_path):
         assert tray_module.main(["--config", str(cfg_path)]) == 0
 
     acquire.assert_called_once_with(tray_module.MUTEX_TRAY)
+
+
+def test_a_preview_takes_the_tray_over_and_leaves_the_everyday_interpreter_unnamed(
+        cfg_path, monkeypatch):
+    """Naming would write a copy of the interpreter into the everyday
+    checkout's venv, which the usual tray names for itself."""
+    monkeypatch.setenv(branch_session.FLAG, "1")
+
+    with patch.object(tray_module, "configure_logging",
+                      return_value=logging.getLogger("test.tray")), \
+         patch.object(tray_module, "install_exception_logging"), \
+         patch.object(tray_module, "_name_this_process") as named, \
+         patch.object(branch_session, "take_the_tray_over", return_value=None) as took_over:
+        assert tray_module.main(["--config", str(cfg_path)]) == 0
+
+    named.assert_not_called()
+    took_over.assert_called_once_with(end_the_other_trays=branch_session.end_the_other_trays)
+
+
+def test_a_preview_s_tray_names_its_branch_and_hands_the_tray_back(qapp, cfg_path, monkeypatch):
+    monkeypatch.setenv(branch_session.FLAG, "1")
+    monkeypatch.setattr(branch_session, "branch", lambda: "claude/example")
+    handed_back, quits = [], []
+    monkeypatch.setattr(branch_session, "hand_back",
+                        lambda config, claim: handed_back.append(claim))
+
+    tray, _, hand_back_timer = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), 42,
+        quit_app=lambda: quits.append(True))
+    tray.set_status(running=False, mode="unknown")
+    tray.quit_action.trigger()
+
+    assert tray.toolTip() == "OSR2 Broker — preview of claude/example: stopped"
+    assert handed_back == [42]
+    assert quits == [True]
+    assert hand_back_timer.interval() == branch_session.HAND_BACK_AFTER_MINUTES * 60_000
+
+
+def test_the_usual_tray_never_hands_itself_back(qapp, cfg_path, monkeypatch):
+    monkeypatch.delenv(branch_session.FLAG, raising=False)
+
+    tray, tray_app, hand_back_timer = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), 42, quit_app=lambda: None)
+
+    assert hand_back_timer is None
+    tray.set_status(running=False, mode="unknown")
+    assert tray.toolTip() == "OSR2 Broker: stopped"
 
 
 def test_tick_shows_the_broker_s_state_in_the_menu(tray, cfg_path):
@@ -401,3 +469,11 @@ def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
     assert _drawn(tray.start_action.icon()) == _family_mark("play")
     assert not tray.pause_action.isEnabled()
     assert tray.toolTip() == "OSR2 Broker: stopped"
+
+
+def test_a_preview_s_tray_says_so_on_hover(qapp):
+
+    tray = BrokerTray("OSR2 Broker — preview of claude/example")
+    tray.set_status(running=True, mode="auto")
+
+    assert tray.toolTip() == "OSR2 Broker — preview of claude/example: running (auto)"

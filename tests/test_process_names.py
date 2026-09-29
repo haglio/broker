@@ -29,7 +29,8 @@ from osr2_broker.process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from osr2_broker.tray import BrokerSupervisor, _name_this_process, terminate_broker
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-(LAUNCHER,) = launchers(PROJECT_DIR)
+LAUNCHER = next(launcher for launcher in launchers(PROJECT_DIR)
+                if launcher.file == "launch_broker_tray.vbs")
 
 
 class TestWhatTheRowsSay:

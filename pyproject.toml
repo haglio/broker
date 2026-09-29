@@ -67,6 +67,14 @@ interpreter = "pythonw.exe"
 named-interpreter = "Broker-Tray.exe"
 run = '-m osr2_broker.tray --config "{root}\osr2_broker_config.json"'
 
+[tool.haglio.launchers."launch_preview_branch.vbs"]
+app = "OSR2 Broker (branch preview)"
+interpreter = "pythonw.exe"
+venv = "primary"
+run = '-m osr2_broker.tray --config "{primary}\osr2_broker_config.json"'
+log = 'state\preview_branch.log'
+environment = { BROKER_BRANCH_SESSION = "1" }
+
 [tool.setuptools.packages.find]
 include = ["osr2_broker*"]
 namespaces = false

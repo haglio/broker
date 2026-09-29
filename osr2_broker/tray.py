@@ -17,7 +17,7 @@ from shared_ui.chrome import menu_rules
 from shared_ui.colors import TEXT_SECONDARY
 from shared_ui.icons import glyph_icon
 
-from . import peer_watch
+from . import branch_session, peer_watch
 from .config import load_config
 from .process_names import BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
@@ -103,8 +103,9 @@ class BrokerSupervisor:
 class BrokerTray(QSystemTrayIcon):
     """Tray icon exposing the broker's status and controls."""
 
-    def __init__(self, parent=None):
+    def __init__(self, name: str = "OSR2 Broker", parent=None):
         super().__init__(parent)
+        self._name = name
 
         self._menu = build_menu()
 
@@ -136,10 +137,10 @@ class BrokerTray(QSystemTrayIcon):
         """Retitle the menu and tooltip for the broker's current state."""
         if running:
             self.status_action.setText(f"Broker status: running ({mode})")
-            self.setToolTip(f"OSR2 Broker: running ({mode})")
+            self.setToolTip(f"{self._name}: running ({mode})")
         else:
             self.status_action.setText("Broker status: stopped")
-            self.setToolTip("OSR2 Broker: stopped")
+            self.setToolTip(f"{self._name}: stopped")
 
         self.start_action.setText("Restart Broker" if running else "Start Broker")
         self.start_action.setIcon(self._restart_mark if running else self._start_mark)
@@ -150,13 +151,14 @@ class BrokerTrayApp:
     """Policy: keep a broker alive, and keep the tray telling the truth."""
 
     def __init__(self, config, supervisor, tray: BrokerTray, *, open_file=None,
-                 peer=None, stand_down=peer_watch.stand_broker_down):
+                 peer=None, stand_down=peer_watch.stand_broker_down, hand_back=None):
         self._config = config
         self._supervisor = supervisor
         self._tray = tray
         self._open_file = open_file or open_in_editor
         self._peer = peer
         self._stand_down = stand_down
+        self._hand_back = hand_back
         self._paused = False
 
         tray.start_action.triggered.connect(self.start_or_restart)
@@ -210,9 +212,15 @@ class BrokerTrayApp:
         And leave the mark that tells Evolver this was asked for, so it does not
         start the tray again a quarter of an hour later. Every other way the tray
         dies leaves no mark and is undone, which is the point of the pairing.
+
+        A preview's quit is the exception: the usual tray takes the broker back,
+        still running.
         """
-        self._stand_down()
-        self._supervisor.stop()
+        if self._hand_back is not None:
+            self._hand_back()
+        else:
+            self._stand_down()
+            self._supervisor.stop()
         self._tray.hide()
         quit_app()
 
@@ -271,9 +279,29 @@ def _name_this_process() -> None:
     NAMER.name_this_process(TRAY_ROLE)
 
 
-def main(argv: list[str] | None = None) -> int:
-    _name_this_process()
+def start_the_tray(config, logger, claim: int, *, quit_app):
+    tray = BrokerTray(branch_session.app_name())
+    tray.setIcon(QIcon(str(ICON_PATH)))
 
+    supervisor = BrokerSupervisor(
+        config,
+        launch=lambda argv_: launch_broker(argv_, config, logger),
+        terminate=lambda: terminate_broker(logger),
+    )
+    preview = branch_session.is_one()
+    tray_app = BrokerTrayApp(
+        config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger),
+        hand_back=(lambda: branch_session.hand_back(config, claim)) if preview else None)
+    tray.quit_action.triggered.connect(lambda: tray_app.quit(quit_app))
+    hand_back_timer = (branch_session.hand_back_later(lambda: tray_app.quit(quit_app))
+                       if preview else None)
+    return tray, tray_app, hand_back_timer
+
+
+def main(argv: list[str] | None = None) -> int:
+    preview = branch_session.is_one()
+    if not preview:
+        _name_this_process()
 
     config = load_config(preparse_config_path(argv))
     logger = configure_logging("osr2_broker.tray", config.log_file("broker_tray"))
@@ -281,7 +309,11 @@ def main(argv: list[str] | None = None) -> int:
 
     # The scheduled task relaunches us every couple of minutes so a killed tray
     # is revived; while one is alive each relaunch must be a no-op.
-    _mutex_handle = try_acquire_mutex(MUTEX_TRAY)
+    if preview:
+        _mutex_handle = branch_session.take_the_tray_over(
+            end_the_other_trays=branch_session.end_the_other_trays)
+    else:
+        _mutex_handle = try_acquire_mutex(MUTEX_TRAY)
     if _mutex_handle is None:
         logger.info("Another tray is already running; exiting")
         return 0
@@ -296,17 +328,8 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
-    tray = BrokerTray()
-    tray.setIcon(QIcon(str(ICON_PATH)))
-
-    supervisor = BrokerSupervisor(
-        config,
-        launch=lambda argv_: launch_broker(argv_, config, logger),
-        terminate=lambda: terminate_broker(logger),
-    )
-    tray_app = BrokerTrayApp(
-        config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger))
-    tray.quit_action.triggered.connect(lambda: tray_app.quit(app.quit))
+    tray, tray_app, _hand_back_timer = start_the_tray(
+        config, logger, _mutex_handle, quit_app=app.quit)
 
     timer = QTimer()
     timer.setInterval(WATCHDOG_INTERVAL_MS)
