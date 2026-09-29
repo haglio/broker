@@ -14,6 +14,8 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from shared_ui.chrome import menu_rules
+from shared_ui.colors import TEXT_SECONDARY
+from shared_ui.icons import glyph_icon
 
 from . import peer_watch
 from .config import load_config
@@ -51,6 +53,10 @@ def build_menu() -> QMenu:
     menu = QMenu()
     menu.setStyleSheet(menu_rules())
     return menu
+
+
+def _family_mark(name: str) -> QIcon:
+    return glyph_icon(name, color=TEXT_SECONDARY)
 
 
 class BrokerSupervisor:
@@ -106,18 +112,22 @@ class BrokerTray(QSystemTrayIcon):
         self.status_action.setEnabled(False)
         self._menu.addAction(self.status_action)
 
-        self.start_action = QAction("Start broker", self._menu)
+        self._menu.addSeparator()
+
+        self._start_mark = _family_mark("play")
+        self._restart_mark = _family_mark("restart")
+        self.start_action = QAction(self._start_mark, "Start Broker", self._menu)
         self._menu.addAction(self.start_action)
 
-        self.pause_action = QAction("Pause broker", self._menu)
+        self.pause_action = QAction(_family_mark("pause"), "Pause Broker", self._menu)
         self._menu.addAction(self.pause_action)
 
-        self.log_action = QAction("Open broker log", self._menu)
+        self.log_action = QAction(_family_mark("log"), "Open Broker Log", self._menu)
         self._menu.addAction(self.log_action)
 
         self._menu.addSeparator()
 
-        self.quit_action = QAction("Quit", self._menu)
+        self.quit_action = QAction(_family_mark("power"), "Quit", self._menu)
         self._menu.addAction(self.quit_action)
 
         self.setContextMenu(self._menu)
@@ -131,7 +141,8 @@ class BrokerTray(QSystemTrayIcon):
             self.status_action.setText("Broker status: stopped")
             self.setToolTip("OSR2 Broker: stopped")
 
-        self.start_action.setText("Restart broker" if running else "Start broker")
+        self.start_action.setText("Restart Broker" if running else "Start Broker")
+        self.start_action.setIcon(self._restart_mark if running else self._start_mark)
         self.pause_action.setEnabled(running)
 
 
