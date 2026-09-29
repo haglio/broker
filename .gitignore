@@ -31,3 +31,6 @@ htmlcov/
 # Private overlays — real values live here and never get published; each has a
 # committed *.example.* template documenting its shape.
 /osr2_broker_config.json
+
+# A branch preview's own log and launchers, in its worktree.
+/state/
