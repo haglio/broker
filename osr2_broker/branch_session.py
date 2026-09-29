@@ -57,7 +57,8 @@ def end_the_other_trays() -> None:
             "Get-CimInstance Win32_Process | Where-Object { "
             f"$_.Name -match '{NAMER.process_name_pattern}' -and "
             "$_.CommandLine -match 'osr2_broker\\.tray' -and "
-            f"$_.ProcessId -ne {os.getpid()} "
+            f"$_.ProcessId -ne {os.getpid()} -and "
+            f"$_.ProcessId -ne {os.getppid()} "
             "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
             "-ErrorAction SilentlyContinue }",
         ],
