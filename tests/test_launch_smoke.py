@@ -1,7 +1,7 @@
 """The launch smoke test: everything the tray launch imports, imported.
 
 The suite can be entirely green while nothing appears in the notification area,
-and this is the gap. The scheduled task, the Start Menu shortcut and fun_time
+and this is the gap. The scheduled task, the pinned shortcut and fun_time
 all start the broker the same way -- ``launch_broker_tray.vbs`` running
 ``pythonw -m osr2_broker.tray`` -- and ``main()`` there reaches the config, the
 logging setup and the icon through imports *inside* the function, so a break in

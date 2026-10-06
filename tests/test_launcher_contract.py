@@ -1,6 +1,6 @@
 """What launch_broker_tray.vbs runs, asked of the launcher under the real script host.
 
-The "OSR2 Broker" scheduled task, the Start Menu shortcut and Fun Time all start
+The "OSR2 Broker" scheduled task, the pinned shortcut and Fun Time all start
 the tray through this file, so its name and place are pinned here.  It is
 rendered from its spec in pyproject.toml by app_support.launcher, whose own tests
 hold what every launcher does; what is the broker's is asked of this one.
