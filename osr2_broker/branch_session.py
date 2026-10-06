@@ -29,9 +29,12 @@ def take_the_flag() -> bool:
 
 
 def branch() -> str:
-    done = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=PROJECT_DIR,
-                          capture_output=True, text=True, check=False,
-                          **hidden_subprocess_kwargs())
+    try:
+        done = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=PROJECT_DIR,
+                              capture_output=True, text=True, check=False,
+                              **hidden_subprocess_kwargs())
+    except OSError:
+        return PROJECT_DIR.name
     return done.stdout.strip() or PROJECT_DIR.name
 
 
