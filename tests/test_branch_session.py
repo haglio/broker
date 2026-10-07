@@ -36,21 +36,6 @@ def test_a_tray_launched_without_the_flag_is_the_usual_one(monkeypatch):
     assert branch_session.take_the_flag() is False
 
 
-def test_a_preview_names_the_branch_it_runs(monkeypatch):
-    monkeypatch.setattr(branch_session, "branch", lambda: "claude/example")
-
-    assert branch_session.app_name(preview=True) == "OSR2 Broker — preview of claude/example"
-
-
-def test_a_preview_where_git_cannot_run_is_named_for_its_folder():
-    with patch.object(branch_session.subprocess, "run", side_effect=FileNotFoundError("git")):
-        assert branch_session.branch() == branch_session.PROJECT_DIR.name
-
-
-def test_the_usual_tray_is_just_the_broker():
-    assert branch_session.app_name(preview=False) == "OSR2 Broker"
-
-
 def test_a_preview_takes_the_tray_over_by_ending_the_one_running():
     claims = iter([None, None, 42])
     asked, ended = [], []

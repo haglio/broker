@@ -16,9 +16,11 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from shared_ui.chrome import menu_rules
 from shared_ui.colors import TEXT_SECONDARY
 from shared_ui.icons import glyph_icon
+from shared_ui.preview import Preview, preview_of, window_title
+from shared_ui.preview_icon import app_icon
 
 from . import branch_session, peer_watch
-from .config import load_config
+from .config import PROJECT_DIR, load_config
 from .process_names import BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 from .state_files import BrokerMode
@@ -100,10 +102,13 @@ class BrokerSupervisor:
         self._launch(self._broker_argv())
 
 
+APP_TITLE = "OSR2 Broker"
+
+
 class BrokerTray(QSystemTrayIcon):
     """Tray icon exposing the broker's status and controls."""
 
-    def __init__(self, name: str = "OSR2 Broker", parent=None):
+    def __init__(self, name: str = APP_TITLE, parent=None):
         super().__init__(parent)
         self._name = name
 
@@ -279,9 +284,10 @@ def _name_this_process() -> None:
     NAMER.name_this_process(TRAY_ROLE)
 
 
-def start_the_tray(config, logger, claim: int, *, preview: bool, quit_app):
-    tray = BrokerTray(branch_session.app_name(preview))
-    tray.setIcon(QIcon(str(ICON_PATH)))
+def start_the_tray(config, logger, claim: int, *, hands_back: bool, shown_as: Preview | None,
+                   quit_app):
+    tray = BrokerTray(window_title(APP_TITLE, shown_as))
+    tray.setIcon(app_icon(ICON_PATH, shown_as))
 
     supervisor = BrokerSupervisor(
         config,
@@ -290,11 +296,15 @@ def start_the_tray(config, logger, claim: int, *, preview: bool, quit_app):
     )
     tray_app = BrokerTrayApp(
         config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger),
-        hand_back=(lambda: branch_session.hand_back(config, claim)) if preview else None)
+        hand_back=(lambda: branch_session.hand_back(config, claim)) if hands_back else None)
     tray.quit_action.triggered.connect(lambda: tray_app.quit(quit_app))
     hand_back_timer = (branch_session.hand_back_later(lambda: tray_app.quit(quit_app))
-                       if preview else None)
+                       if hands_back else None)
     return tray, tray_app, hand_back_timer
+
+
+def shown_as(*, preview: bool) -> Preview | None:
+    return preview_of(PROJECT_DIR) if preview else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -323,12 +333,13 @@ def main(argv: list[str] | None = None) -> int:
     # deliberate start rather than every two minutes.
     peer_watch.clear_broker_stand_down()
 
-    claim_taskbar_identity()
+    marked = shown_as(preview=preview)
+    claim_taskbar_identity(marked)
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
     tray, tray_app, _hand_back_timer = start_the_tray(
-        config, logger, _mutex_handle, preview=preview, quit_app=app.quit)
+        config, logger, _mutex_handle, hands_back=preview, shown_as=marked, quit_app=app.quit)
 
     timer = QTimer()
     timer.setInterval(WATCHDOG_INTERVAL_MS)

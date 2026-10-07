@@ -12,6 +12,8 @@ from PyQt6.QtGui import QIcon, QImage
 from PyQt6.QtWidgets import QApplication
 from shared_ui.colors import BG_TERTIARY, BLUE, TEXT_SECONDARY
 from shared_ui.icons import glyph_pixmap
+from shared_ui.palette import PREVIEW_INK
+from shared_ui.preview import Preview
 
 from osr2_broker import branch_session
 from osr2_broker import tray as tray_module
@@ -406,28 +408,37 @@ def test_a_preview_takes_the_tray_over_and_leaves_the_everyday_interpreter_unnam
     took_over.assert_called_once_with(end_the_other_trays=branch_session.end_the_other_trays)
 
 
-def test_a_preview_s_tray_names_its_branch_and_hands_the_tray_back(qapp, cfg_path, monkeypatch):
-    monkeypatch.setattr(branch_session, "branch", lambda: "claude/example")
+def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qapp, cfg_path, monkeypatch):
     handed_back, quits = [], []
     monkeypatch.setattr(branch_session, "hand_back",
                         lambda config, claim: handed_back.append(claim))
 
     tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        preview=True, quit_app=lambda: quits.append(True))
+        hands_back=True, shown_as=Preview(feature="the new idle alert"),
+        quit_app=lambda: quits.append(True))
     tray.set_status(running=False, mode="unknown")
     tray.quit_action.trigger()
 
-    assert tray.toolTip() == "OSR2 Broker — preview of claude/example: stopped"
+    assert tray.toolTip() == "OSR2 Broker — preview of the new idle alert: stopped"
     assert handed_back == [42]
     assert quits == [True]
     assert hand_back_timer.interval() == branch_session.HAND_BACK_AFTER_MINUTES * 60_000
 
 
+def test_a_preview_s_tray_wears_the_brokers_letter_in_the_preview_ink(qapp, cfg_path):
+    tray, _, _hand_back_timer = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), 42,
+        hands_back=True, shown_as=Preview(feature=None), quit_app=lambda: None)
+
+    middle_bar_of_the_b = tray.icon().pixmap(256, 256).toImage().pixelColor(128, 128)
+    assert (middle_bar_of_the_b.red(), middle_bar_of_the_b.green(), middle_bar_of_the_b.blue()) == PREVIEW_INK
+
+
 def test_the_usual_tray_never_hands_itself_back(qapp, cfg_path):
     tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        preview=False, quit_app=lambda: None)
+        hands_back=False, shown_as=None, quit_app=lambda: None)
 
     assert hand_back_timer is None
     tray.set_status(running=False, mode="unknown")
@@ -475,3 +486,16 @@ def test_a_preview_s_tray_says_so_on_hover(qapp):
     tray.set_status(running=True, mode="auto")
 
     assert tray.toolTip() == "OSR2 Broker — preview of claude/example: running (auto)"
+
+
+def test_a_preview_tray_wears_what_its_checkout_describes(monkeypatch):
+    described = Preview(feature="the new idle alert")
+    monkeypatch.setattr(tray_module, "preview_of", lambda checkout: described)
+
+    assert tray_module.shown_as(preview=True) is described
+
+
+def test_the_usual_tray_wears_no_preview_wherever_it_runs_from(monkeypatch):
+    monkeypatch.setattr(tray_module, "preview_of", lambda checkout: Preview(feature="unused"))
+
+    assert tray_module.shown_as(preview=False) is None

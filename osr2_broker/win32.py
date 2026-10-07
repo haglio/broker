@@ -7,6 +7,7 @@ import ctypes.wintypes as wt
 import logging
 
 from app_support.win32 import set_app_user_model_id
+from shared_ui.preview import Preview, taskbar_identity, window_title
 
 from .config import PROJECT_DIR
 
@@ -18,14 +19,14 @@ ICON_PATH = PROJECT_DIR / "broker_icon.ico"
 APP_USER_MODEL_ID = "OSR2Broker"
 
 
-def claim_taskbar_identity() -> None:
+def claim_taskbar_identity(shown_as: Preview | None) -> None:
     """Claim a stable taskbar identity so windows show the broker icon.
 
     Cosmetic: a window under the interpreter's icon is still a window, so a
     refusal is logged and the launch goes on.
     """
     try:
-        set_app_user_model_id(APP_USER_MODEL_ID)
+        set_app_user_model_id(taskbar_identity(APP_USER_MODEL_ID, shown_as))
     except OSError:
         logging.getLogger(__name__).warning(
             "Could not claim the taskbar identity", exc_info=True)
@@ -33,7 +34,8 @@ def claim_taskbar_identity() -> None:
 
 # --- Warning dialog ---
 
-def show_warning(title: str, message: str, button_text: str = "OK") -> None:
+def show_warning(title: str, message: str, button_text: str = "OK", *,
+                 shown_as: Preview | None) -> None:
     """Show the family's warning dialog under the broker's own identity.
 
     Blocks until dismissed.  The taskbar identity goes first: Windows reads it
@@ -42,12 +44,15 @@ def show_warning(title: str, message: str, button_text: str = "OK") -> None:
     """
     # Local: shared_ui.alert is Qt, and the broker process imports this module
     # without ever wanting a toolkit unless a warning actually has to be shown.
+    from PyQt6.QtWidgets import QApplication  # noqa: PLC0415
     from shared_ui.alert import Level, show_alert  # noqa: PLC0415
+    from shared_ui.preview_icon import app_icon  # noqa: PLC0415
 
-    claim_taskbar_identity()
+    claim_taskbar_identity(shown_as)
+    _the_app_its_icon_is_drawn_in = QApplication.instance() or QApplication([])
     show_alert(
-        title, message,
-        level=Level.WARNING, icon=ICON_PATH, button_text=button_text,
+        window_title(title, shown_as), message,
+        level=Level.WARNING, icon=app_icon(ICON_PATH, shown_as), button_text=button_text,
     )
 
 

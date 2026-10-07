@@ -10,7 +10,6 @@ from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import try_acquire_mutex
 from PyQt6.QtCore import QTimer
 
-from .config import PROJECT_DIR
 from .process_names import NAMER
 from .single_instance import MUTEX_TRAY
 
@@ -26,20 +25,6 @@ _close_handle.restype = wintypes.BOOL
 
 def take_the_flag() -> bool:
     return os.environ.pop(FLAG, None) == "1"
-
-
-def branch() -> str:
-    try:
-        done = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=PROJECT_DIR,
-                              capture_output=True, text=True, check=False,
-                              **hidden_subprocess_kwargs())
-    except OSError:
-        return PROJECT_DIR.name
-    return done.stdout.strip() or PROJECT_DIR.name
-
-
-def app_name(preview: bool) -> str:
-    return f"OSR2 Broker — preview of {branch()}" if preview else "OSR2 Broker"
 
 
 def take_the_tray_over(*, claim=try_acquire_mutex, end_the_other_trays,
