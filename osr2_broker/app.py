@@ -12,9 +12,10 @@ from app_support.file_channel import consume_command_file
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import mutex_name, try_acquire_mutex
+from shared_ui.preview import preview_of
 
 from .activity import ActivityStamp
-from .config import load_config
+from .config import PROJECT_DIR, load_config
 from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
 from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
 from .power_on import PowerOnWatch
@@ -219,6 +220,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
                 f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"
                 "Did you forget to turn it off?",
                 button_text="I don't know, did you?",
+                shown_as=preview_of(PROJECT_DIR),
             )
             state.acknowledge()
 
