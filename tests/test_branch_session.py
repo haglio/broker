@@ -135,6 +135,17 @@ def test_the_usual_tray_starts_from_the_everyday_checkout_and_not_as_a_preview(
     assert branch_session.FLAG not in kwargs["env"]
 
 
+def test_the_usual_tray_loads_its_own_modules_rather_than_the_preview_s(cfg_path, monkeypatch):
+    config = load_config(cfg_path)
+    monkeypatch.setenv("PYTHONPATH", "C:/workspace/shared_ui/.claude/worktrees/a-change")
+
+    with patch.object(branch_session.subprocess, "Popen") as popen:
+        branch_session.start_the_usual_tray(config)
+
+    (_argv,), kwargs = popen.call_args
+    assert "PYTHONPATH" not in kwargs["env"]
+
+
 def test_a_preview_nobody_quits_hands_the_tray_back_after_an_hour(qapp):
     quits = []
 

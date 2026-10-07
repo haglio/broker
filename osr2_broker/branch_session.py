@@ -74,8 +74,12 @@ def let_go_of(claim: int) -> None:
     _close_handle(claim)
 
 
+_WHAT_ONLY_A_PREVIEW_RUNS_WITH = (FLAG, "PYTHONPATH")
+
+
 def start_the_usual_tray(config) -> None:
-    environment = {key: value for key, value in os.environ.items() if key != FLAG}
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in _WHAT_ONLY_A_PREVIEW_RUNS_WITH}
     subprocess.Popen(["wscript.exe", str(config.project_dir / "launch_broker_tray.vbs")],
                      cwd=str(config.project_dir), env=environment,
                      **hidden_subprocess_kwargs())
