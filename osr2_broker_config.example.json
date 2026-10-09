@@ -9,5 +9,5 @@
   "idle_minutes": 15.0,
   "mfp_config_path": "C:/path/to/MultiFunPlayer/MultiFunPlayer.config.json",
   "tcode_udp_port": 50557,
-  "evolver_launcher": "../evolver/launch_evolver.vbs"
+  "evolver_launcher": "../evolver/launch_evolver_if_not_running.vbs"
 }
