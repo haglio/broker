@@ -157,8 +157,14 @@ class TestWhereTheLauncherComesFrom:
 
         launcher = load_config(cfg_path).evolver_launcher
 
-        assert launcher.name == "launch_evolver.vbs"
         assert launcher.parent.name == "evolver"
+
+    def test_it_starts_the_launcher_that_leaves_an_evolver_already_running_alone(
+            self, cfg_path):
+
+        launcher = load_config(cfg_path).evolver_launcher
+
+        assert launcher.name == "launch_evolver_if_not_running.vbs"
 
     def test_a_config_may_name_another(self, tmp_path):
 

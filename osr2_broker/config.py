@@ -13,7 +13,7 @@ DEFAULT_CONFIG_PATH = PROJECT_DIR / "osr2_broker_config.json"
 # osr2_broker/peer_watch.py). Relative to this repo, because the pair is a
 # pair of sibling checkouts; a machine with no Evolver beside the broker
 # leaves this pointing at nothing, which is how the watch turns itself off.
-DEFAULT_EVOLVER_LAUNCHER = "../evolver/launch_evolver.vbs"
+DEFAULT_EVOLVER_LAUNCHER = "../evolver/launch_evolver_if_not_running.vbs"
 
 
 @dataclass(frozen=True)
