@@ -1,4 +1,4 @@
-"""The verb channel fun_time, genau and clipper steer the broker through.
+"""The verb channel fun_time, genau and genaumacher steer the broker through.
 
 The consumer is the family's (``app_support.file_channel``, tested there): every
 queued verb, folded to upper case, the queue claimed by rename so a verb written
