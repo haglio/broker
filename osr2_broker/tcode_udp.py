@@ -1,7 +1,7 @@
 """T-Code arriving over loopback UDP, and the mute that outlasts a direct write.
 
 Genau sends the OSR2 its moves as datagrams, bypassing MFP entirely, and so do
-the video players and Origenerator. A fired hold writes to the device the same
+the Funestras and Origenerator. A fired hold writes to the device the same
 way. Both are "someone drove the device directly just now", which is what MFP's
 forwarder has to know: two writers fighting over one serial port make the device
 stutter between them, so the window says whose turn it is not.
