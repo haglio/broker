@@ -1,6 +1,6 @@
 """The files the broker publishes itself through.
 
-Three names under the shared state directory, read by fun_time, genau, clipper
+Three names under the shared state directory, read by fun_time, genau, genaumacher
 and the tray.  The reading and the writing are app_support.file_channel's and
 pinned there, file by file; what is pinned here is the broker's side of each:
 what it writes, when, and what it does when it cannot.

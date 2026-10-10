@@ -1,7 +1,7 @@
 """The files the broker publishes itself through.
 
 Three small files under the shared state directory, and the loop that keeps one
-of them fresh. They are the only thing fun_time, genau, clipper and the tray see
+of them fresh. They are the only thing fun_time, genau, genaumacher and the tray see
 of a running broker, so their contents are a wire format: the mode file holds
 "0" or "1" and nothing else, and the heartbeat holds one wall-clock float.  The
 names are the family's (``app_support.state_files``), and the reading and the

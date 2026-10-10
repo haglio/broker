@@ -289,7 +289,7 @@ class BrokerSerialSession:
     def _retract(self, _udp_sock) -> None:
         self._holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
-    # The whole vocabulary, in one place. fun_time, genau and clipper write
+    # The whole vocabulary, in one place. fun_time, genau and genaumacher write
     # these into broker_cmd.txt; the family's consumer upper-cases whatever it reads,
     # so the keys are the verbs as they arrive.
     _VERBS = MappingProxyType({

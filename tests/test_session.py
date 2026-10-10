@@ -240,7 +240,7 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
 
 
 def test_a_verb_the_broker_does_not_know_is_ignored():
-    """The command file is a shared channel: fun_time, genau and clipper all
+    """The command file is a shared channel: fun_time, genau and genaumacher all
     write into it, and one of them growing a verb this broker has no handler for
     must be a no-op, not a crash inside the 50 ms tick."""
     session, _auto_mode, logger = _build_session()
