@@ -8,14 +8,14 @@ import time
 
 import serial
 from app_support.cli import preparse_config_path
-from app_support.file_channel import consume_command_file
+from app_support.file_channel import consume_command_file, publish_whole
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import mutex_name, try_acquire_mutex
 
 from . import idle_warning
 from .activity import ActivityStamp
-from .config import load_config
+from .config import PROJECT_DIR, load_config
 from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
 from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
 from .power_on import PowerOnWatch
@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     if _mutex_handle is None:
         logger.warning("Another broker instance is already running; exiting")
         return 0
+    publish_whole(config.broker_checkout_file, str(PROJECT_DIR))
 
     build_parser().parse_args(argv)
     virtual_port = resolve_virtual_port(config.mfp_config_path, config.virtual_port, logger)

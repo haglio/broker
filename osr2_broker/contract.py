@@ -33,7 +33,7 @@ TRAY_MODULE = f"{__package__}.tray"
 #: The file that starts the tray, which starts the broker.
 TRAY_LAUNCHER = "launch_broker_tray.vbs"
 
-#: Where this app's six state files sit, as a path under the checkout named
+#: Where this app's state files sit, as a path under the checkout named
 #: here rather than under this one.  Three apps meet at that directory -- this
 #: one writes the files, a session and Origenerator read them -- and only one of
 #: the three is always running, which is why they live in the orchestrator's

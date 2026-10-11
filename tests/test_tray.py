@@ -17,7 +17,7 @@ from shared_ui.preview import Preview
 
 from osr2_broker import branch_session
 from osr2_broker import tray as tray_module
-from osr2_broker.config import load_config
+from osr2_broker.config import PROJECT_DIR, load_config
 from osr2_broker.process_names import BROKER_ROLE, NAMER
 from osr2_broker.single_instance import MUTEX_BROKER
 from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, _guarded_tick, mode_text
@@ -162,16 +162,20 @@ def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
     assert probed == [mutex_name(MUTEX_BROKER, config.config_path)]
 
 
-def _supervisor(cfg_path, *, running=False):
-    """A supervisor over a real config, with its launch/kill seams recorded."""
+def _supervisor(cfg_path, *, running=False, running_from=PROJECT_DIR):
+    """A supervisor over a real config, with its launch/kill seams recorded, and
+    a running broker that says it runs from *running_from* (None: says nothing)."""
 
     calls = {"launched": [], "terminated": 0}
 
     def terminate():
         calls["terminated"] += 1
 
+    config = load_config(cfg_path)
+    if running and running_from is not None:
+        config.broker_checkout_file.write_text(str(running_from), encoding="utf-8")
     supervisor = BrokerSupervisor(
-        load_config(cfg_path),
+        config,
         launch=calls["launched"].append,
         terminate=terminate,
         is_held=lambda name: running,
@@ -194,12 +198,42 @@ def test_start_runs_the_broker_module_against_our_config(cfg_path):
     ]
 
 
+def test_a_tray_starts_the_broker_from_its_own_checkout(cfg_path):
+    """So a branch's tray runs the branch's broker: `-m` finds the package in
+    the working directory first."""
+    with patch.object(tray_module.subprocess, "Popen") as popen:
+        tray_module.launch_broker(["broker"], load_config(cfg_path), logging.getLogger("test.tray"))
+    popen.call_args.kwargs["stdout"].close()
+
+    assert popen.call_args.kwargs["cwd"] == str(PROJECT_DIR)
+
+
 def test_start_leaves_a_live_broker_alone(cfg_path):
     supervisor, calls = _supervisor(cfg_path, running=True)
 
     supervisor.start()
 
     assert calls["launched"] == []
+
+
+def test_start_replaces_a_broker_another_checkout_started(cfg_path, tmp_path):
+    """How a branch's preview tray comes to run the branch's broker, and how the
+    usual tray takes the usual broker back after it."""
+    supervisor, calls = _supervisor(cfg_path, running=True, running_from=tmp_path / "elsewhere")
+
+    supervisor.start()
+
+    assert calls["terminated"] == 1
+    assert len(calls["launched"]) == 1
+
+
+def test_start_replaces_a_broker_that_never_said_where_it_runs_from(cfg_path):
+    supervisor, calls = _supervisor(cfg_path, running=True, running_from=None)
+
+    supervisor.start()
+
+    assert calls["terminated"] == 1
+    assert len(calls["launched"]) == 1
 
 
 def test_restart_replaces_a_live_broker(cfg_path):

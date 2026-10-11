@@ -58,6 +58,10 @@ class BrokerConfig:
     def osr2_idle_state_file(self) -> Path:
         return self.state_dir / "osr2_idle_state.txt"
 
+    @property
+    def broker_checkout_file(self) -> Path:
+        return self.state_dir / "broker_checkout.txt"
+
     def log_file(self, name: str) -> Path:
         return self.state_dir / f"{name}.log"
 
