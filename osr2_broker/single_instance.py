@@ -1,4 +1,4 @@
-"""The two mutex names that say a broker, or a tray, is already running.
+"""The mutex names that say a broker, a tray or an idle warning is already running.
 
 Claiming, holding and probing them is ``app_support.win32``'s.  The names are
 the broker's, and they cannot change: a broker started before a change -- by
@@ -12,3 +12,5 @@ from __future__ import annotations
 MUTEX_BROKER = "Global\\OSR2Broker"
 # The tray's, as it stands: one tray per machine.
 MUTEX_TRAY = "Global\\OSR2Broker.Tray"
+# The idle warning's, made per config like the broker's: one on screen at a time.
+MUTEX_IDLE_WARNING = "Global\\OSR2Broker.IdleWarning"
