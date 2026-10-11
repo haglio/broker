@@ -41,6 +41,13 @@ hour later (`osr2_broker/branch_session.py`), and it takes the everyday broker
 back the same way. That shape is the user's choice (2026-09-28), the same one
 Evolver's preview has. Never launch the preview yourself.
 
+Never start a broker yourself either, not even on a scratch config with ports
+that do not exist: a missing virtual port makes it fall back to the machine's
+one broker-side com0com port, which is the everyday broker's, and once running
+it wears the broker's process name, so no tool an agent may use can stop it
+(2026-10-11: one sat waiting on a scratch port until the user said to end it).
+`tests/test_launch_smoke.py` checks the launch path without starting anything.
+
 ## Config
 
 `osr2_broker_config.json` — flat JSON, one dataclass. State files are derived from `state_dir` (currently shared with fun_time's state directory).
