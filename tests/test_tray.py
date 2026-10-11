@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from app_support.win32 import mutex_name
@@ -21,6 +21,7 @@ from osr2_broker.config import PROJECT_DIR, load_config
 from osr2_broker.process_names import BROKER_ROLE, NAMER
 from osr2_broker.single_instance import MUTEX_BROKER
 from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, _guarded_tick, mode_text
+from tests.heard import what_is_said_on
 
 
 @pytest.fixture(scope="module")
@@ -201,11 +202,29 @@ def test_start_runs_the_broker_module_against_our_config(cfg_path):
 def test_a_tray_starts_the_broker_from_its_own_checkout(cfg_path):
     """So a branch's tray runs the branch's broker: `-m` finds the package in
     the working directory first."""
-    with patch.object(tray_module.subprocess, "Popen") as popen:
+    closed = MagicMock(pid=4321)
+    closed.wait.return_value = 0
+    with patch.object(tray_module.subprocess, "Popen", return_value=closed) as popen:
         tray_module.launch_broker(["broker"], load_config(cfg_path), logging.getLogger("test.tray"))
     popen.call_args.kwargs["stdout"].close()
 
     assert popen.call_args.kwargs["cwd"] == str(PROJECT_DIR)
+
+
+def test_the_tray_logs_how_a_broker_it_launched_ended(cfg_path):
+    crashed = MagicMock(pid=4321)
+    crashed.wait.return_value = 0xC0000005
+
+    with (
+        what_is_said_on("test.tray") as heard,
+        patch.object(tray_module.subprocess, "Popen", return_value=crashed) as popen,
+    ):
+        tray_module.launch_broker(["broker"], load_config(cfg_path), logging.getLogger("test.tray"))
+        popen.call_args.kwargs["stdout"].close()
+        ended = heard.first_saying("ended", timeout=5.0)
+
+    assert "4321" in ended
+    assert "0xc0000005" in ended
 
 
 def test_start_leaves_a_live_broker_alone(cfg_path):

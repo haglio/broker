@@ -1,6 +1,7 @@
 """System tray icon for the broker, dark-themed via shared_ui."""
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path
 from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.subprocess_utils import hidden_subprocess_kwargs
+from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QAction, QIcon
@@ -240,14 +242,21 @@ class BrokerTrayApp:
 def launch_broker(argv: list[str], config, logger) -> None:
     """Start the broker detached, with its console output kept for post-mortems."""
     launcher_log = config.log_file("broker_service_launcher").open("a", encoding="utf-8")
-    subprocess.Popen(
+    broker = subprocess.Popen(
         argv,
         cwd=str(PROJECT_DIR),
         stdout=launcher_log,
         stderr=subprocess.STDOUT,
         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
     )
-    logger.info("Launched broker")
+    logger.info("Launched broker (pid %d)", broker.pid)
+    start_daemon_thread(target=_say_how_it_ended, args=(broker, logger), name="broker-ended")
+
+
+def _say_how_it_ended(broker: subprocess.Popen, logger) -> None:
+    code = broker.wait()
+    logger.log(logging.INFO if code == 0 else logging.WARNING,
+               "Broker (pid %d) ended: exit code %#x", broker.pid, code)
 
 
 def terminate_broker(logger) -> None:

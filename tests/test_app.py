@@ -5,7 +5,6 @@ import importlib
 import json
 import logging
 import os
-import queue
 import subprocess
 import sys
 import threading
@@ -20,6 +19,7 @@ import pytest
 import osr2_broker.monitor as monitor_mod
 from osr2_broker import idle_warning
 from osr2_broker.config import PROJECT_DIR, load_config
+from tests.heard import what_is_said_on
 
 
 class FakeSocket:
@@ -203,42 +203,13 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
     assert persisted["alerted"] is True
 
 
-class _Heard(logging.Handler):
-    def __init__(self):
-        super().__init__()
-        self._lines = queue.Queue()
-
-    def emit(self, record):
-        self._lines.put(record.getMessage())
-
-    def first_saying(self, words, *, timeout):
-        deadline = _time.monotonic() + timeout
-        while True:
-            line = self._lines.get(timeout=max(deadline - _time.monotonic(), 0.0))
-            if words in line:
-                return line
-
-
-@contextmanager
-def _what_the_broker_says():
-    logger = logging.getLogger("test.broker")
-    heard, level = _Heard(), logger.level
-    logger.addHandler(heard)
-    logger.setLevel(logging.INFO)
-    try:
-        yield heard
-    finally:
-        logger.removeHandler(heard)
-        logger.setLevel(level)
-
-
 def test_the_broker_logs_how_an_idle_warning_ended(broker_app_module, cfg_path):
     config = load_config(str(cfg_path))
     _an_idle_spell_already_due(config)
     crashed = subprocess.CompletedProcess(
         [], 0xC0000005, "", "Windows fatal exception: access violation\n")
 
-    with _what_the_broker_says() as heard, \
+    with what_is_said_on("test.broker") as heard, \
          patch.object(idle_warning, "show_until_closed", return_value=crashed):
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
         captured["poll_fn"]()
