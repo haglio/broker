@@ -50,6 +50,19 @@ def test_the_warnings_process_gets_no_console_and_is_not_told_to_start_hidden(cf
     assert "startupinfo" not in kwargs
 
 
+def test_what_the_warnings_process_says_comes_back_as_text(cfg_path):
+    config = load_config(str(cfg_path))
+    started = []
+
+    idle_warning.show_until_closed(
+        config, run=lambda argv, **kwargs: started.append(kwargs) or _closed(argv))
+
+    (kwargs,) = started
+    assert kwargs["capture_output"] is True
+    assert kwargs["text"] is True
+    assert kwargs["errors"] == "replace"
+
+
 def test_the_warning_asks_whether_he_forgot_to_turn_the_osr2_off(cfg_factory):
     config_path = cfg_factory({"idle_minutes": 20.0})
 

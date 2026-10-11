@@ -17,6 +17,7 @@ def show_until_closed(config: BrokerConfig, *, run=subprocess.run) -> subprocess
         [sys.executable, "-m", __spec__.name, "--config", str(config.config_path)],
         cwd=PROJECT_DIR,
         creationflags=subprocess.CREATE_NO_WINDOW,
+        capture_output=True, text=True, errors="replace",
     )
 
 
