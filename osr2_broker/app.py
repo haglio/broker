@@ -215,7 +215,11 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
         logger.info("OSR2 idle for %.0f minutes — showing alert", idle_threshold / 60)
 
         def _show_and_acknowledge():
-            idle_warning.show_until_closed(config)
+            ended = idle_warning.show_until_closed(config)
+            said = ended.stderr.strip()
+            logger.log(logging.INFO if ended.returncode == 0 else logging.WARNING,
+                       "Idle warning ended: exit code %#x%s",
+                       ended.returncode, f"\n{said}" if said else "")
             state.acknowledge()
 
         threading.Thread(target=_show_and_acknowledge, daemon=True).start()

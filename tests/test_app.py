@@ -5,6 +5,7 @@ import importlib
 import json
 import logging
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -169,6 +170,15 @@ def test_shutdown_is_allowed_when_the_device_has_never_reported(broker_app_modul
     assert captured["should_block_fn"]() is False
 
 
+def _an_idle_spell_already_due(config):
+    now = _time.time()
+    monitor_mod.save_idle_state(
+        config.osr2_idle_state_file,
+        idle_since=now - config.idle_minutes * 60.0 - 1.0, alerted=False,
+    )
+    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # device on
+
+
 def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_module, cfg_path):
     """The idle state seeded from osr2_idle_state.txt must feed the poll: a
     countdown that had already elapsed before the restart alerts on the first
@@ -176,22 +186,66 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
 
 
     config = load_config(str(cfg_path))
-    now = _time.time()
-    idle_threshold = config.idle_minutes * 60.0
-    monitor_mod.save_idle_state(
-        config.osr2_idle_state_file, idle_since=now - idle_threshold - 1.0, alerted=False,
-    )
-    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # device on
+    _an_idle_spell_already_due(config)
 
     warned = threading.Event()
-    with patch.object(idle_warning, "show_until_closed",
-                      side_effect=lambda *a, **kw: warned.set()):
+
+    def closed(_config):
+        warned.set()
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    with patch.object(idle_warning, "show_until_closed", side_effect=closed):
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
         captured["poll_fn"]()
+        assert warned.wait(timeout=5.0), "the idle alert never reached the warning"
 
-    assert warned.wait(timeout=5.0), "the idle alert never reached the warning"
     persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
     assert persisted["alerted"] is True
+
+
+class _Heard(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self._lines = queue.Queue()
+
+    def emit(self, record):
+        self._lines.put(record.getMessage())
+
+    def first_saying(self, words, *, timeout):
+        deadline = _time.monotonic() + timeout
+        while True:
+            line = self._lines.get(timeout=max(deadline - _time.monotonic(), 0.0))
+            if words in line:
+                return line
+
+
+@contextmanager
+def _what_the_broker_says():
+    logger = logging.getLogger("test.broker")
+    heard, level = _Heard(), logger.level
+    logger.addHandler(heard)
+    logger.setLevel(logging.INFO)
+    try:
+        yield heard
+    finally:
+        logger.removeHandler(heard)
+        logger.setLevel(level)
+
+
+def test_the_broker_logs_how_an_idle_warning_ended(broker_app_module, cfg_path):
+    config = load_config(str(cfg_path))
+    _an_idle_spell_already_due(config)
+    crashed = subprocess.CompletedProcess(
+        [], 0xC0000005, "", "Windows fatal exception: access violation\n")
+
+    with _what_the_broker_says() as heard, \
+         patch.object(idle_warning, "show_until_closed", return_value=crashed):
+        captured = _start_monitor_with_fake_guard(broker_app_module, config)
+        captured["poll_fn"]()
+        ended = heard.first_saying("Idle warning", timeout=5.0)
+
+    assert "0xc0000005" in ended
+    assert "Windows fatal exception: access violation" in ended
 
 
 def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_path):
