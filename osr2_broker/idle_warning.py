@@ -6,9 +6,11 @@ import subprocess
 import sys
 
 from app_support.cli import preparse_config_path
+from app_support.win32 import mutex_name, try_acquire_mutex
 from shared_ui.preview import Preview, preview_of, window_title
 
 from .config import PROJECT_DIR, BrokerConfig, load_config
+from .single_instance import MUTEX_IDLE_WARNING
 from .win32 import ICON_PATH, claim_taskbar_identity
 
 
@@ -43,6 +45,10 @@ def show_warning(title: str, message: str, *, button_text: str,
 
 def main(argv: list[str] | None = None) -> int:
     config = load_config(preparse_config_path(argv))
+    _one_on_screen_at_a_time = try_acquire_mutex(
+        mutex_name(MUTEX_IDLE_WARNING, config.config_path))
+    if _one_on_screen_at_a_time is None:
+        return 0
     show_warning(
         "OSR2 Broker",
         f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"

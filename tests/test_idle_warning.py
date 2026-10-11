@@ -5,6 +5,7 @@ import sys
 from unittest.mock import ANY, patch
 
 import pytest
+from app_support.win32 import mutex_name
 from PyQt6.QtWidgets import QApplication
 from shared_ui.alert import Level
 from shared_ui.palette import MAGENTA, PREVIEW_INK
@@ -12,6 +13,7 @@ from shared_ui.preview import Preview, preview_of
 
 from osr2_broker import idle_warning, win32
 from osr2_broker.config import PROJECT_DIR, load_config
+from osr2_broker.single_instance import MUTEX_IDLE_WARNING
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +68,10 @@ def test_what_the_warnings_process_says_comes_back_as_text(cfg_path):
 def test_the_warning_asks_whether_he_forgot_to_turn_the_osr2_off(cfg_factory):
     config_path = cfg_factory({"idle_minutes": 20.0})
 
-    with patch.object(idle_warning, "show_warning") as shown:
+    with (
+        patch.object(idle_warning, "try_acquire_mutex", return_value=1),
+        patch.object(idle_warning, "show_warning") as shown,
+    ):
         assert idle_warning.main(["--config", str(config_path)]) == 0
 
     shown.assert_called_once_with(
@@ -75,6 +80,20 @@ def test_the_warning_asks_whether_he_forgot_to_turn_the_osr2_off(cfg_factory):
         button_text="I don't know, did you?",
         shown_as=preview_of(PROJECT_DIR),
     )
+
+
+def test_a_second_warning_does_not_cover_one_still_showing(cfg_path):
+    config = load_config(str(cfg_path))
+    asked = []
+
+    with (
+        patch.object(idle_warning, "try_acquire_mutex", side_effect=asked.append),
+        patch.object(idle_warning, "show_warning") as shown,
+    ):
+        assert idle_warning.main(["--config", str(cfg_path)]) == 0
+
+    shown.assert_not_called()
+    assert asked == [mutex_name(MUTEX_IDLE_WARNING, config.config_path)]
 
 
 def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon(qapp):
