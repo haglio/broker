@@ -1,12 +1,12 @@
-"""The park command the broker writes is the one player_core publishes.
+"""The park command the broker writes is the one funestra publishes.
 
-The T-Code format is player_core's: every driver in the family spells a move
-through `funestra_core.tcode`, and the rest command a stopped driver leaves the
-device with is `funestra_core.tcode.PARK_COMMAND`. The broker parks with the same
-string on its own, when a room is paused, and it does not install player_core
+The T-Code format is funestra's: every driver in the family spells a move
+through `funestra.tcode`, and the rest command a stopped driver leaves the
+device with is `funestra.tcode.PARK_COMMAND`. The broker parks with the same
+string on its own, when a room is paused, and it does not install funestra
 -- a device daemon has no use for a video engine -- so the two spellings are
 held together here by reading the sibling checkout, the way this family's
-consumer gates do. Where no player_core checkout sits beside this one, which is
+consumer gates do. Where no funestra checkout sits beside this one, which is
 what CI clones, there is nothing to compare against and this skips.
 """
 
@@ -23,10 +23,10 @@ from osr2_broker.hold import PARK, HoldScheduler
 
 def _published(module: str, name: str):
     try:
-        checkout = sibling_checkout("player_core", near=Path(__file__))
+        checkout = sibling_checkout("funestra", near=Path(__file__))
     except RuntimeError:
-        pytest.skip("no player_core checkout beside this one to read the family's numbers from")
-    source = next(path for package in ("funestra_core", "player_core")
+        pytest.skip("no funestra checkout beside this one to read the family's numbers from")
+    source = next(path for package in ("funestra", "funestra_core", "player_core")
                   if (path := checkout / package / module).is_file())
     tree = ast.parse(source.read_text(encoding="utf-8"))
     for node in tree.body:
