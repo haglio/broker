@@ -420,6 +420,19 @@ class TestMainPublishesItsStateFiles:
 
         assert (config.state_dir / "broker_mode.txt").read_text(encoding="utf-8") == "0"
 
+    def test_a_started_broker_says_which_checkout_it_runs_from(self, broker_app_module, cfg_path):
+        config = load_config(str(cfg_path))
+        FakeSerial = make_fake_serial([])
+
+        def stop_on_first_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        with _main_running(broker_app_module, fake_serial=FakeSerial,
+                           sleep=stop_on_first_sleep):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        assert config.broker_checkout_file.read_text(encoding="utf-8") == str(PROJECT_DIR)
+
     def test_a_started_broker_takes_the_mode_file_out_from_under_its_old_name(
         self, broker_app_module, cfg_path,
     ):

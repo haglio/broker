@@ -89,10 +89,17 @@ class BrokerSupervisor:
         ]
 
     def start(self) -> None:
-        """Launch a broker, unless one is already up."""
-        if self.is_running():
-            return
-        self._launch(self._broker_argv())
+        """Launch a broker, unless one from this checkout is already up."""
+        if not self.is_running():
+            self._launch(self._broker_argv())
+        elif self._running_from() != str(PROJECT_DIR):
+            self.restart()
+
+    def _running_from(self) -> str | None:
+        try:
+            return self._config.broker_checkout_file.read_text(encoding="utf-8")
+        except OSError:
+            return None
 
     def stop(self) -> None:
         self._terminate()
@@ -235,7 +242,7 @@ def launch_broker(argv: list[str], config, logger) -> None:
     launcher_log = config.log_file("broker_service_launcher").open("a", encoding="utf-8")
     subprocess.Popen(
         argv,
-        cwd=str(config.project_dir),
+        cwd=str(PROJECT_DIR),
         stdout=launcher_log,
         stderr=subprocess.STDOUT,
         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,

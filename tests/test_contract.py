@@ -75,7 +75,7 @@ def test_publishing_writes_the_document_where_a_supervisor_would_look(tmp_path):
 
 
 class TestWhereTheseFilesLive:
-    """The directory the six state files sit in, which three apps meet at.
+    """The directory the state files sit in, which three apps meet at.
 
     This one writes them, a session and Origenerator read them, and only one of
     the three is always running -- so they live in the orchestrator's state

@@ -33,10 +33,13 @@ The monitor runs on a dedicated daemon thread with its own Win32 message pump (S
 Every worktree carries `launch_preview_branch.vbs` (tracked, rendered from its
 spec in `pyproject.toml`). Double-clicking it runs that worktree's tray in place
 of the one the user runs every day, on the everyday checkout's venv and config,
-so it watches the same broker: the usual tray is ended as the preview starts,
-and started again when the preview is quit, or on its own an hour later
-(`osr2_broker/branch_session.py`). That shape is the user's choice (2026-09-28),
-the same one Evolver's preview has. Never launch the preview yourself.
+and that tray runs the worktree's broker in place of the everyday one: a tray
+replaces any broker another checkout started, which each broker records in
+`broker_checkout.txt` in the state directory. The usual tray is ended as the
+preview starts, and started again when the preview is quit, or on its own an
+hour later (`osr2_broker/branch_session.py`), and it takes the everyday broker
+back the same way. That shape is the user's choice (2026-09-28), the same one
+Evolver's preview has. Never launch the preview yourself.
 
 ## Config
 
