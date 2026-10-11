@@ -1,4 +1,4 @@
-"""Win32 API wrappers for notifications and shutdown blocking."""
+"""Win32 API wrappers for the taskbar identity and shutdown blocking."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import ctypes.wintypes as wt
 import logging
 
 from app_support.win32 import set_app_user_model_id
-from shared_ui.preview import Preview, taskbar_identity, window_title
+from shared_ui.preview import Preview, taskbar_identity
 
 from .config import PROJECT_DIR
 
@@ -30,30 +30,6 @@ def claim_taskbar_identity(shown_as: Preview | None) -> None:
     except OSError:
         logging.getLogger(__name__).warning(
             "Could not claim the taskbar identity", exc_info=True)
-
-
-# --- Warning dialog ---
-
-def show_warning(title: str, message: str, button_text: str = "OK", *,
-                 shown_as: Preview | None) -> None:
-    """Show the family's warning dialog under the broker's own identity.
-
-    Blocks until dismissed.  The taskbar identity goes first: Windows reads it
-    when a window of this process first appears, and without one the dialog's
-    taskbar button wears the python host's icon rather than the broker's.
-    """
-    # Local: shared_ui.alert is Qt, and the broker process imports this module
-    # without ever wanting a toolkit unless a warning actually has to be shown.
-    from PyQt6.QtWidgets import QApplication  # noqa: PLC0415
-    from shared_ui.alert import Level, show_alert  # noqa: PLC0415
-    from shared_ui.preview_icon import app_icon  # noqa: PLC0415
-
-    claim_taskbar_identity(shown_as)
-    _the_app_its_icon_is_drawn_in = QApplication.instance() or QApplication([])
-    show_alert(
-        window_title(title, shown_as), message,
-        level=Level.WARNING, icon=app_icon(ICON_PATH, shown_as), button_text=button_text,
-    )
 
 
 # --- Shutdown blocking via hidden window ---
