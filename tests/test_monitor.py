@@ -1,7 +1,10 @@
 
 from __future__ import annotations
 
+import json
+
 from osr2_broker.monitor import (
+    REARM_SECONDS,
     MonitorOutcome,
     MonitorState,
     load_idle_state,
@@ -181,10 +184,10 @@ class TestMonitorPoll:
         idle_file = tmp_path / "idle_state.txt"
         run_monitor_poll(state, now=1000.0, last_rx=995.0, last_tx=998.0,
                          auto_active=False, idle_state_file=idle_file, on_alert=lambda: None)
-        assert load_idle_state(idle_file) == (None, False)
+        assert load_idle_state(idle_file, now=1000.0) == (None, False)
         run_monitor_poll(state, now=1500.0, last_rx=1495.0, last_tx=998.0,
                          auto_active=False, idle_state_file=idle_file, on_alert=lambda: None)
-        assert load_idle_state(idle_file) == (1000.0, False)
+        assert load_idle_state(idle_file, now=1500.0) == (1000.0, False)
 
     def test_poll_fires_on_alert_and_persists_alerted(self, tmp_path):
         state = MonitorState(idle_threshold=900.0, rx_stale_threshold=30.0, idle_since=1000.0)
@@ -194,27 +197,44 @@ class TestMonitorPoll:
                          auto_active=False, idle_state_file=idle_file,
                          on_alert=lambda: calls.append(1))
         assert calls == [1]
-        assert load_idle_state(idle_file) == (1000.0, True)
+        assert load_idle_state(idle_file, now=1950.0) == (1000.0, True)
 
 
 class TestIdleStatePersistence:
     def test_save_and_load_round_trip(self, tmp_path):
         p = tmp_path / "idle_state.txt"
-        save_idle_state(p, idle_since=1711900000.5, alerted=True)
-        assert load_idle_state(p) == (1711900000.5, True)
+        save_idle_state(p, idle_since=1711900000.5, alerted=True, saved_at=1711900100.0)
+        assert load_idle_state(p, now=1711900110.0) == (1711900000.5, True)
 
     def test_save_and_load_none_idle_since(self, tmp_path):
         p = tmp_path / "idle_state.txt"
-        save_idle_state(p, idle_since=None, alerted=False)
-        assert load_idle_state(p) == (None, False)
+        save_idle_state(p, idle_since=None, alerted=False, saved_at=1000.0)
+        assert load_idle_state(p, now=1010.0) == (None, False)
+
+    def test_a_countdown_saved_moments_before_a_restart_is_resumed(self, tmp_path):
+        p = tmp_path / "idle_state.txt"
+        save_idle_state(p, idle_since=1000.0, alerted=True, saved_at=2000.0)
+        assert load_idle_state(p, now=2000.0 + REARM_SECONDS) == (1000.0, True)
+
+    def test_a_countdown_saved_longer_ago_than_a_re_arm_takes_starts_fresh(self, tmp_path):
+        """No broker watched the OSR2 in between, so it may have been switched
+        off long enough to re-arm, and on again."""
+        p = tmp_path / "idle_state.txt"
+        save_idle_state(p, idle_since=1000.0, alerted=True, saved_at=2000.0)
+        assert load_idle_state(p, now=2000.0 + REARM_SECONDS + 1.0) == (None, False)
+
+    def test_a_countdown_saved_without_its_time_starts_fresh(self, tmp_path):
+        p = tmp_path / "idle_state.txt"
+        p.write_text(json.dumps({"idle_since": 1000.0, "alerted": True}), encoding="utf-8")
+        assert load_idle_state(p, now=1001.0) == (None, False)
 
     def test_a_first_run_with_nothing_saved_starts_the_countdown_fresh(self, tmp_path):
-        assert load_idle_state(tmp_path / "nonexistent.txt") == (None, False)
+        assert load_idle_state(tmp_path / "nonexistent.txt", now=1000.0) == (None, False)
 
     def test_an_unreadable_saved_countdown_starts_fresh_rather_than_failing(self, tmp_path):
         p = tmp_path / "idle_state.txt"
         p.write_text("not json at all")
-        assert load_idle_state(p) == (None, False)
+        assert load_idle_state(p, now=1000.0) == (None, False)
 
 
 class TestFileReaders:

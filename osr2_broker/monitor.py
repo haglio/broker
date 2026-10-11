@@ -102,7 +102,7 @@ def run_monitor_poll(
     """Advance the monitor one tick, persist the idle state so the 15-min
     countdown survives a broker restart, and dispatch the idle alert."""
     action = state.update(now, last_rx, last_tx, auto_active)
-    save_idle_state(idle_state_file, state.idle_since, state.alerted)
+    save_idle_state(idle_state_file, state.idle_since, state.alerted, saved_at=now)
     if action == MonitorOutcome.IDLE_ALERT:
         on_alert()
     return action
@@ -115,19 +115,21 @@ def read_timestamp(path: Path) -> float | None:
         return None
 
 
-def save_idle_state(path: Path, idle_since: float | None, alerted: bool) -> None:
+def save_idle_state(path: Path, idle_since: float | None, alerted: bool, *, saved_at: float) -> None:
     try:
         path.write_text(
-            json.dumps({"idle_since": idle_since, "alerted": alerted}),
+            json.dumps({"idle_since": idle_since, "alerted": alerted, "saved_at": saved_at}),
             encoding="utf-8",
         )
     except OSError:
         pass
 
 
-def load_idle_state(path: Path) -> tuple[float | None, bool]:
+def load_idle_state(path: Path, *, now: float) -> tuple[float | None, bool]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        if now - float(data["saved_at"]) > REARM_SECONDS:
+            return None, False
         idle_since = data["idle_since"]
         idle_since = float(idle_since) if idle_since is not None else None
         return idle_since, bool(data["alerted"])
