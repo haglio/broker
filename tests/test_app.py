@@ -4,6 +4,8 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
+import subprocess
 import sys
 import threading
 import time as _time
@@ -15,7 +17,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import osr2_broker.monitor as monitor_mod
-from osr2_broker.config import load_config
+from osr2_broker import idle_warning
+from osr2_broker.config import PROJECT_DIR, load_config
 
 
 class FakeSocket:
@@ -181,12 +184,12 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
     config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # device on
 
     warned = threading.Event()
-    with patch.object(broker_app_module, "show_warning",
-               side_effect=lambda *a, **kw: warned.set()):
+    with patch.object(idle_warning, "show_until_closed",
+                      side_effect=lambda *a, **kw: warned.set()):
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
         captured["poll_fn"]()
 
-    assert warned.wait(timeout=5.0), "the idle alert never reached show_warning"
+    assert warned.wait(timeout=5.0), "the idle alert never reached the warning"
     persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
     assert persisted["alerted"] is True
 
@@ -200,14 +203,24 @@ def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_p
     config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")
 
     warned = []
-    with patch.object(broker_app_module, "show_warning",
-               side_effect=lambda *a, **kw: warned.append(True)):
+    with patch.object(idle_warning, "show_until_closed",
+                      side_effect=lambda *a, **kw: warned.append(True)):
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
         captured["poll_fn"]()
 
     assert warned == []
     persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
     assert persisted["alerted"] is False
+
+
+def test_the_broker_process_never_loads_qt_widgets():
+    environment = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    done = subprocess.run(
+        [sys.executable, "-c",
+         "import sys, osr2_broker.app; print('PyQt6.QtWidgets' in sys.modules)"],
+        cwd=PROJECT_DIR, env=environment, capture_output=True, text=True, check=True,
+    )
+    assert done.stdout.strip() == "False"
 
 
 @contextmanager

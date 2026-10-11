@@ -40,11 +40,13 @@ PACKAGE = "osr2_broker"
 
 # ``-m osr2_broker.tray`` runs tray.py, which is both the entrypoint and the
 # module holding main(); it spawns the broker as ``-m osr2_broker.app``, whose
-# own entrypoint is __main__.py.
+# own entrypoint is __main__.py, and the broker spawns each idle warning as
+# ``-m osr2_broker.idle_warning``.
 LAUNCH_FILES = (
     REPO_ROOT / PACKAGE / "tray.py",
     REPO_ROOT / PACKAGE / "__main__.py",
     REPO_ROOT / PACKAGE / "app.py",
+    REPO_ROOT / PACKAGE / "idle_warning.py",
 )
 
 # Reached only from inside a main(), so a module-level import test never saw
@@ -54,6 +56,7 @@ _REACHED_ONLY_FROM_INSIDE_MAIN = (
     "osr2_broker.config",
     "osr2_broker.win32",
     "osr2_broker.monitor",
+    "shared_ui.alert",
 )
 
 

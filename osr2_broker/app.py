@@ -12,10 +12,10 @@ from app_support.file_channel import consume_command_file
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import mutex_name, try_acquire_mutex
-from shared_ui.preview import preview_of
 
+from . import idle_warning
 from .activity import ActivityStamp
-from .config import PROJECT_DIR, load_config
+from .config import load_config
 from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
 from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
 from .power_on import PowerOnWatch
@@ -23,7 +23,7 @@ from .protocol import BrokerAutoController
 from .session import BrokerSerialSession
 from .single_instance import MUTEX_BROKER
 from .state_files import heartbeat_loop, rename_last_sessions_mode_file, write_mode
-from .win32 import ShutdownGuard, show_warning
+from .win32 import ShutdownGuard
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
 # How often the retry loop asks whether an absent OSR2 port has come back.  Short
@@ -215,13 +215,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
         logger.info("OSR2 idle for %.0f minutes — showing alert", idle_threshold / 60)
 
         def _show_and_acknowledge():
-            show_warning(
-                "OSR2 Broker",
-                f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"
-                "Did you forget to turn it off?",
-                button_text="I don't know, did you?",
-                shown_as=preview_of(PROJECT_DIR),
-            )
+            idle_warning.show_until_closed(config)
             state.acknowledge()
 
         threading.Thread(target=_show_and_acknowledge, daemon=True).start()
