@@ -204,7 +204,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
     tx_file = config.osr2_serial_tx_file
     idle_state_file = config.osr2_idle_state_file
 
-    idle_since, alerted = load_idle_state(idle_state_file)
+    idle_since, alerted = load_idle_state(idle_state_file, now=time.time())
     state = MonitorState(
         idle_threshold=idle_threshold,
         rx_stale_threshold=RX_STALE_THRESHOLD,
