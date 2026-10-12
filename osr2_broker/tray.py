@@ -23,7 +23,7 @@ from shared_ui.preview_icon import app_icon
 
 from . import branch_session, peer_watch
 from .config import PROJECT_DIR, load_config
-from .process_names import BROKER_ROLE, NAMER, TRAY_ROLE
+from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 from .state_files import BrokerMode
 from .win32 import ICON_PATH, claim_taskbar_identity
@@ -111,13 +111,10 @@ class BrokerSupervisor:
         self._launch(self._broker_argv())
 
 
-APP_TITLE = "OSR2 Broker"
-
-
 class BrokerTray(QSystemTrayIcon):
     """Tray icon exposing the broker's status and controls."""
 
-    def __init__(self, name: str = APP_TITLE, parent=None):
+    def __init__(self, name: str = APP_NAME, parent=None):
         super().__init__(parent)
         self._name = name
 
@@ -302,7 +299,7 @@ def _name_this_process() -> None:
 
 def start_the_tray(config, logger, claim: int, *, hands_back: bool, shown_as: Preview | None,
                    quit_app):
-    tray = BrokerTray(window_title(APP_TITLE, shown_as))
+    tray = BrokerTray(window_title(APP_NAME, shown_as))
     tray.setIcon(app_icon(ICON_PATH, shown_as))
 
     supervisor = BrokerSupervisor(
