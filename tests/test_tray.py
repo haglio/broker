@@ -473,7 +473,7 @@ def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qap
     tray.set_status(running=False, mode="unknown")
     tray.quit_action.trigger()
 
-    assert tray.toolTip() == "OSR2 Broker — preview of the new idle alert: stopped"
+    assert tray.toolTip() == "Broker — preview of the new idle alert: stopped"
     assert handed_back == [42]
     assert quits == [True]
     assert hand_back_timer.interval() == branch_session.HAND_BACK_AFTER_MINUTES * 60_000
@@ -489,13 +489,21 @@ def test_a_preview_s_tray_wears_the_brokers_letter_in_the_preview_ink(qapp, cfg_
 
 
 def test_the_usual_tray_never_hands_itself_back(qapp, cfg_path):
-    tray, _, hand_back_timer = tray_module.start_the_tray(
+    _tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
         hands_back=False, shown_as=None, quit_app=lambda: None)
 
     assert hand_back_timer is None
-    tray.set_status(running=False, mode="unknown")
-    assert tray.toolTip() == "OSR2 Broker: stopped"
+
+
+def test_hovering_the_usual_tray_names_the_app_broker(qapp, cfg_path):
+    tray, _, _hand_back_timer = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), 42,
+        hands_back=False, shown_as=None, quit_app=lambda: None)
+
+    tray.set_status(running=True, mode="control")
+
+    assert tray.toolTip() == "Broker: running (control)"
 
 
 def test_tick_shows_the_broker_s_state_in_the_menu(tray, cfg_path):
@@ -518,7 +526,7 @@ def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
     assert tray.start_action.text() == "Restart Broker"
     assert _drawn(tray.start_action.icon()) == _family_mark("restart")
     assert tray.pause_action.isEnabled()
-    assert tray.toolTip() == "OSR2 Broker: running (auto)"
+    assert tray.toolTip() == "Broker: running (auto)"
 
 
 def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
@@ -530,15 +538,15 @@ def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
     assert tray.start_action.text() == "Start Broker"
     assert _drawn(tray.start_action.icon()) == _family_mark("play")
     assert not tray.pause_action.isEnabled()
-    assert tray.toolTip() == "OSR2 Broker: stopped"
+    assert tray.toolTip() == "Broker: stopped"
 
 
 def test_a_preview_s_tray_says_so_on_hover(qapp):
 
-    tray = BrokerTray("OSR2 Broker — preview of claude/example")
+    tray = BrokerTray("Broker — preview of claude/example")
     tray.set_status(running=True, mode="auto")
 
-    assert tray.toolTip() == "OSR2 Broker — preview of claude/example: running (auto)"
+    assert tray.toolTip() == "Broker — preview of claude/example: running (auto)"
 
 
 def test_a_preview_tray_wears_what_its_checkout_describes(monkeypatch):
