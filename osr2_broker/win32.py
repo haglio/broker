@@ -10,6 +10,7 @@ from app_support.win32 import set_app_user_model_id
 from shared_ui.preview import Preview, taskbar_identity
 
 from .config import PROJECT_DIR
+from .process_names import APP_NAME
 
 ICON_PATH = PROJECT_DIR / "broker_icon.ico"
 
@@ -165,7 +166,7 @@ class ShutdownGuard:
         _RegisterClassW(ctypes.byref(wc))
 
         self._hwnd = _CreateWindowExW(
-            0, self.CLASS_NAME, "OSR2 Broker", 0,
+            0, self.CLASS_NAME, APP_NAME, 0,
             0, 0, 0, 0,
             None, None, hinstance, None,
         )
