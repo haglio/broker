@@ -17,6 +17,7 @@ from . import idle_warning
 from .activity import ActivityStamp
 from .config import PROJECT_DIR, load_config
 from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
+from .osr2_device import SILENT_ONCE_OFF_S, switched_on
 from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
 from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
@@ -193,7 +194,6 @@ def wait_for_real_port(
 # Monitor integration
 # ---------------------------------------------------------------------------
 
-RX_STALE_THRESHOLD = 30.0
 MONITOR_POLL_INTERVAL_MS = 10_000
 
 
@@ -207,7 +207,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
     idle_since, alerted = load_idle_state(idle_state_file, now=time.time())
     state = MonitorState(
         idle_threshold=idle_threshold,
-        rx_stale_threshold=RX_STALE_THRESHOLD,
+        rx_stale_threshold=SILENT_ONCE_OFF_S,
         idle_since=idle_since,
         alerted=alerted,
     )
@@ -237,9 +237,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
         )
 
     def should_block_shutdown():
-        now = time.time()
-        last_rx = read_timestamp(rx_file)
-        device_on = last_rx is not None and (now - last_rx) < RX_STALE_THRESHOLD
+        device_on = switched_on(rx_file)
         if device_on:
             logger.info("Shutdown blocked — OSR2 is still on")
         return device_on

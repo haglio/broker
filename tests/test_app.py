@@ -147,13 +147,13 @@ def test_shutdown_is_blocked_while_the_device_is_on(broker_app_module, cfg_path)
 
 
 def test_shutdown_is_allowed_once_the_rx_stamp_goes_stale(broker_app_module, cfg_path):
-    """Past RX_STALE_THRESHOLD the device counts as off — shutdown proceeds.
+    """Past SILENT_ONCE_OFF_S the device counts as off — shutdown proceeds.
     With the fresh case above, this pins the comparison from both sides, so
     its sign cannot flip unseen (audit finding broker/all/tests/005)."""
 
 
     config = load_config(str(cfg_path))
-    stale = _time.time() - (broker_app_module.RX_STALE_THRESHOLD + 10.0)
+    stale = _time.time() - (broker_app_module.SILENT_ONCE_OFF_S + 10.0)
     config.osr2_serial_rx_file.write_text(str(stale), encoding="utf-8")
 
     captured = _start_monitor_with_fake_guard(broker_app_module, config)
