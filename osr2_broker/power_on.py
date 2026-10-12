@@ -18,9 +18,7 @@ from app_support.file_channel import stamp_age
 class PowerOnWatch:
     """Where one spell of the OSR2 talking ends and the next one begins."""
 
-    # Double the 30s within which the idle monitor calls the device on from
-    # its RX stamp, and which it has held for fifteen minutes at a stretch --
-    # so 30s is the observed ceiling on the gaps a powered OSR2 leaves.
+    # Four of the 15s gaps a powered OSR2 leaves between its own reports.
     # Erring long is deliberate: a missed park costs one button press, a
     # false one moves the device while it is in use.
     SILENCE_SECONDS = 60.0

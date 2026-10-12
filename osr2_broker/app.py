@@ -7,6 +7,7 @@ import threading
 import time
 
 import serial
+from app_support import osr2_device
 from app_support.cli import preparse_config_path
 from app_support.file_channel import consume_command_file, publish_whole
 from app_support.logging_utils import configure_logging, install_exception_logging
@@ -17,7 +18,6 @@ from . import idle_warning
 from .activity import ActivityStamp
 from .config import PROJECT_DIR, load_config
 from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
-from .osr2_device import SILENT_ONCE_OFF_S, switched_on
 from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
 from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
@@ -207,7 +207,6 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
     idle_since, alerted = load_idle_state(idle_state_file, now=time.time())
     state = MonitorState(
         idle_threshold=idle_threshold,
-        rx_stale_threshold=SILENT_ONCE_OFF_S,
         idle_since=idle_since,
         alerted=alerted,
     )
@@ -226,10 +225,11 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
         threading.Thread(target=_show_and_acknowledge, daemon=True).start()
 
     def poll():
+        now = time.time()
         run_monitor_poll(
             state,
-            now=time.time(),
-            last_rx=read_timestamp(rx_file),
+            now=now,
+            device_on=osr2_device.switched_on(rx_file, now=now),
             last_tx=read_timestamp(tx_file),
             auto_active=auto_mode.is_active,
             idle_state_file=idle_state_file,
@@ -237,7 +237,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
         )
 
     def should_block_shutdown():
-        device_on = switched_on(rx_file)
+        device_on = osr2_device.switched_on(rx_file)
         if device_on:
             logger.info("Shutdown blocked — OSR2 is still on")
         return device_on
