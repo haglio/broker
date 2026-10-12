@@ -15,6 +15,7 @@ from contextlib import ExitStack, contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
+from app_support.osr2_device import SILENT_ONCE_OFF_S
 
 import osr2_broker.monitor as monitor_mod
 from osr2_broker import idle_warning
@@ -146,14 +147,10 @@ def test_shutdown_is_blocked_while_the_device_is_on(broker_app_module, cfg_path)
     assert captured["should_block_fn"]() is True
 
 
-def test_shutdown_is_allowed_once_the_rx_stamp_goes_stale(broker_app_module, cfg_path):
-    """Past SILENT_ONCE_OFF_S the device counts as off — shutdown proceeds.
-    With the fresh case above, this pins the comparison from both sides, so
-    its sign cannot flip unseen (audit finding broker/all/tests/005)."""
-
-
+def test_shutdown_is_allowed_once_the_device_has_been_silent_for_the_shared_window(
+        broker_app_module, cfg_path):
     config = load_config(str(cfg_path))
-    stale = _time.time() - (broker_app_module.SILENT_ONCE_OFF_S + 10.0)
+    stale = _time.time() - (SILENT_ONCE_OFF_S + 0.5)
     config.osr2_serial_rx_file.write_text(str(stale), encoding="utf-8")
 
     captured = _start_monitor_with_fake_guard(broker_app_module, config)

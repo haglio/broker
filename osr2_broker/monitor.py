@@ -18,11 +18,10 @@ REARM_SECONDS = 60.0
 
 
 class MonitorState:
-    def __init__(self, idle_threshold: float = 900.0, rx_stale_threshold: float = 30.0,
+    def __init__(self, idle_threshold: float = 900.0,
                  rearm_seconds: float = REARM_SECONDS, idle_since: float | None = None,
                  alerted: bool = False):
         self._idle_threshold = idle_threshold
-        self._rx_stale_threshold = rx_stale_threshold
         self._rearm_seconds = rearm_seconds
         self._device_on = False
         self._device_on_since: float | None = None
@@ -49,12 +48,12 @@ class MonitorState:
     def update(
         self,
         now: float,
-        last_rx: float | None,
+        device_on: bool,
         last_tx: float | None,
         auto_mode: bool,
     ) -> MonitorOutcome | None:
         was_on = self._device_on
-        self._device_on = last_rx is not None and (now - last_rx) < self._rx_stale_threshold
+        self._device_on = device_on
         in_use = auto_mode or (last_tx is not None and (now - last_tx) < IN_USE_THRESHOLD)
 
         if not self._device_on:
@@ -93,7 +92,7 @@ def run_monitor_poll(
     state: MonitorState,
     *,
     now: float,
-    last_rx: float | None,
+    device_on: bool,
     last_tx: float | None,
     auto_active: bool,
     idle_state_file: Path,
@@ -101,7 +100,7 @@ def run_monitor_poll(
 ) -> MonitorOutcome | None:
     """Advance the monitor one tick, persist the idle state so the 15-min
     countdown survives a broker restart, and dispatch the idle alert."""
-    action = state.update(now, last_rx, last_tx, auto_active)
+    action = state.update(now, device_on, last_tx, auto_active)
     save_idle_state(idle_state_file, state.idle_since, state.alerted, saved_at=now)
     if action == MonitorOutcome.IDLE_ALERT:
         on_alert()

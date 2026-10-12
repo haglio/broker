@@ -24,7 +24,7 @@ from shared_ui.preview_icon import app_icon
 
 from . import branch_session, peer_watch
 from .config import PROJECT_DIR, load_config
-from .osr2_device import switched_on
+from app_support.osr2_device import switched_on
 from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 from .win32 import ICON_PATH, claim_taskbar_identity
