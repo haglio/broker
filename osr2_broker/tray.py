@@ -114,8 +114,8 @@ class BrokerSupervisor:
 class BrokerTray(QSystemTrayIcon):
     """Tray icon exposing the broker's status and controls."""
 
-    def __init__(self, name: str = APP_NAME, parent=None):
-        super().__init__(parent)
+    def __init__(self, name: str = APP_NAME):
+        super().__init__()
         self._name = name
 
         self._menu = build_menu()
