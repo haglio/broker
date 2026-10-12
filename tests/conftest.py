@@ -1,4 +1,3 @@
-"""Shared pytest fixtures for OSR2 Broker tests."""
 from __future__ import annotations
 
 import json
