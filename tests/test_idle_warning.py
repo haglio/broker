@@ -65,6 +65,17 @@ def test_what_the_warnings_process_says_comes_back_as_text(cfg_path):
     assert kwargs["errors"] == "replace"
 
 
+def test_the_warning_is_titled_broker(cfg_path):
+    with (
+        patch.object(idle_warning, "try_acquire_mutex", return_value=1),
+        patch.object(idle_warning, "show_warning") as shown,
+    ):
+        idle_warning.main(["--config", str(cfg_path)])
+
+    title, _message = shown.call_args.args
+    assert title == "Broker"
+
+
 def test_the_warning_asks_whether_he_forgot_to_turn_the_osr2_off(cfg_factory):
     config_path = cfg_factory({"idle_minutes": 20.0})
 
@@ -75,7 +86,7 @@ def test_the_warning_asks_whether_he_forgot_to_turn_the_osr2_off(cfg_factory):
         assert idle_warning.main(["--config", str(config_path)]) == 0
 
     shown.assert_called_once_with(
-        "OSR2 Broker",
+        ANY,
         "Your OSR2 has been idle for 20 minutes.\nDid you forget to turn it off?",
         button_text="I don't know, did you?",
         shown_as=preview_of(PROJECT_DIR),
@@ -98,11 +109,11 @@ def test_a_second_warning_does_not_cover_one_still_showing(cfg_path):
 
 def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon(qapp):
     with patch("shared_ui.alert.show_alert") as show_alert:
-        idle_warning.show_warning("OSR2 Broker", "Still going.", button_text="Got it",
+        idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=None)
 
     show_alert.assert_called_once_with(
-        "OSR2 Broker", "Still going.",
+        "Broker", "Still going.",
         level=Level.WARNING, icon=ANY, button_text="Got it",
     )
     assert _middle_of(show_alert.call_args.kwargs["icon"]) == MAGENTA
@@ -120,7 +131,7 @@ def test_the_process_claims_its_taskbar_identity_before_the_dialog_appears():
         ),
         patch("shared_ui.alert.show_alert", side_effect=lambda *a, **k: order.append("dialog")),
     ):
-        idle_warning.show_warning("OSR2 Broker", "Still going.", button_text="Got it",
+        idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=None)
 
     assert order == [win32.APP_USER_MODEL_ID, "dialog"]
@@ -137,10 +148,10 @@ def test_a_previews_warning_names_the_feature_it_demos_and_wears_the_preview_ink
         patch.object(win32, "set_app_user_model_id", side_effect=claimed.append),
         patch("shared_ui.alert.show_alert") as show_alert,
     ):
-        idle_warning.show_warning("OSR2 Broker", "Still going.", button_text="Got it",
+        idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=Preview(feature="the new idle alert"))
 
     title, _message = show_alert.call_args.args
-    assert title == "OSR2 Broker — preview of the new idle alert"
+    assert title == "Broker — preview of the new idle alert"
     assert _middle_of(show_alert.call_args.kwargs["icon"]) == PREVIEW_INK
     assert claimed == [f"{win32.APP_USER_MODEL_ID}.Preview"]
