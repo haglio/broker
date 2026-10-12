@@ -17,7 +17,7 @@ Else
 End If
 
 Sub Decide()
-  app = "OSR2 Broker"
+  app = "Broker"
   arguments = "-m osr2_broker.tray --config """ & root & "\osr2_broker_config.json"""
   interpreter = fso.BuildPath(root, ".venv\Scripts\pythonw.exe")
   If fso.FileExists(fso.BuildPath(root, ".venv\Scripts\Broker-Tray.exe")) Then interpreter = fso.BuildPath(root, ".venv\Scripts\Broker-Tray.exe")

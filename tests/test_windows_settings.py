@@ -10,10 +10,20 @@ from pathlib import Path
 
 from app_support.launcher import launchers
 
+from osr2_broker.process_names import APP_NAME
 from osr2_broker.win32 import APP_USER_MODEL_ID
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LISTED = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["haglio"]
+
+
+def test_windows_calls_the_app_by_the_name_it_shows_itself():
+    assert {launcher.file: launcher.app for launcher in launchers(REPO_ROOT)} == {
+        "launch_broker_tray.vbs": APP_NAME,
+        "launch_preview_branch.vbs": f"{APP_NAME} (branch preview)",
+    }
+    assert set(LISTED["shortcuts"]) == {APP_NAME}
+    assert set(LISTED["scheduled-tasks"]) == {APP_NAME}
 
 
 def test_what_the_list_starts_is_one_of_this_checkouts_launchers():
@@ -32,6 +42,6 @@ def test_each_shortcut_carries_the_identity_the_app_claims():
 
 
 def test_a_tray_that_died_is_started_again_within_two_minutes():
-    task = LISTED["scheduled-tasks"]["OSR2 Broker"]
+    task = LISTED["scheduled-tasks"][APP_NAME]
 
     assert (task["launcher"], task["every-minutes"]) == ("launch_broker_tray.vbs", 2)
