@@ -17,7 +17,7 @@ Else
 End If
 
 Sub Decide()
-  app = "OSR2 Broker (branch preview)"
+  app = "Broker (branch preview)"
   primary = fso.GetParentFolderName(fso.GetParentFolderName(fso.GetParentFolderName(root)))
   logPath = fso.BuildPath(root, "state\preview_branch.log")
   arguments = "-m osr2_broker.tray --config """ & primary & "\osr2_broker_config.json"""

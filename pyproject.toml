@@ -58,17 +58,17 @@ testpaths = ["tests"]
 [tool.haglio]
 siblings = ["app_support", "shared_ui"]
 
-# What launch_broker_tray.vbs starts: the file the "OSR2 Broker" scheduled task,
-# the pinned shortcut and Fun Time all run. The launcher is rendered from
-# this by `python -m app_support.launcher --write`.
+# What launch_broker_tray.vbs starts: the file the scheduled task, the pinned
+# shortcut and Fun Time all run. The launcher is rendered from this by
+# `python -m app_support.launcher --write`.
 [tool.haglio.launchers."launch_broker_tray.vbs"]
-app = "OSR2 Broker"
+app = "Broker"
 interpreter = "pythonw.exe"
 named-interpreter = "Broker-Tray.exe"
 run = '-m osr2_broker.tray --config "{root}\osr2_broker_config.json"'
 
 [tool.haglio.launchers."launch_preview_branch.vbs"]
-app = "OSR2 Broker (branch preview)"
+app = "Broker (branch preview)"
 interpreter = "pythonw.exe"
 venv = "primary"
 run = '-m osr2_broker.tray --config "{primary}\osr2_broker_config.json"'
@@ -79,13 +79,13 @@ environment = { BROKER_BRANCH_SESSION = "1" }
 # the scheduled task that starts the tray at sign-in and again within two minutes
 # of it dying. `python -m app_support.windows_settings --write` makes this machine
 # match every checkout's list.
-[tool.haglio.shortcuts."OSR2 Broker"]
+[tool.haglio.shortcuts."Broker"]
 launcher = "launch_broker_tray.vbs"
 icon = "broker_icon.ico"
 app-id = "OSR2Broker"
 places = ["taskbar", "checkout"]
 
-[tool.haglio.scheduled-tasks."OSR2 Broker"]
+[tool.haglio.scheduled-tasks."Broker"]
 launcher = "launch_broker_tray.vbs"
 every-minutes = 2
 
