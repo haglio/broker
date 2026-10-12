@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from app_support.cli import preparse_config_path
+from app_support.file_channel import read_flag
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.threading_utils import start_daemon_thread
@@ -23,27 +24,21 @@ from shared_ui.preview_icon import app_icon
 
 from . import branch_session, peer_watch
 from .config import PROJECT_DIR, load_config
+from .osr2_device import switched_on
 from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
-from .state_files import BrokerMode
 from .win32 import ICON_PATH, claim_taskbar_identity
 
 # How often the watchdog checks the broker is still there.
 WATCHDOG_INTERVAL_MS = 5_000
 
 
-def mode_text(mode_file: Path) -> str:
-    """Name the auto-mode the broker last recorded, or "unknown" if it hasn't."""
-    try:
-        raw = mode_file.read_text(encoding="utf-8")
-    except OSError:
-        return "unknown"
-
-    written = raw.replace("﻿", "").strip()
-    try:
-        return BrokerMode(written).label
-    except ValueError:
-        return f"mode={written}"
+def what_the_osr2_is_doing(config) -> str:
+    if not switched_on(config.osr2_serial_rx_file):
+        return "OSR2 off"
+    if read_flag(config.broker_mode_file, default=False):
+        return "but OSR2 in auto mode"
+    return "controlling OSR2"
 
 
 def open_in_editor(path: Path) -> None:
@@ -144,14 +139,10 @@ class BrokerTray(QSystemTrayIcon):
 
         self.setContextMenu(self._menu)
 
-    def set_status(self, running: bool, mode: str) -> None:
-        """Retitle the menu and tooltip for the broker's current state."""
-        if running:
-            self.status_action.setText(f"Broker status: running ({mode})")
-            self.setToolTip(f"{self._name}: running ({mode})")
-        else:
-            self.status_action.setText("Broker status: stopped")
-            self.setToolTip(f"{self._name}: stopped")
+    def set_status(self, running: bool, osr2: str) -> None:
+        status = f"running ({osr2})" if running else "stopped"
+        self.status_action.setText(f"Broker status: {status}")
+        self.setToolTip(f"{self._name}: {status}")
 
         self.start_action.setText("Restart Broker" if running else "Start Broker")
         self.start_action.setIcon(self._restart_mark if running else self._start_mark)
@@ -193,7 +184,7 @@ class BrokerTrayApp:
     def refresh(self) -> None:
         self._tray.set_status(
             running=self._supervisor.is_running(),
-            mode=mode_text(self._config.broker_mode_file),
+            osr2=what_the_osr2_is_doing(self._config),
         )
 
     def start_or_restart(self) -> None:

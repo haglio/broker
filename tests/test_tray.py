@@ -6,6 +6,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from app_support.file_channel import publish_stamp
 from app_support.win32 import mutex_name
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QIcon, QImage
@@ -20,7 +21,7 @@ from osr2_broker import tray as tray_module
 from osr2_broker.config import PROJECT_DIR, load_config
 from osr2_broker.process_names import BROKER_ROLE, NAMER
 from osr2_broker.single_instance import MUTEX_BROKER
-from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, _guarded_tick, mode_text
+from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, _guarded_tick
 from tests.heard import what_is_said_on
 
 
@@ -125,28 +126,6 @@ def test_each_command_wears_the_family_s_mark_as_the_evolver_s_menu_does(qapp):
     assert _drawn(tray.pause_action.icon()) == _family_mark("pause")
     assert _drawn(tray.log_action.icon()) == _family_mark("log")
     assert _drawn(tray.quit_action.icon()) == _family_mark("power")
-
-
-@pytest.mark.parametrize(
-    "written, expected",
-    [
-        ("0", "control"),
-        ("1", "auto"),
-        ("﻿1\r\n", "auto"),
-        ("7", "mode=7"),
-    ],
-)
-def test_mode_text_names_the_mode_the_broker_wrote(tmp_path, written, expected):
-
-    mode_file = tmp_path / "broker_mode.txt"
-    mode_file.write_text(written, encoding="utf-8")
-
-    assert mode_text(mode_file) == expected
-
-
-def test_mode_text_is_unknown_when_the_broker_has_written_nothing(tmp_path):
-
-    assert mode_text(tmp_path / "broker_mode.txt") == "unknown"
 
 
 def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
@@ -470,7 +449,7 @@ def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qap
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
         hands_back=True, shown_as=Preview(feature="the new idle alert"),
         quit_app=lambda: quits.append(True))
-    tray.set_status(running=False, mode="unknown")
+    tray.set_status(running=False, osr2="OSR2 off")
     tray.quit_action.trigger()
 
     assert tray.toolTip() == "Broker — preview of the new idle alert: stopped"
@@ -501,38 +480,67 @@ def test_hovering_the_usual_tray_names_the_app_broker(qapp, cfg_path):
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
         hands_back=False, shown_as=None, quit_app=lambda: None)
 
-    tray.set_status(running=True, mode="control")
+    tray.set_status(running=True, osr2="controlling OSR2")
 
-    assert tray.toolTip() == "Broker: running (control)"
+    assert tray.toolTip() == "Broker: running (controlling OSR2)"
 
 
-def test_tick_shows_the_broker_s_state_in_the_menu(tray, cfg_path):
-
+def _ticked(tray, cfg_path, *, mode_written: str | None, osr2_spoke: bool):
     config = load_config(cfg_path)
-    config.broker_mode_file.write_text("1", encoding="utf-8")
-    app = BrokerTrayApp(config, FakeSupervisor(running=True), tray)
+    if mode_written is not None:
+        config.broker_mode_file.write_text(mode_written, encoding="utf-8")
+    if osr2_spoke:
+        publish_stamp(config.osr2_serial_rx_file)
+    BrokerTrayApp(config, FakeSupervisor(running=True), tray).tick()
+    return tray
 
-    app.tick()
 
-    assert tray.status_action.text() == "Broker status: running (auto)"
+def test_hovering_says_the_broker_is_controlling_an_osr2_that_is_on(tray, cfg_path):
+
+    ticked = _ticked(tray, cfg_path, mode_written="0", osr2_spoke=True)
+
+    assert ticked.toolTip() == "Broker: running (controlling OSR2)"
+
+
+def test_a_broker_that_has_written_no_mode_yet_is_controlling_the_osr2(tray, cfg_path):
+
+    ticked = _ticked(tray, cfg_path, mode_written=None, osr2_spoke=True)
+
+    assert ticked.toolTip() == "Broker: running (controlling OSR2)"
+
+
+@pytest.mark.parametrize("mode_written", ["0", "1"])
+def test_hovering_says_the_osr2_is_off_while_it_has_not_spoken(tray, cfg_path, mode_written):
+
+    ticked = _ticked(tray, cfg_path, mode_written=mode_written, osr2_spoke=False)
+
+    assert ticked.toolTip() == "Broker: running (OSR2 off)"
+
+
+@pytest.mark.parametrize("mode_written", ["1", "﻿1\r\n"])
+def test_the_menu_says_when_the_osr2_runs_its_own_auto_mode(tray, cfg_path, mode_written):
+
+    ticked = _ticked(tray, cfg_path, mode_written=mode_written, osr2_spoke=True)
+
+    assert ticked.status_action.text() == "Broker status: running (but OSR2 in auto mode)"
 
 
 def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
 
     tray = BrokerTray()
-    tray.set_status(running=True, mode="auto")
+    tray.set_status(running=True, osr2="but OSR2 in auto mode")
 
-    assert tray.status_action.text() == "Broker status: running (auto)"
+    assert tray.status_action.text() == "Broker status: running (but OSR2 in auto mode)"
     assert tray.start_action.text() == "Restart Broker"
     assert _drawn(tray.start_action.icon()) == _family_mark("restart")
     assert tray.pause_action.isEnabled()
-    assert tray.toolTip() == "Broker: running (auto)"
+    assert tray.toolTip() == "Broker: running (but OSR2 in auto mode)"
 
 
 def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
 
     tray = BrokerTray()
-    tray.set_status(running=False, mode="unknown")
+    tray.set_status(running=False, osr2="OSR2 off")
 
     assert tray.status_action.text() == "Broker status: stopped"
     assert tray.start_action.text() == "Start Broker"
@@ -544,9 +552,9 @@ def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
 def test_a_preview_s_tray_says_so_on_hover(qapp):
 
     tray = BrokerTray("Broker — preview of claude/example")
-    tray.set_status(running=True, mode="auto")
+    tray.set_status(running=True, osr2="OSR2 off")
 
-    assert tray.toolTip() == "Broker — preview of claude/example: running (auto)"
+    assert tray.toolTip() == "Broker — preview of claude/example: running (OSR2 off)"
 
 
 def test_a_preview_tray_wears_what_its_checkout_describes(monkeypatch):

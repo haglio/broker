@@ -32,10 +32,6 @@ class BrokerMode(StrEnum):
     CONTROL = "0"
     AUTO = "1"
 
-    @property
-    def label(self) -> str:
-        return "control" if self is BrokerMode.CONTROL else "auto"
-
 
 def write_mode(path: Path, mode: BrokerMode, logger: logging.Logger) -> None:
     """Published whole: the orchestrator polls this, and a poller that caught a
