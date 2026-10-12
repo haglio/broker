@@ -10,6 +10,7 @@ from app_support.win32 import mutex_name, try_acquire_mutex
 from shared_ui.preview import Preview, preview_of, window_title
 
 from .config import PROJECT_DIR, BrokerConfig, load_config
+from .process_names import APP_NAME
 from .single_instance import MUTEX_IDLE_WARNING
 from .win32 import ICON_PATH, claim_taskbar_identity
 
@@ -50,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     if _one_on_screen_at_a_time is None:
         return 0
     show_warning(
-        "OSR2 Broker",
+        APP_NAME,
         f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"
         "Did you forget to turn it off?",
         button_text="I don't know, did you?",
