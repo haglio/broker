@@ -135,7 +135,6 @@ def _write_config(tmp_path: Path, overrides: dict | None = None) -> Path:
         "baud": 115200,
         "udp_host": "127.0.0.1",
         "udp_port": 50555,
-        "auto_stale_timeout": 8.0,
         "idle_minutes": 15.0,
         "mfp_config_path": str(mfp_dir / "MultiFunPlayer.config.json"),
         "tcode_udp_port": 50557,

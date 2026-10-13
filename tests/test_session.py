@@ -5,9 +5,14 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from app_support.file_channel import publish_stamp, stamp_age
+from app_support.osr2_device import ANSWERS_ONCE_OFF_S, switched_on
+from app_support.state_files import OSR2_SERIAL_RX
+
 from osr2_broker import session as session_module
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.hold import HoldScheduler
+from osr2_broker.question import DeviceQuestion
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
 from tests.conftest import FakePowerOn
 
@@ -70,7 +75,8 @@ class FakeAutoMode:
 def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
                     rx_activity=None, tx_activity=None,
                     is_retryable_error=lambda _exc: False,
-                    tcode_udp_port: int = 0, power_on=None):
+                    tcode_udp_port: int = 0, power_on=None, question=None,
+                    device_on=lambda: True):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = MagicMock()
     session = BrokerSerialSession(
@@ -79,7 +85,6 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         real_port="COM4",
         baud=115200,
         broker_cmd_file=Path("broker.cmd"),
-        auto_stale_timeout=2.0,
         stop_event=threading.Event(),
         broker_paused=threading.Event(),
         auto_mode=auto_mode,
@@ -93,6 +98,8 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         is_retryable_error=is_retryable_error,
         tcode_udp_port=tcode_udp_port,
         power_on=power_on or FakePowerOn(),
+        question=question,
+        device_on=device_on,
     )
     return session, auto_mode, logger
 
@@ -119,12 +126,12 @@ def test_park_schedules_delayed_write():
 
     session.handle_broker_command("PARK", sock)
     # Not written yet — still pending
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
     # Advance past the delay
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
@@ -137,7 +144,7 @@ def test_park_suppresses_mfp_forwarding():
 
     session.handle_broker_command("PARK", sock)
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     assert session._tcode_window.is_open() is True
 
 
@@ -151,7 +158,7 @@ def test_resume_cancels_pending_park():
     session.handle_broker_command("PARK", sock)
     session.handle_broker_command("RESUME", sock)
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
 
@@ -169,11 +176,11 @@ def test_retract_schedules_the_far_end_instead_of_home():
     sock = object()
 
     session.handle_broker_command("RETRACT", sock)
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
@@ -191,7 +198,7 @@ def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
 
     session.handle_broker_command("RETRACT", sock)
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(sock, real_port=MagicMock(), serial_write_lock=lock)
+    session.tick(sock, real_port=MagicMock(), serial_write_lock=lock)
 
     fired = [call.args[0] for call in logger.info.call_args_list]
     assert any("Retracting" in msg and "9999" in msg for msg in fired), fired
@@ -201,21 +208,21 @@ def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
 
 def test_auto_mode_deactivation_schedules_park():
     clock = [10.0]
-    session, auto_mode, _logger = _build_session(auto_active=True, monotonic=lambda: clock[0])
+    session, auto_mode, _logger = _build_session(auto_active=True, monotonic=lambda: clock[0],
+                                                 device_on=lambda: False)
     real_port = MagicMock()
     lock = threading.Lock()
     sock = object()
 
-    # Deactivate auto mode via stale timeout
-    session.last_real_rx_time = 7.0
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    # The device switched off, which ends its own auto mode
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
 
     # Park is pending now (auto went inactive), and the settle delay is not up
     real_port.write.assert_not_called()
 
     # Advance past delay
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
@@ -231,11 +238,11 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
     auto_mode.set_auto(sock, False)
 
     # Next tick should detect the deactivation via the flag
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(sock, real_port=real_port, serial_write_lock=lock)
+    session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I500\n")
 
 
@@ -263,67 +270,40 @@ def test_an_empty_tick_with_no_command_is_a_no_op():
     logger.info.assert_not_called()
 
 
-def test_maybe_disable_stale_auto_turns_off_auto_when_stale():
-    session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
-    session.last_real_rx_time = 7.0
+def test_the_devices_own_auto_mode_ends_once_it_is_switched_off():
+    session, auto_mode, logger = _build_session(auto_active=True, device_on=lambda: False)
     sock = object()
 
-    session.maybe_disable_stale_auto(sock)
+    session.end_auto_mode_once_switched_off(sock)
 
     assert auto_mode.set_auto_calls == [(sock, False)]
-    logger.warning.assert_called_once_with("AUTO stale timeout reached after %.2fs", 2.0)
+    logger.warning.assert_called_once_with("AUTO ended: the OSR2 has been switched off")
 
 
-def test_maybe_disable_stale_auto_leaves_a_paused_broker_alone():
-    """Paused means the user took over; even a genuinely stale rx must not
+def test_end_auto_mode_once_switched_off_leaves_a_paused_broker_alone():
+    """Paused means the user took over; even a device gone quiet must not
     flip AUTO without them knowing."""
-    session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
+    session, auto_mode, logger = _build_session(auto_active=True, device_on=lambda: False)
     session.broker_paused.set()
-    session.last_real_rx_time = 7.0  # stale: 3s old against a 2s timeout
 
-    session.maybe_disable_stale_auto(object())
-
-    assert auto_mode.set_auto_calls == []
-    logger.warning.assert_not_called()
-
-
-def test_maybe_disable_stale_auto_keeps_auto_on_while_rx_is_fresh():
-    """The fresh side of the timeout, pinned on its own: before this, deleting
-    the staleness comparison outright left the suite green (audit finding
-    broker/all/tests/001) — the timeout could degrade into 'AUTO off on every
-    tick' unnoticed."""
-    session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
-    session.last_real_rx_time = 10.0 - 1.9  # 0.1s inside the 2s timeout
-
-    session.maybe_disable_stale_auto(object())
+    session.end_auto_mode_once_switched_off(object())
 
     assert auto_mode.set_auto_calls == []
     logger.warning.assert_not_called()
 
 
-def test_maybe_disable_stale_auto_waits_until_something_has_been_received():
-    """Before the first real byte there is nothing to be stale relative to."""
-    session, auto_mode, logger = _build_session(auto_active=True, monotonic=lambda: 10.0)
-    session.last_real_rx_time = 0.0
+def test_end_auto_mode_once_switched_off_ignores_an_inactive_auto_mode():
+    session, auto_mode, logger = _build_session(auto_active=False, device_on=lambda: False)
 
-    session.maybe_disable_stale_auto(object())
-
-    assert auto_mode.set_auto_calls == []
-    logger.warning.assert_not_called()
-
-
-def test_maybe_disable_stale_auto_ignores_an_inactive_auto_mode():
-    session, auto_mode, logger = _build_session(auto_active=False, monotonic=lambda: 10.0)
-    session.last_real_rx_time = 7.0  # stale, but there is no AUTO to turn off
-
-    session.maybe_disable_stale_auto(object())
+    session.end_auto_mode_once_switched_off(object())
 
     assert auto_mode.set_auto_calls == []
     logger.warning.assert_not_called()
 
 
 def test_forward_real_to_virtual_updates_timestamp_and_handles_lines():
-    session, auto_mode, _logger = _build_session(monotonic=lambda: 12.5)
+    rx_activity = StampSpy()
+    session, auto_mode, _logger = _build_session(rx_activity=rx_activity)
     session_stop = threading.Event()
     retry_state = SessionRetryState()
     udp_sock = object()
@@ -350,7 +330,7 @@ def test_forward_real_to_virtual_updates_timestamp_and_handles_lines():
 
     session.forward_real_to_virtual(real, virt, udp_sock, session_stop, retry_state)
 
-    assert session.last_real_rx_time == 12.5
+    assert rx_activity.marks == 1
     assert virt.writes == [b"hello\r\n"]
     assert auto_mode.handle_line_calls == ["hello"]
     assert retry_state.value is False
@@ -893,7 +873,7 @@ def test_the_osr2_speaking_after_a_silence_schedules_a_park():
 
     real_port = MagicMock()
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(
+    session.tick(
         object(), real_port=real_port, serial_write_lock=threading.Lock(),
     )
     real_port.write.assert_called_once_with(b"L00000I500\n")
@@ -924,7 +904,7 @@ def test_the_osr2_talking_on_without_a_silence_is_left_alone():
 
     real_port = MagicMock()
     clock[0] = 12.0
-    session.tick_command_and_stale_timeout(
+    session.tick(
         object(), real_port=real_port, serial_write_lock=threading.Lock(),
     )
     real_port.write.assert_not_called()
@@ -973,3 +953,104 @@ def test_a_park_on_power_on_leaves_the_script_feed_running():
     )
 
     assert real.writes == [b"L50"]
+
+
+def _question(tmp_path: Path, clock: list[float]) -> DeviceQuestion:
+    return DeviceQuestion(answer_file=tmp_path / "osr2_serial_answer.txt",
+                          monotonic=lambda: clock[0], logger=MagicMock())
+
+
+def test_the_tick_asks_the_device_its_question_when_one_is_due(tmp_path):
+    session, _auto_mode, _logger = _build_session(question=_question(tmp_path, [10.0]))
+    real_port = MagicMock()
+
+    session.tick(object(), real_port=real_port,
+                                           serial_write_lock=threading.Lock())
+
+    real_port.write.assert_called_once_with(DeviceQuestion.QUESTION)
+
+
+def _forward(session, real, lock, *chunks: bytes) -> None:
+    pending = list(chunks)
+    session_stop = threading.Event()
+
+    class FakeVirt:
+        in_waiting = 1
+
+        def read(self, _size):
+            data = pending.pop(0)
+            if not pending:
+                session_stop.set()
+            return data
+
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, SessionRetryState(), lock)
+
+
+def test_no_question_goes_into_the_middle_of_a_command_being_forwarded(tmp_path):
+    session, _auto_mode, _logger = _build_session(question=_question(tmp_path, [10.0]))
+    real, lock = MagicMock(), threading.Lock()
+    _forward(session, real, lock, b"L05")
+    real.write.reset_mock()
+
+    session.tick(object(), real_port=real, serial_write_lock=lock)
+
+    real.write.assert_not_called()
+
+
+def test_the_question_goes_out_once_the_command_being_forwarded_has_ended(tmp_path):
+    session, _auto_mode, _logger = _build_session(question=_question(tmp_path, [10.0]))
+    real, lock = MagicMock(), threading.Lock()
+    _forward(session, real, lock, b"L05", b"00I100\n")
+    real.write.reset_mock()
+
+    session.tick(object(), real_port=real, serial_write_lock=lock)
+
+    real.write.assert_called_once_with(DeviceQuestion.QUESTION)
+
+
+def test_no_question_goes_out_while_the_device_runs_its_own_auto_mode(tmp_path):
+    session, _auto_mode, _logger = _build_session(auto_active=True,
+                                                  question=_question(tmp_path, [10.0]))
+    real = MagicMock()
+
+    session.tick(object(), real_port=real,
+                                           serial_write_lock=threading.Lock())
+
+    real.write.assert_not_called()
+
+
+def test_a_device_running_its_own_auto_mode_is_judged_by_what_it_says_unasked(tmp_path):
+    question = _question(tmp_path, [10.0])
+    question.heard("TCode v0.3")
+    publish_stamp(tmp_path / OSR2_SERIAL_RX)
+    session, _auto_mode, _logger = _build_session(auto_active=True, question=question)
+
+    session.tick(object(), real_port=MagicMock(),
+                                           serial_write_lock=threading.Lock())
+
+    assert switched_on(tmp_path, now=time.time() + ANSWERS_ONCE_OFF_S + 1.0)
+
+
+def test_the_devices_answer_is_stamped_as_it_arrives(tmp_path):
+    session, _auto_mode, _logger = _build_session(question=_question(tmp_path, [10.0]))
+    session_stop = threading.Event()
+
+    class FakeReal:
+        in_waiting = 12
+
+        def read(self, _size):
+            session_stop.set()
+            return b"TCode v0.3\r\n"
+
+    session.forward_real_to_virtual(FakeReal(), MagicMock(), object(), session_stop,
+                                    SessionRetryState())
+
+    assert stamp_age(tmp_path / "osr2_serial_answer.txt") is not None
+
+
+def test_the_devices_own_auto_mode_outlasts_a_quiet_spell_while_it_is_switched_on():
+    session, auto_mode, logger = _build_session(auto_active=True, device_on=lambda: True)
+
+    session.end_auto_mode_once_switched_off(object())
+
+    assert auto_mode.set_auto_calls == []

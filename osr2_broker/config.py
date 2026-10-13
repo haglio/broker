@@ -26,7 +26,6 @@ class BrokerConfig:
     baud: int
     udp_host: str
     udp_port: int
-    auto_stale_timeout: float
     idle_minutes: float
     # None when the config names no MFP config: there is then nothing to read
     # the port from and nothing to point at ours.
@@ -49,6 +48,10 @@ class BrokerConfig:
     @property
     def osr2_serial_rx_file(self) -> Path:
         return self.state_dir / state_files.OSR2_SERIAL_RX
+
+    @property
+    def osr2_serial_answer_file(self) -> Path:
+        return self.state_dir / state_files.OSR2_SERIAL_ANSWER
 
     @property
     def osr2_serial_tx_file(self) -> Path:
@@ -83,7 +86,6 @@ def load_config(config_path: str | Path | None = None) -> BrokerConfig:
         baud=require_typed(raw, "baud", path, cast=int),
         udp_host=require_typed(raw, "udp_host", path, cast=str),
         udp_port=require_typed(raw, "udp_port", path, cast=int),
-        auto_stale_timeout=require_typed(raw, "auto_stale_timeout", path, cast=float),
         idle_minutes=float(raw.get("idle_minutes", 15.0)),
         mfp_config_path=(resolve_path(project_dir, raw["mfp_config_path"])
                          if raw.get("mfp_config_path") else None),

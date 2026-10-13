@@ -118,7 +118,7 @@ def _session(logger, serial_factory) -> BrokerSerialSession:
         real_port="COM4",
         baud=115200,
         broker_cmd_file=Path("broker_cmd.txt"),
-        auto_stale_timeout=5.0,
+        device_on=lambda: True,
         stop_event=threading.Event(),
         broker_paused=threading.Event(),
         auto_mode=None,
