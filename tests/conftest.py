@@ -9,8 +9,18 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from PyQt6.QtWidgets import QApplication
 
 from tests.scratch import scratch_dir
+
+
+@pytest.fixture(scope="session")
+def qapp():
+    """Held for the run: a QApplication nothing refers to is collected the moment
+    it is built, and the next QSystemTrayIcon then faults the interpreter rather
+    than raising."""
+    app = QApplication.instance() or QApplication([])
+    yield app
 
 
 class FakePowerOn:
