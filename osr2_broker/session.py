@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
+from app_support import osr2_hold
+
 from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
 from .motion_log import HOLD, MFP, MotionLog
@@ -311,14 +313,14 @@ class BrokerSerialSession:
     def _retract(self, _udp_sock) -> None:
         self._holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
-    # The whole vocabulary, in one place. fun_time, genau and genaumacher write
-    # these into broker_cmd.txt; the family's consumer upper-cases whatever it reads,
-    # so the keys are the verbs as they arrive.
+    # The whole vocabulary. Every app asks with app_support.osr2_hold's verbs;
+    # the family's consumer upper-cases whatever it reads, so the keys are the
+    # verbs as they arrive.
     _VERBS = MappingProxyType({
         "PAUSE": _pause,
-        "RESUME": _resume,
-        "PARK": _park,
-        "RETRACT": _retract,
+        osr2_hold.RESUME: _resume,
+        osr2_hold.PARK: _park,
+        osr2_hold.RETRACT: _retract,
     })
 
     def end_auto_mode_once_switched_off(self, udp_sock) -> None:

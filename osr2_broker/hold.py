@@ -11,6 +11,8 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 
+from app_support import osr2_hold
+
 
 @dataclass(frozen=True)
 class Hold:
@@ -27,8 +29,12 @@ class Hold:
     fired_message: str
 
 
-PARK = Hold(b"L00000I500\n", "Parking OSR2 at position 0")
-RETRACT = Hold(b"L09999I500\n", "Retracting OSR2 to position 9999")
+def _moved_by(verb: str) -> bytes:
+    return f"{osr2_hold.hold_tcode(verb)}\n".encode("ascii")
+
+
+PARK = Hold(_moved_by(osr2_hold.PARK), "Parking OSR2 at position 0")
+RETRACT = Hold(_moved_by(osr2_hold.RETRACT), "Retracting OSR2 to position 9999")
 
 
 class HoldScheduler:
@@ -46,7 +52,7 @@ class HoldScheduler:
     serial write are outside, the latter also because it takes a second lock.
     """
 
-    DELAY_SECONDS = 1.0
+    DELAY_SECONDS = osr2_hold.HOLD_DELAY_S
     # After a hold is scheduled, MFP forwarding is muted for this long to swallow
     # the in-flight script tail. Past it, live MFP data self-heals the mute so a
     # lost RESUME can't leave the device muted indefinitely.

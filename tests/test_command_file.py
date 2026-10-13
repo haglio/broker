@@ -85,7 +85,7 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
     clock[0] = 11.2
     session.tick(object(), real_port=real_port, serial_write_lock=lock)
 
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
     scheduled = [c.args[0] for c in logger.info.call_args_list]
     assert scheduled.count("OmniPause: park scheduled") == 1
 
