@@ -4,9 +4,7 @@ import subprocess
 import sys
 from unittest.mock import ANY, patch
 
-import pytest
 from app_support.win32 import mutex_name
-from PyQt6.QtWidgets import QApplication
 from shared_ui.alert import Level
 from shared_ui.palette import MAGENTA, PREVIEW_INK
 from shared_ui.preview import Preview, preview_of
@@ -14,11 +12,6 @@ from shared_ui.preview import Preview, preview_of
 from osr2_broker import idle_warning, win32
 from osr2_broker.config import PROJECT_DIR, load_config
 from osr2_broker.single_instance import MUTEX_IDLE_WARNING
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    return QApplication.instance() or QApplication([])
 
 
 def _closed(argv, **_kwargs):

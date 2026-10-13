@@ -5,20 +5,12 @@ import os
 import uuid
 from unittest.mock import patch
 
-import pytest
 from app_support.win32 import is_mutex_held, try_acquire_mutex
-from PyQt6.QtWidgets import QApplication
 
 from osr2_broker import branch_session
 from osr2_broker.config import load_config
 from osr2_broker.process_names import NAMER
 from osr2_broker.single_instance import MUTEX_TRAY
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    app = QApplication.instance() or QApplication([])
-    yield app
 
 
 def test_reading_the_flag_keeps_it_from_everything_the_preview_starts(monkeypatch):

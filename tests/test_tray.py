@@ -10,7 +10,6 @@ from app_support.file_channel import publish_stamp
 from app_support.win32 import mutex_name
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QIcon, QImage
-from PyQt6.QtWidgets import QApplication
 from shared_ui.colors import BG_TERTIARY, BLUE, TEXT_SECONDARY
 from shared_ui.icons import glyph_pixmap
 from shared_ui.palette import PREVIEW_INK
@@ -23,12 +22,6 @@ from osr2_broker.process_names import BROKER_ROLE, NAMER
 from osr2_broker.single_instance import MUTEX_BROKER
 from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, _guarded_tick
 from tests.heard import what_is_said_on
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    app = QApplication.instance() or QApplication([])
-    yield app
 
 
 def test_menu_is_painted_in_the_shared_dark_palette(qapp):

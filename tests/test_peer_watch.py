@@ -13,7 +13,6 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PyQt6.QtWidgets import QApplication
 
 from osr2_broker import peer_watch
 from osr2_broker import tray as tray_module
@@ -24,18 +23,6 @@ from tests.conftest import _write_config
 from .test_tray import FakeSupervisor
 
 LOG = logging.getLogger("test.peer_watch")
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    """Held for the module, not made and dropped per test.
-
-    A QApplication nothing refers to is collected the moment it is built, and the
-    next QSystemTrayIcon then faults the interpreter rather than raising.
-    """
-
-    app = QApplication.instance() or QApplication([])
-    yield app
 
 
 @pytest.fixture
