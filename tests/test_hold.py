@@ -36,7 +36,19 @@ def test_a_scheduled_hold_is_not_written_until_the_settle_delay_has_passed():
     clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
     holds.fire_due(real_port, lock, _nothing)
 
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
+
+
+def test_a_park_sets_the_device_down_at_home_over_a_whole_second():
+    clock = [10.0]
+    holds, _logger = _build(clock)
+    real_port = MagicMock()
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 11.0
+    holds.fire_due(real_port, threading.Lock(), _nothing)
+
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
 def test_scheduling_mutes_mfp_at_once_rather_than_when_the_write_lands():
@@ -117,7 +129,7 @@ def test_a_handover_park_is_scheduled_without_muting_mfp():
     clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
     holds.fire_due(real_port, threading.Lock(), _nothing)
 
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
 def test_a_fired_hold_is_handed_back_to_the_caller():
@@ -177,7 +189,7 @@ def test_the_same_hold_asked_for_again_keeps_the_deadline_it_has():
     clock[0] = 11.0
     holds.fire_due(real_port, lock, _nothing)
 
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
     scheduled = [c.args[0] for c in logger.info.call_args_list]
     assert scheduled.count("OmniPause: park scheduled") == 1
 
@@ -314,4 +326,4 @@ def test_a_hold_fires_once_and_is_not_replayed_on_the_next_tick():
     holds.fire_due(real_port, lock, _nothing)
     holds.fire_due(real_port, lock, _nothing)
 
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")

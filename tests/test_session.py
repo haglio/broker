@@ -132,7 +132,7 @@ def test_park_schedules_delayed_write():
     # Advance past the delay
     clock[0] = 12.0
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
 def test_park_suppresses_mfp_forwarding():
@@ -223,7 +223,7 @@ def test_auto_mode_deactivation_schedules_park():
     # Advance past delay
     clock[0] = 12.0
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
 def test_auto_mode_deactivation_between_ticks_schedules_park():
@@ -243,7 +243,7 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
 
     clock[0] = 12.0
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
 def test_a_verb_the_broker_does_not_know_is_ignored():
@@ -876,7 +876,7 @@ def test_the_osr2_speaking_after_a_silence_schedules_a_park():
     session.tick(
         object(), real_port=real_port, serial_write_lock=threading.Lock(),
     )
-    real_port.write.assert_called_once_with(b"L00000I500\n")
+    real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
 def test_the_osr2_talking_on_without_a_silence_is_left_alone():
