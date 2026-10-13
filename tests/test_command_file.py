@@ -58,7 +58,7 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
         real_port="COM4",
         baud=115200,
         broker_cmd_file=cmd,
-        auto_stale_timeout=2.0,
+        device_on=lambda: True,
         stop_event=threading.Event(),
         broker_paused=threading.Event(),
         auto_mode=auto_mode,
@@ -75,15 +75,15 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
     real_port = MagicMock()
     lock = threading.Lock()
 
-    session.tick_command_and_stale_timeout(object(), real_port=real_port, serial_write_lock=lock)
+    session.tick(object(), real_port=real_port, serial_write_lock=lock)
     clock[0] = 10.5
-    session.tick_command_and_stale_timeout(object(), real_port=real_port, serial_write_lock=lock)
+    session.tick(object(), real_port=real_port, serial_write_lock=lock)
 
     # 11.2 is past the first tick's schedule (11.0) but short of where a replay
     # on the second tick would have pushed it (11.5): a replayed verb means no
     # write lands here.
     clock[0] = 11.2
-    session.tick_command_and_stale_timeout(object(), real_port=real_port, serial_write_lock=lock)
+    session.tick(object(), real_port=real_port, serial_write_lock=lock)
 
     real_port.write.assert_called_once_with(b"L00000I500\n")
     scheduled = [c.args[0] for c in logger.info.call_args_list]
@@ -104,7 +104,7 @@ def test_two_verbs_queued_between_ticks_are_both_acted_on_in_order(tmp_path: Pat
     session = BrokerSerialSession(
         serial_factory=MagicMock(), virtual_port="COM15", real_port="COM4", baud=115200,
         broker_cmd_file=cmd,
-        auto_stale_timeout=2.0, stop_event=threading.Event(), broker_paused=threading.Event(),
+        device_on=lambda: True, stop_event=threading.Event(), broker_paused=threading.Event(),
         auto_mode=auto_mode, logger=logger, start_thread=MagicMock(),
         consume_command=consume_command_file,
         rx_activity=ActivityStamp(tmp_path / "osr2_serial_rx.txt"),
@@ -113,7 +113,7 @@ def test_two_verbs_queued_between_ticks_are_both_acted_on_in_order(tmp_path: Pat
         power_on=FakePowerOn(), monotonic=lambda: 10.0,
     )
 
-    session.tick_command_and_stale_timeout(
+    session.tick(
         object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
 
     said = [c.args[0] for c in logger.info.call_args_list]

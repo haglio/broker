@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from app_support import osr2_device
 from app_support.threading_utils import wait_until
 
 from osr2_broker.activity import ActivityStamp
@@ -167,7 +168,7 @@ def _build_stack(tmp_path: Path):
         real_port="COM4",
         baud=115200,
         broker_cmd_file=broker_cmd_file,
-        auto_stale_timeout=2.0,
+        device_on=lambda: osr2_device.switched_on(tmp_path / "state"),
         stop_event=stop_event,
         broker_paused=broker_paused,
         auto_mode=controller,
@@ -306,28 +307,24 @@ class TestSerialForwarding:
 
 
 class TestBrokerCommands:
-    def test_pause_blocks_stale_timeout(self, tmp_path):
+    def test_pause_keeps_auto_mode_through_the_device_going_quiet(self, tmp_path):
         s = _build_stack(tmp_path)
         sock = object()
         s.controller.set_auto(sock, True)
-        s.session.last_real_rx_time = 1.0
-        s.clock.t = 10.0
 
         s.session.handle_broker_command("PAUSE", sock)
-        s.session.maybe_disable_stale_auto(sock)
+        s.session.end_auto_mode_once_switched_off(sock)
 
         assert s.controller.is_active is True
 
-    def test_resume_allows_stale_timeout(self, tmp_path):
+    def test_resume_lets_a_switched_off_device_end_auto_mode(self, tmp_path):
         s = _build_stack(tmp_path)
         sock = object()
         s.controller.set_auto(sock, True)
-        s.session.last_real_rx_time = 1.0
-        s.clock.t = 10.0
 
         s.session.handle_broker_command("PAUSE", sock)
         s.session.handle_broker_command("RESUME", sock)
-        s.session.maybe_disable_stale_auto(sock)
+        s.session.end_auto_mode_once_switched_off(sock)
 
         assert s.controller.is_active is False
 

@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 from app_support.cli import preparse_config_path
-from app_support.file_channel import read_flag
 from app_support.logging_utils import configure_logging, install_exception_logging
+from app_support.osr2_device import Osr2Mode, mode
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
@@ -24,7 +24,6 @@ from shared_ui.preview_icon import app_icon
 
 from . import branch_session, peer_watch
 from .config import PROJECT_DIR, load_config
-from app_support.osr2_device import switched_on
 from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 from .win32 import ICON_PATH, claim_taskbar_identity
@@ -33,12 +32,15 @@ from .win32 import ICON_PATH, claim_taskbar_identity
 WATCHDOG_INTERVAL_MS = 5_000
 
 
+_WHAT_THE_OSR2_IS_DOING = {
+    Osr2Mode.OFF: "OSR2 off",
+    Osr2Mode.AUTO: "but OSR2 in auto mode",
+    Osr2Mode.CONTROLLED: "controlling OSR2",
+}
+
+
 def what_the_osr2_is_doing(config) -> str:
-    if not switched_on(config.osr2_serial_rx_file):
-        return "OSR2 off"
-    if read_flag(config.broker_mode_file, default=False):
-        return "but OSR2 in auto mode"
-    return "controlling OSR2"
+    return _WHAT_THE_OSR2_IS_DOING[mode(config.state_dir)]
 
 
 def open_in_editor(path: Path) -> None:

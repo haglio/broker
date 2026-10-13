@@ -21,7 +21,6 @@ REQUIRED_KEYS: dict = {
     "baud": 115200,
     "udp_host": "127.0.0.1",
     "udp_port": 50555,
-    "auto_stale_timeout": 8.0,
 }
 
 

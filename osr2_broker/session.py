@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -10,6 +11,7 @@ from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
 from .motion_log import HOLD, MFP, MotionLog
 from .power_on import PowerOnWatch
+from .question import DeviceQuestion
 from .tcode_udp import TCodeWriteWindow, UdpTCodeListener
 
 
@@ -31,7 +33,7 @@ class BrokerSerialSession:
         real_port: str,
         baud: int,
         broker_cmd_file: Path,
-        auto_stale_timeout: float,
+        device_on: Callable[[], bool],
         stop_event,
         broker_paused,
         auto_mode,
@@ -46,13 +48,14 @@ class BrokerSerialSession:
         monotonic=time.monotonic,
         sleep=time.sleep,
         tcode_udp_port: int = 0,
+        question: DeviceQuestion | None = None,
     ):
         self.serial_factory = serial_factory
         self.virtual_port = virtual_port
         self.real_port = real_port
         self.baud = baud
         self.broker_cmd_file = broker_cmd_file
-        self.auto_stale_timeout = auto_stale_timeout
+        self.device_on = device_on
         self.stop_event = stop_event
         self.broker_paused = broker_paused
         self.auto_mode = auto_mode
@@ -63,11 +66,14 @@ class BrokerSerialSession:
         self.sleep = sleep
         self.is_retryable_error = is_retryable_error
         self.connected_event = connected_event
-        self.last_real_rx_time = 0.0
         self.poll_interval_seconds = 0.05
         self._rx_activity = rx_activity
         self._tx_activity = tx_activity
         self._power_on = power_on
+        self._question = question
+        # Whether the last bytes forwarded from the virtual port stopped short
+        # of a line's end: a question written then would land inside a command.
+        self._mid_command = False
         self._motion = MotionLog(logger=logger, monotonic=monotonic)
         self._holds = HoldScheduler(monotonic=monotonic, logger=logger)
         self._tcode_window = TCodeWriteWindow(monotonic=monotonic)
@@ -108,7 +114,6 @@ class BrokerSerialSession:
                 self.baud,
                 timeout=0.02,
             ) as real:
-                self.last_real_rx_time = 0.0
                 virt.write_timeout = 0.1
                 self._report_recovery()
                 self.connected_event.set()
@@ -140,7 +145,7 @@ class BrokerSerialSession:
                             self.logger.warning("Virtual port peer disconnected (DSR low), ending session")
                             peer_disconnected = True
                             break
-                        self.tick_command_and_stale_timeout(
+                        self.tick(
                             udp_sock, real_port=real, serial_write_lock=serial_write_lock,
                         )
                 finally:
@@ -200,7 +205,6 @@ class BrokerSerialSession:
         A switched-on OSR2 comes up half way along its travel, so the first
         thing it says is the cue to send it home.
         """
-        self.last_real_rx_time = self.monotonic()
         self._rx_activity.mark()
         if self._power_on.rx_broke_the_silence():
             self._holds.schedule_without_muting(PARK, "OSR2 powered on: park scheduled")
@@ -226,6 +230,8 @@ class BrokerSerialSession:
                     line = raw_line.rstrip(b"\r").decode("utf-8", errors="replace").strip()
                     if line:
                         self.auto_mode.handle_line(udp_sock, line)
+                        if self._question is not None:
+                            self._question.heard(line)
             except Exception as exc:
                 self.logger.exception("REAL->VIRT error")
                 retry_state.value = self.is_retryable_error(exc)
@@ -245,6 +251,7 @@ class BrokerSerialSession:
                         and not self._holds.suppresses_mfp()):
                     with serial_write_lock:
                         real.write(data)
+                        self._mid_command = not data.endswith(b"\n")
                     if queued:
                         self._tx_activity.mark()
                         self._motion.wrote(MFP)
@@ -254,15 +261,30 @@ class BrokerSerialSession:
                 session_stop.set()
                 return
 
-    def tick_command_and_stale_timeout(self, udp_sock, *, real_port, serial_write_lock) -> None:
+    def tick(self, udp_sock, *, real_port, serial_write_lock) -> None:
         for cmd in self.consume_command(self.broker_cmd_file):
             self.handle_broker_command(cmd, udp_sock)
-        self.maybe_disable_stale_auto(udp_sock)
+        self.end_auto_mode_once_switched_off(udp_sock)
         self._motion.tick()
         if self.auto_mode.consume_deactivation():
             self._holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
         if self._holds.fire_due(real_port, serial_write_lock, self._tcode_window.mark):
             self._motion.wrote(HOLD)
+        self._ask_the_device(real_port, serial_write_lock)
+
+    def _ask_the_device(self, real_port, serial_write_lock) -> None:
+        if self._question is None:
+            return
+        if self.auto_mode.is_active:
+            self._question.stand_down()
+            return
+        if not self._question.due():
+            return
+        with serial_write_lock:
+            if self._mid_command:
+                return
+            real_port.write(DeviceQuestion.QUESTION)
+        self._question.asked()
 
     def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
         """Act on one verb off the command file, or on nothing at all.
@@ -299,14 +321,12 @@ class BrokerSerialSession:
         "RETRACT": _retract,
     })
 
-    def maybe_disable_stale_auto(self, udp_sock) -> None:
+    def end_auto_mode_once_switched_off(self, udp_sock) -> None:
         if not self.auto_mode.is_active:
             return
         if self.broker_paused.is_set():
             return
-        if not self.last_real_rx_time:
+        if self.device_on():
             return
-        if self.monotonic() - self.last_real_rx_time <= self.auto_stale_timeout:
-            return
-        self.logger.warning("AUTO stale timeout reached after %.2fs", self.auto_stale_timeout)
+        self.logger.warning("AUTO ended: the OSR2 has been switched off")
         self.auto_mode.set_auto(udp_sock, False)
