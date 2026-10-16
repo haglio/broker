@@ -99,9 +99,12 @@ This repo is public at `github.com/haglio/broker` with a merge-queue ruleset on
   into its venv yourself.** `main` advances only on origin (via the queue), and
   app_support's production updater brings the primary checkout and its venv up
   to it, the libraries it pins first, as soon as nothing of his runs from it;
-  every launcher here does the same just before it starts the broker's tray. So a change
-  reaches him the next time he opens the broker's tray, and worktrees update with
-  `git rebase origin/main`.
+  every launcher here does the same just before it starts the broker's tray. The
+  tray never closes, so once the updater is waiting for it and the OSR2 is off,
+  it stops the broker and starts again through its launcher
+  (`osr2_broker.tray`, app_support's `UpdateWatch`), which brings the checkout
+  up first. So a change reaches the Broker within minutes of shipping, at the
+  first moment the OSR2 is off, and worktrees update with `git rebase origin/main`.
 - **A red required check** (`.github/workflows/merge-gate.yml`) can't land.
 
 Everything else in the global CLAUDE.md — work in a worktree, green tests before
