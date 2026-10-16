@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -394,6 +395,52 @@ def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
     assert quit_calls == [True]
 
 
+def test_making_way_for_an_update_stops_the_broker_before_the_next_tray_is_started(tray, cfg_path):
+    """Nothing of this checkout may still run while the next tray's launcher updates
+    it, and Evolver must go on bringing the tray back should that tray never start."""
+    supervisor = FakeSupervisor(running=True)
+    stood_down, started_with_the_broker_running, quit_calls = [], [], []
+    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
+                        stand_down=lambda: stood_down.append(True))
+
+    app.make_way_for_an_update(
+        start_the_next_tray=lambda: started_with_the_broker_running.append(supervisor.running),
+        quit_app=lambda: quit_calls.append(True))
+
+    assert started_with_the_broker_running == [False]
+    assert stood_down == []
+    assert not tray.isVisible()
+    assert quit_calls == [True]
+
+
+class FakeUpdateWatch:
+    def __init__(self):
+        self.ticks = 0
+
+    def tick(self):
+        self.ticks += 1
+
+
+def test_the_watchdog_looks_for_an_update_on_every_beat(tray, cfg_path):
+    updates = FakeUpdateWatch()
+    app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, updates=updates)
+
+    app.tick()
+
+    assert updates.ticks == 1
+
+
+def test_a_paused_broker_takes_no_update(tray, cfg_path):
+    """The next tray would come up knowing nothing of the pause, and start the broker."""
+    updates = FakeUpdateWatch()
+    app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, updates=updates)
+
+    app.pause()
+    app.tick()
+
+    assert updates.ticks == 0
+
+
 def test_a_second_tray_stands_down(cfg_path):
     """The scheduled task relaunches the tray every couple of minutes."""
 
@@ -466,6 +513,54 @@ def test_the_usual_tray_never_hands_itself_back(qapp, cfg_path):
         hands_back=False, shown_as=None, quit_app=lambda: None)
 
     assert hand_back_timer is None
+
+
+@pytest.fixture
+def an_update_waiting(monkeypatch):
+    """A beat of a tray start_the_tray builds reaches the machine's brokers and this
+    checkout's update; these stand in for both, and the tray may take it at once."""
+    happened = []
+    monkeypatch.setattr(tray_module.production_update, "UP_BEFORE_AN_UPDATE_S", 0.0)
+    monkeypatch.setattr(tray_module, "launch_broker", lambda argv, config, logger: None)
+    monkeypatch.setattr(tray_module, "terminate_broker", lambda logger: happened.append("stopped the broker"))
+    monkeypatch.setattr(tray_module.production_update, "waits_for_programs_to_close",
+                        lambda checkout: checkout == PROJECT_DIR)
+    monkeypatch.setattr(tray_module.production_update, "start_again_after",
+                        lambda pid, launcher: happened.append(f"{launcher.name} once {pid} has ended"))
+    return happened
+
+
+def test_the_usual_tray_starts_again_for_an_update_waiting_on_its_checkout(qapp, cfg_path, an_update_waiting):
+    _tray, tray_app, _ = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), 42,
+        hands_back=False, shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+
+    tray_app.tick()
+
+    assert an_update_waiting == [
+        "stopped the broker", f"launch_broker_tray.vbs once {os.getpid()} has ended", "quit"]
+
+
+def test_the_usual_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path, an_update_waiting):
+    config = load_config(cfg_path)
+    publish_stamp(config.osr2_serial_rx_file)
+    _tray, tray_app, _ = tray_module.start_the_tray(
+        config, logging.getLogger("test.tray"), 42,
+        hands_back=False, shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+
+    tray_app.tick()
+
+    assert an_update_waiting == []
+
+
+def test_a_preview_never_starts_again_for_an_update(qapp, cfg_path, an_update_waiting):
+    _tray, tray_app, _ = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), 42,
+        hands_back=True, shown_as=Preview(feature=None), quit_app=lambda: an_update_waiting.append("quit"))
+
+    tray_app.tick()
+
+    assert an_update_waiting == []
 
 
 def test_hovering_the_usual_tray_names_the_app_broker(qapp, cfg_path):

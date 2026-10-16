@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app_support import production_update
 from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.osr2_device import Osr2Mode, mode
@@ -155,12 +156,13 @@ class BrokerTrayApp:
     """Policy: keep a broker alive, and keep the tray telling the truth."""
 
     def __init__(self, config, supervisor, tray: BrokerTray, *, open_file=None,
-                 peer=None, stand_down=peer_watch.stand_broker_down, hand_back=None):
+                 peer=None, updates=None, stand_down=peer_watch.stand_broker_down, hand_back=None):
         self._config = config
         self._supervisor = supervisor
         self._tray = tray
         self._open_file = open_file or open_in_editor
         self._peer = peer
+        self._updates = updates
         self._stand_down = stand_down
         self._hand_back = hand_back
         self._paused = False
@@ -182,6 +184,8 @@ class BrokerTrayApp:
         if self._peer is not None:
             self._peer.tick()
         self.refresh()
+        if self._updates is not None and not self._paused:
+            self._updates.tick()
 
     def refresh(self) -> None:
         self._tray.set_status(
@@ -225,6 +229,12 @@ class BrokerTrayApp:
         else:
             self._stand_down()
             self._supervisor.stop()
+        self._tray.hide()
+        quit_app()
+
+    def make_way_for_an_update(self, *, start_the_next_tray, quit_app) -> None:
+        self._supervisor.stop()
+        start_the_next_tray()
         self._tray.hide()
         quit_app()
 
@@ -300,8 +310,16 @@ def start_the_tray(config, logger, claim: int, *, hands_back: bool, shown_as: Pr
         launch=lambda argv_: launch_broker(argv_, config, logger),
         terminate=lambda: terminate_broker(logger),
     )
+
+    updates = None if hands_back else production_update.UpdateWatch(
+        PROJECT_DIR, a_good_moment=lambda: mode(config.state_dir) is Osr2Mode.OFF,
+        start_again=lambda: tray_app.make_way_for_an_update(
+            start_the_next_tray=lambda: production_update.start_again_after(
+                os.getpid(), PROJECT_DIR / "launch_broker_tray.vbs"),
+            quit_app=quit_app),
+        logger=logger)
     tray_app = BrokerTrayApp(
-        config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger),
+        config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger), updates=updates,
         hand_back=(lambda: branch_session.hand_back(config, claim)) if hands_back else None)
     tray.quit_action.triggered.connect(lambda: tray_app.quit(quit_app))
     hand_back_timer = (branch_session.hand_back_later(lambda: tray_app.quit(quit_app))
