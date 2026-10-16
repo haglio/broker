@@ -4,7 +4,7 @@
 
 Option Explicit
 
-Dim fso, shell, root, app, interpreter, directory, arguments, primary, logPath
+Dim fso, shell, root, app, interpreter, directory, arguments, base, updater, gates, held(), primary, logPath
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
@@ -23,6 +23,9 @@ Sub Decide()
   arguments = "-m osr2_broker.tray --config """ & primary & "\osr2_broker_config.json"""
   interpreter = fso.BuildPath(primary, ".venv\Scripts\pythonw.exe")
   directory = root
+  base = primary
+  updater = fso.BuildPath(fso.GetParentFolderName(base), "app_support\.venv\Scripts\pythonw.exe")
+  gates = Array(fso.BuildPath(base, ".git\production-update.turn"))
 End Sub
 
 Sub Report()
@@ -34,16 +37,24 @@ Sub Report()
   WScript.Echo "log: " & logPath
   WScript.Echo "environment: " & "BROKER_BRANCH_SESSION" & "=" & "1"
   WScript.Echo "command: " & Command()
+  WScript.Echo "update: " & Update()
+  Dim gate
+  For Each gate In gates
+    WScript.Echo "gate: " & gate
+  Next
 End Sub
 
 Sub Launch()
   If Not fso.FileExists(interpreter) Then
     Refuse "The primary checkout's virtual environment is missing:" & vbCrLf & interpreter, vbCritical
   End If
+  CatchUp
+  HoldGates
   shell.Environment("Process").Item("BROKER_BRANCH_SESSION") = "1"
   logPath = FreeLog(logPath)
   Note logPath, "===== " & Now & " launch: " & Command()
   shell.Run Command(), 0, False
+  ReleaseGates
 End Sub
 
 Function Command()
@@ -65,6 +76,44 @@ End Sub
 Sub Refuse(message, icon)
   Tell message, icon
   WScript.Quit 1
+End Sub
+
+Function Update()
+  Update = Quote(updater) & " -m app_support.production_update --before-launch " & Quote(base)
+End Function
+
+Sub CatchUp()
+  If fso.FileExists(updater) Then shell.Run Update(), 0, True
+End Sub
+
+Sub HoldGates()
+  Dim index, waited
+  ReDim held(UBound(gates))
+  For index = 0 To UBound(gates)
+    If fso.FolderExists(fso.GetParentFolderName(gates(index))) Then
+      waited = 0
+      Do Until Holds(index)
+        If waited >= 900000 Then WScript.Quit 1
+        WScript.Sleep 500
+        waited = waited + 500
+      Loop
+    End If
+  Next
+End Sub
+
+Function Holds(index)
+  On Error Resume Next
+  Set held(index) = fso.OpenTextFile(gates(index), 1, True)
+  Holds = (Err.Number = 0)
+  Err.Clear
+  On Error GoTo 0
+End Function
+
+Sub ReleaseGates()
+  Dim index
+  For index = 0 To UBound(held)
+    If IsObject(held(index)) Then held(index).Close
+  Next
 End Sub
 
 Function FreeLog(preferred)
