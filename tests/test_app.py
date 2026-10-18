@@ -281,7 +281,7 @@ def test_the_broker_process_never_loads_qt_widgets():
 
 @contextmanager
 def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=None,
-                  retry_delay_seconds=None, port_present=True):
+                  retry_delay_seconds=None, osr2_adapters=("COM4",)):
     """main(), with everything it installs process-wide held off.
 
     `configure_logging` and `install_exception_logging` replace both excepthooks
@@ -292,10 +292,11 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
     the run loop -- raising KeyboardInterrupt out of it is main()'s ordinary
     shutdown path.
 
-    `serial_port_present` answers for the machine's real COM ports, which the
-    retry path asks about between attempts; it is answered here so a suite run
-    on a desk with no OSR2 plugged in does not sit in the wait.  A test about
-    that wait says `port_present=` for itself.
+    `osr2_adapters` answers for the machine's real COM ports, which the broker
+    asks before every session; it is answered here so a suite run on a desk with
+    no OSR2 plugged in does not sit in the wait.  A test about where the OSR2 is
+    says `osr2_adapters=` for itself: a list of the ports it is on, or a callable
+    returning them.
     """
     patches = [
         patch.object(broker_app_module, "configure_logging",
@@ -308,9 +309,9 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
                      side_effect=mfp_config_error),
         patch.object(broker_app_module.serial, "Serial", side_effect=fake_serial),
         patch.object(broker_app_module, "_start_monitor"),
-        patch.object(broker_app_module, "serial_port_present", side_effect=port_present)
-        if callable(port_present)
-        else patch.object(broker_app_module, "serial_port_present", return_value=port_present),
+        patch("osr2_broker.osr2_port.osr2_adapters", side_effect=osr2_adapters)
+        if callable(osr2_adapters)
+        else patch("osr2_broker.osr2_port.osr2_adapters", return_value=list(osr2_adapters)),
         patch.object(broker_app_module.time, "sleep", side_effect=sleep),
     ]
     if retry_delay_seconds is not None:
@@ -328,7 +329,9 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
 
 
 class TestMainReconnect:
-    def test_retries_after_retryable_serial_open_failure(self, broker_app_module, cfg_path):
+    def test_retries_after_retryable_serial_open_failure(self, broker_app_module, cfg_path,
+                                                         caplog):
+        caplog.set_level(logging.INFO, logger="test.broker")
         open_ports: list[str] = []
         FakeSerial = make_fake_serial(
             open_ports, fail_once_on=("COM4", broker_app_module.serial.SerialException),
@@ -348,6 +351,29 @@ class TestMainReconnect:
         assert result == 0
         assert open_ports.count("COM4") >= 2
         assert open_ports.count("COM15") >= 2
+        assert caplog.messages.count("The OSR2 is plugged in on COM4") == 1
+
+    def test_follows_the_osr2_to_whichever_socket_it_is_plugged_into(
+        self, broker_app_module, cfg_path,
+    ):
+        open_ports: list[str] = []
+        FakeSerial = make_fake_serial(
+            open_ports, fail_once_on=("COM4", broker_app_module.serial.SerialException),
+        )
+        sockets = iter([["COM4"]])
+        slept = {"count": 0}
+
+        def fake_sleep(_seconds):
+            slept["count"] += 1
+            if "COM5" in open_ports or slept["count"] >= 50:
+                raise KeyboardInterrupt
+
+        with _main_running(broker_app_module, fake_serial=FakeSerial, sleep=fake_sleep,
+                           retry_delay_seconds=0.0,
+                           osr2_adapters=lambda: next(sockets, ["COM5"])):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        assert [port for port in open_ports if port != "COM15"] == ["COM4", "COM5"]
 
 
 class TestMainSurvivesMfpConfigTrouble:

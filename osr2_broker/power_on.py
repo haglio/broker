@@ -1,7 +1,7 @@
 """Noticing that the OSR2 has just been switched on.
 
-Its USB adapter stays enumerated with the power off, so COM4's presence says
-nothing about the device.  What does say something is its own chatter: a
+Its USB adapter stays enumerated with the power off, so the adapter's presence
+says nothing about the device.  What does say something is its own chatter: a
 powered OSR2 sends serial lines of its own accord and a switched-off one sends
 none, which is already how the idle monitor decides the device is on.  The
 first line after a long enough silence is therefore the device coming back.

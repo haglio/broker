@@ -22,7 +22,6 @@ class BrokerConfig:
     project_dir: Path
     state_dir: Path
     virtual_port: str
-    real_port: str
     baud: int
     udp_host: str
     udp_port: int
@@ -82,7 +81,6 @@ def load_config(config_path: str | Path | None = None) -> BrokerConfig:
         project_dir=project_dir,
         state_dir=require_path(raw, "state_dir", path, base=project_dir),
         virtual_port=require_typed(raw, "virtual_port", path, cast=str),
-        real_port=require_typed(raw, "real_port", path, cast=str),
         baud=require_typed(raw, "baud", path, cast=int),
         udp_host=require_typed(raw, "udp_host", path, cast=str),
         udp_port=require_typed(raw, "udp_port", path, cast=int),

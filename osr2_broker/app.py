@@ -18,7 +18,8 @@ from . import idle_warning
 from .activity import ActivityStamp
 from .config import PROJECT_DIR, load_config
 from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
-from .ports import ensure_mfp_serial_port, resolve_virtual_port, serial_port_present
+from .osr2_port import wait_for_the_osr2
+from .ports import ensure_mfp_serial_port, resolve_virtual_port
 from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
 from .question import DeviceQuestion
@@ -28,10 +29,6 @@ from .state_files import heartbeat_loop, rename_last_sessions_mode_file, write_m
 from .win32 import ShutdownGuard
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
-# How often the retry loop asks whether an absent OSR2 port has come back.  Short
-# enough that switching the device on reconnects while the hand is still on the
-# switch, and it costs one port enumeration -- no serial open, no log line.
-PORT_RETURN_POLL_SECONDS = 1.0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -92,7 +89,6 @@ def main(argv: list[str] | None = None) -> int:
     session = BrokerSerialSession(
         serial_factory=serial.Serial,
         virtual_port=virtual_port,
-        real_port=config.real_port,
         baud=config.baud,
         broker_cmd_file=broker_cmd_file,
         device_on=lambda: osr2_device.switched_on(config.state_dir),
@@ -128,18 +124,18 @@ def main(argv: list[str] | None = None) -> int:
     # --- Monitor (idle alert + shutdown blocking) ---
     _start_monitor(config, auto_mode, logger)
 
-    logger.info("Starting broker: %s <-> %s", virtual_port, config.real_port)
+    logger.info("Starting broker on %s", virtual_port)
     logger.info("Genau UDP target: %s:%s", config.udp_host, config.udp_port)
     logger.info("T-Code UDP listener: 127.0.0.1:%s", config.tcode_udp_port)
 
     try:
-        while not stop_event.is_set():
-            should_retry = session.run(udp_sock)
+        osr2_port = None
+        while (osr2_port := wait_for_the_osr2(stop_event, logger, last_port=osr2_port)) is not None:
+            should_retry = session.run(udp_sock, osr2_port)
             if not should_retry or stop_event.is_set():
                 break
             logger.warning("Retrying serial session in %.2fs", SERIAL_RETRY_DELAY_SECONDS)
             time.sleep(SERIAL_RETRY_DELAY_SECONDS)
-            wait_for_real_port(config.real_port, stop_event, logger)
     except KeyboardInterrupt:
         logger.info("Broker interrupted")
     finally:
@@ -148,49 +144,6 @@ def main(argv: list[str] | None = None) -> int:
         udp_sock.close()
 
     return 0
-
-
-def wait_for_real_port(
-    real_port: str,
-    stop_event: threading.Event,
-    logger: logging.Logger,
-    *,
-    poll_seconds: float = PORT_RETURN_POLL_SECONDS,
-) -> bool:
-    """Hold the retry loop while the OSR2's port is not enumerated at all.
-
-    A port Windows does not have can only fail to open, and ``serial.Serial``
-    says so expensively: a raise and a full traceback, once a second, for as
-    long as it stays away.  Three quarters of an hour of that is the whole
-    broker log, so an outage erases every record that came before it.
-    Enumeration asks the same question for nothing, so the absence is said
-    once, waited on quietly, and said once more when it ends -- and the wait
-    ends the moment the port is back, sooner than any fixed backoff.
-
-    Absence means the adapter is gone from the bus, not that the device is
-    switched off: the OSR2's USB cable normally stays plugged and its port
-    stays enumerated with the power off (docs/osr2_idle_monitor_notes.md in
-    fun_time).  Whenever it IS enumerated this returns at once and nothing
-    changes, leaving the collapsed reporting in ``BrokerSerialSession`` to
-    bound the rest.
-
-    Returns whether the port is present now (False only when the broker is
-    stopping), so a caller can tell "came back" from "gave up".  The clock and
-    the enumeration are read off this module rather than bound as defaults, so a
-    test can stand in for either.
-    """
-    if serial_port_present(real_port):
-        return True
-    logger.warning(
-        "%s is not enumerated -- is the OSR2 plugged in? Waiting for it to come back",
-        real_port,
-    )
-    while not stop_event.is_set():
-        time.sleep(poll_seconds)
-        if serial_port_present(real_port):
-            logger.info("%s is back; reconnecting", real_port)
-            return True
-    return False
 
 
 # ---------------------------------------------------------------------------

@@ -32,7 +32,6 @@ class BrokerSerialSession:
         *,
         serial_factory,
         virtual_port: str,
-        real_port: str,
         baud: int,
         broker_cmd_file: Path,
         device_on: Callable[[], bool],
@@ -54,7 +53,6 @@ class BrokerSerialSession:
     ):
         self.serial_factory = serial_factory
         self.virtual_port = virtual_port
-        self.real_port = real_port
         self.baud = baud
         self.broker_cmd_file = broker_cmd_file
         self.device_on = device_on
@@ -101,7 +99,7 @@ class BrokerSerialSession:
         except (OSError, AttributeError):
             return True
 
-    def run(self, udp_sock) -> bool:
+    def run(self, udp_sock, osr2_port: str) -> bool:
         session_stop = threading.Event()
         retry_state = SessionRetryState()
         thread_real = None
@@ -111,11 +109,10 @@ class BrokerSerialSession:
         peer_disconnected = False
 
         try:
-            with self.serial_factory(self.virtual_port, self.baud, timeout=0.02) as virt, self.serial_factory(
-                self.real_port,
-                self.baud,
-                timeout=0.02,
-            ) as real:
+            with (
+                self.serial_factory(self.virtual_port, self.baud, timeout=0.02) as virt,
+                self.serial_factory(osr2_port, self.baud, timeout=0.02) as real,
+            ):
                 virt.write_timeout = 0.1
                 self._report_recovery()
                 self.connected_event.set()

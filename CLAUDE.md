@@ -13,7 +13,8 @@ No integration tests currently.
 
 ## Architecture
 
-- Serial broker: bridges MFP (virtual COM port) ↔ OSR2 (real COM4)
+- Serial broker: bridges MFP (virtual COM port) ↔ OSR2 (its USB serial adapter, found by
+  what it is on whichever socket it is plugged into, never by a COM name)
 - Auto-mode state machine: parses OSR2 serial output, publishes to Genau via UDP
 - Idle monitor: alerts after configurable idle timeout, blocks Windows shutdown when device is on
 - Tray UI: PyQt6 tray icon (`osr2_broker/tray.py`), dark-themed via shared_ui, which supervises and auto-restarts the broker

@@ -17,7 +17,6 @@ from osr2_broker.config import load_config
 REQUIRED_KEYS: dict = {
     "state_dir": "state",
     "virtual_port": "COM15",
-    "real_port": "COM4",
     "baud": 115200,
     "udp_host": "127.0.0.1",
     "udp_port": 50555,
