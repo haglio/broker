@@ -178,11 +178,23 @@ class TestMonitorPoll:
         state = MonitorState(idle_threshold=900.0)
         idle_file = tmp_path / "idle_state.txt"
         run_monitor_poll(state, now=1000.0, device_on=True, last_tx=998.0,
-                         auto_active=False, idle_state_file=idle_file, on_alert=lambda: None)
+                         auto_active=False, idle_state_file=idle_file, on_alert=lambda: None,
+                         on_heard=lambda _heard: None)
         assert load_idle_state(idle_file, now=1000.0) == (None, False)
         run_monitor_poll(state, now=1500.0, device_on=True, last_tx=998.0,
-                         auto_active=False, idle_state_file=idle_file, on_alert=lambda: None)
+                         auto_active=False, idle_state_file=idle_file, on_alert=lambda: None,
+                         on_heard=lambda _heard: None)
         assert load_idle_state(idle_file, now=1500.0) == (1000.0, False)
+
+    def test_poll_says_each_time_the_device_starts_or_stops_being_heard(self, tmp_path):
+        state = MonitorState(idle_threshold=900.0)
+        heard = []
+        for now, device_on in ((1000.0, False), (1010.0, True), (1020.0, True),
+                               (1030.0, False), (1040.0, False), (1050.0, True)):
+            run_monitor_poll(state, now=now, device_on=device_on, last_tx=None,
+                             auto_active=False, idle_state_file=tmp_path / "idle_state.txt",
+                             on_alert=lambda: None, on_heard=heard.append)
+        assert heard == [True, False, True]
 
     def test_poll_fires_on_alert_and_persists_alerted(self, tmp_path):
         state = MonitorState(idle_threshold=900.0, idle_since=1000.0)
@@ -190,7 +202,7 @@ class TestMonitorPoll:
         calls = []
         run_monitor_poll(state, now=1950.0, device_on=True, last_tx=500.0,
                          auto_active=False, idle_state_file=idle_file,
-                         on_alert=lambda: calls.append(1))
+                         on_alert=lambda: calls.append(1), on_heard=lambda _heard: None)
         assert calls == [1]
         assert load_idle_state(idle_file, now=1950.0) == (1000.0, True)
 
