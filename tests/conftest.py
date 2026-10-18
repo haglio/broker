@@ -23,6 +23,27 @@ def qapp():
     yield app
 
 
+class _Recorder(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture
+def recorded_logger():
+    logger = logging.getLogger("test.osr2_broker.recorded")
+    logger.handlers.clear()
+    logger.propagate = False
+    logger.setLevel(logging.DEBUG)
+    handler = _Recorder()
+    logger.addHandler(handler)
+    yield logger, handler
+    logger.handlers.clear()
+
+
 class FakePowerOn:
     """Stands in for the PowerOnWatch a session is built with.
 
@@ -131,7 +152,6 @@ def _write_config(tmp_path: Path, overrides: dict | None = None) -> Path:
     cfg: dict = {
         "state_dir": str(tmp_path / "state"),
         "virtual_port": "COM15",
-        "real_port": "COM4",
         "baud": 115200,
         "udp_host": "127.0.0.1",
         "udp_port": 50555,

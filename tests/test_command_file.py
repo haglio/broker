@@ -55,7 +55,6 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
     session = BrokerSerialSession(
         serial_factory=MagicMock(),
         virtual_port="COM15",
-        real_port="COM4",
         baud=115200,
         broker_cmd_file=cmd,
         device_on=lambda: True,
@@ -102,7 +101,7 @@ def test_two_verbs_queued_between_ticks_are_both_acted_on_in_order(tmp_path: Pat
     auto_mode.consume_deactivation.return_value = False
     logger = MagicMock()
     session = BrokerSerialSession(
-        serial_factory=MagicMock(), virtual_port="COM15", real_port="COM4", baud=115200,
+        serial_factory=MagicMock(), virtual_port="COM15", baud=115200,
         broker_cmd_file=cmd,
         device_on=lambda: True, stop_event=threading.Event(), broker_paused=threading.Event(),
         auto_mode=auto_mode, logger=logger, start_thread=MagicMock(),

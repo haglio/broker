@@ -1,7 +1,6 @@
 {
   "state_dir": "C:/path/to/fun_time/state",
   "virtual_port": "COM8",
-  "real_port": "COM4",
   "baud": 115200,
   "udp_host": "127.0.0.1",
   "udp_port": 50555,

@@ -82,7 +82,6 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
     session = BrokerSerialSession(
         serial_factory=MagicMock(),
         virtual_port="COM15",
-        real_port="COM4",
         baud=115200,
         broker_cmd_file=Path("broker.cmd"),
         stop_event=threading.Event(),
@@ -542,7 +541,7 @@ def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
     session.sleep = _sleep
     session.start_thread = lambda *, target, args, name: NotActuallyRunning()
 
-    session.run(object())
+    session.run(object(), "COM4")
 
     assert seen_inside == [True]
     assert not session.connected_event.is_set()
@@ -613,7 +612,7 @@ def test_session_stops_when_peer_disconnects():
         return t
     session.start_thread = _fake_start_thread
 
-    should_retry = session.run(object())
+    should_retry = session.run(object(), "COM4")
 
     assert not session.connected_event.is_set()
     assert should_retry is True
@@ -648,7 +647,7 @@ def test_session_stays_alive_when_peer_never_connected():
         return t
     session.start_thread = _fake_start_thread
 
-    session.run(object())
+    session.run(object(), "COM4")
 
     assert poll_count >= 5
 
@@ -757,7 +756,7 @@ def test_peer_disconnect_retries_despite_thread_teardown_error():
         return t
     session.start_thread = _start
 
-    should_retry = session.run(object())
+    should_retry = session.run(object(), "COM4")
 
     assert should_retry is True
 
@@ -808,7 +807,7 @@ def _thread_names_started_by_one_run(session) -> list[str]:
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = lambda _s: session.stop_event.set()
     session.start_thread = _start
-    session.run(object())
+    session.run(object(), "COM4")
     return started
 
 

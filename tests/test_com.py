@@ -103,7 +103,7 @@ def _running(stack, *, timeout=2.0):
     killed at 120 s, which on CI is a job timeout with no traceback naming the
     test that caused it.
     """
-    runner = threading.Thread(target=stack.session.run, args=(object(),),
+    runner = threading.Thread(target=stack.session.run, args=(object(), "COM4"),
                               name="broker-session", daemon=True)
     runner.start()
     try:
@@ -165,7 +165,6 @@ def _build_stack(tmp_path: Path):
     session = BrokerSerialSession(
         serial_factory=serial_factory,
         virtual_port="COM15",
-        real_port="COM4",
         baud=115200,
         broker_cmd_file=broker_cmd_file,
         device_on=lambda: osr2_device.switched_on(tmp_path / "state"),
