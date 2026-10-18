@@ -97,10 +97,12 @@ def run_monitor_poll(
     auto_active: bool,
     idle_state_file: Path,
     on_alert: Callable[[], None],
+    on_heard: Callable[[bool], None],
 ) -> MonitorOutcome | None:
-    """Advance the monitor one tick, persist the idle state so the 15-min
-    countdown survives a broker restart, and dispatch the idle alert."""
+    was_heard = state.device_on
     action = state.update(now, device_on, last_tx, auto_active)
+    if state.device_on != was_heard:
+        on_heard(state.device_on)
     save_idle_state(idle_state_file, state.idle_since, state.alerted, saved_at=now)
     if action == MonitorOutcome.IDLE_ALERT:
         on_alert()

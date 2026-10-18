@@ -236,6 +236,20 @@ def test_the_broker_logs_how_an_idle_warning_ended(broker_app_module, cfg_path):
     assert "Windows fatal exception: access violation" in ended
 
 
+def test_the_broker_logs_when_it_starts_and_stops_hearing_the_osr2(broker_app_module, cfg_path):
+    config = load_config(str(cfg_path))
+    config.osr2_serial_rx_file.write_text(str(_time.time()), encoding="utf-8")
+
+    with what_is_said_on("test.broker") as heard:
+        captured = _start_monitor_with_fake_guard(broker_app_module, config)
+        captured["poll_fn"]()
+        heard.first_saying("counted as switched on", timeout=1.0)
+        config.osr2_serial_rx_file.write_text(
+            str(_time.time() - SILENT_ONCE_OFF_S - 1.0), encoding="utf-8")
+        captured["poll_fn"]()
+        heard.first_saying("counted as switched off", timeout=1.0)
+
+
 def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_path):
     config = load_config(str(cfg_path))
     now = _time.time()

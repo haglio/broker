@@ -226,6 +226,13 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
 
         threading.Thread(target=_show_and_acknowledge, daemon=True).start()
 
+    def _say_whether_the_osr2_is_heard(heard: bool):
+        if heard:
+            logger.info("OSR2 heard: counted as switched on, so the idle warning can come")
+        else:
+            logger.info("OSR2 not heard: counted as switched off, "
+                        "so no idle warning comes until it is heard again")
+
     def poll():
         now = time.time()
         run_monitor_poll(
@@ -236,6 +243,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
             auto_active=auto_mode.is_active,
             idle_state_file=idle_state_file,
             on_alert=_show_idle_alert,
+            on_heard=_say_whether_the_osr2_is_heard,
         )
 
     def should_block_shutdown():
