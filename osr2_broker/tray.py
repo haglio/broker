@@ -10,7 +10,7 @@ from pathlib import Path
 from app_support import production_update
 from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
-from app_support.osr2_device import Osr2Mode, mode
+from app_support.osr2_device import Osr2Mode, Osr2Trouble, mode, trouble
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
@@ -38,9 +38,16 @@ _WHAT_THE_OSR2_IS_DOING = {
     Osr2Mode.AUTO: "but OSR2 in auto mode",
     Osr2Mode.CONTROLLED: "controlling OSR2",
 }
+_WHY_THE_OSR2_IS_UNHEARD = {
+    Osr2Trouble.NOT_FOUND: "OSR2 unplugged",
+    Osr2Trouble.NOT_ANSWERING: "OSR2 no answer",
+}
 
 
 def what_the_osr2_is_doing(config) -> str:
+    unheard = trouble(config.state_dir)
+    if unheard is not None:
+        return _WHY_THE_OSR2_IS_UNHEARD[unheard]
     return _WHAT_THE_OSR2_IS_DOING[mode(config.state_dir)]
 
 
