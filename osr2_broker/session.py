@@ -266,7 +266,7 @@ class BrokerSerialSession:
     def tcode_writer(self, real, serial_write_lock, session_stop,
                      retry_state: SessionRetryState) -> Callable[[str, str], None]:
         def write(source: str, line: str) -> None:
-            if session_stop.is_set() or self.auto_mode.is_active:
+            if session_stop.is_set() or self.auto_mode.is_active or not line.isascii():
                 return
             self._tcode_window.mark()
             try:
