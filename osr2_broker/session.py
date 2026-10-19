@@ -15,7 +15,8 @@ from .motion_log import HOLD, MFP, MotionLog
 from .not_answering import NotAnsweringWatch
 from .power_on import PowerOnWatch
 from .question import DeviceQuestion
-from .tcode_udp import TCodeWriteWindow, UdpTCodeListener
+from .tcode_udp import UdpTCodeListener
+from .tcode_window import TCodeWriteWindow
 
 
 @dataclass
