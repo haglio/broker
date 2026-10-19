@@ -18,6 +18,7 @@ from . import idle_warning
 from .activity import ActivityStamp
 from .config import PROJECT_DIR, load_config
 from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
+from .not_answering import NotAnsweringWatch
 from .osr2_port import wait_for_the_osr2
 from .ports import ensure_mfp_serial_port, resolve_virtual_port
 from .power_on import PowerOnWatch
@@ -109,6 +110,8 @@ def main(argv: list[str] | None = None) -> int:
                               monotonic=time.monotonic),
         question=DeviceQuestion(answer_file=config.osr2_serial_answer_file,
                                 monotonic=time.monotonic, logger=logger),
+        not_answering=NotAnsweringWatch(stamp_file=config.osr2_not_answering_file,
+                                        monotonic=time.monotonic, logger=logger),
     )
 
     write_mode(state_file, "0", logger)
@@ -130,7 +133,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         osr2_port = None
-        while (osr2_port := wait_for_the_osr2(stop_event, logger, last_port=osr2_port)) is not None:
+        while (osr2_port := wait_for_the_osr2(stop_event, logger, last_port=osr2_port,
+                                              not_found=config.osr2_not_found_file)) is not None:
             should_retry = session.run(udp_sock, osr2_port)
             if not should_retry or stop_event.is_set():
                 break

@@ -76,7 +76,7 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
                     rx_activity=None, tx_activity=None,
                     is_retryable_error=lambda _exc: False,
                     tcode_udp_port: int = 0, power_on=None, question=None,
-                    device_on=lambda: True):
+                    device_on=lambda: True, not_answering=None):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = MagicMock()
     session = BrokerSerialSession(
@@ -99,6 +99,7 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
         power_on=power_on or FakePowerOn(),
         question=question,
         device_on=device_on,
+        not_answering=not_answering,
     )
     return session, auto_mode, logger
 
@@ -1053,3 +1054,61 @@ def test_the_devices_own_auto_mode_outlasts_a_quiet_spell_while_it_is_switched_o
     session.end_auto_mode_once_switched_off(object())
 
     assert auto_mode.set_auto_calls == []
+
+
+class _NotAnsweringSpy:
+    def __init__(self) -> None:
+        self.heard_count = 0
+        self.ticks: list[bool] = []
+
+    def heard(self) -> None:
+        self.heard_count += 1
+
+    def tick(self, *, driving: bool) -> None:
+        self.ticks.append(driving)
+
+
+def test_a_word_from_the_osr2_is_passed_to_the_not_answering_watch():
+    watch = _NotAnsweringSpy()
+    session, _auto_mode, _logger = _build_session(not_answering=watch)
+    session_stop = threading.Event()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"hello\n"
+
+    class FakeVirt:
+        def write(self, data):
+            pass
+
+    session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop,
+                                    SessionRetryState())
+
+    assert watch.heard_count == 1
+
+
+def test_each_tick_tells_the_not_answering_watch_whether_mfp_is_driving_the_osr2():
+    clock = [10.0]
+    watch = _NotAnsweringSpy()
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0],
+                                                  not_answering=watch)
+    session_stop = threading.Event()
+
+    class FakeVirt:
+        in_waiting = 3
+
+        def read(self, _size):
+            session_stop.set()
+            return b"L09\n"
+
+    session.forward_virtual_to_real(FakeVirt(), MagicMock(), session_stop, SessionRetryState(),
+                                    threading.Lock())
+    lock = threading.Lock()
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=lock)
+    clock[0] = 20.0
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=lock)
+
+    assert watch.ticks == [True, False]

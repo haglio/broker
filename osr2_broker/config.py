@@ -57,6 +57,14 @@ class BrokerConfig:
         return self.state_dir / state_files.OSR2_SERIAL_TX
 
     @property
+    def osr2_not_found_file(self) -> Path:
+        return self.state_dir / state_files.OSR2_NOT_FOUND
+
+    @property
+    def osr2_not_answering_file(self) -> Path:
+        return self.state_dir / state_files.OSR2_NOT_ANSWERING
+
+    @property
     def osr2_idle_state_file(self) -> Path:
         return self.state_dir / "osr2_idle_state.txt"
 
