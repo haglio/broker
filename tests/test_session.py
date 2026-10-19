@@ -848,6 +848,21 @@ def test_t_code_reaches_the_osr2_one_line_at_a_time():
     assert port.writes == [b"L05000I33\n"]
 
 
+def test_a_line_that_is_not_ascii_is_dropped_without_ending_the_session():
+    """The inlets read what they are sent as ASCII, standing in for what is not.
+    Written out, the stand-in could still read to the device as a move to
+    somewhere nobody sent it; failing to write it ended the session as a failure
+    not worth retrying, and the broker with it."""
+    session, _auto_mode, _logger = _build_session()
+    session_stop = threading.Event()
+    port = _Port()
+
+    _writer(session, port, session_stop=session_stop)(UDP, "L0\N{REPLACEMENT CHARACTER}500I33")
+
+    assert port.writes == []
+    assert not session_stop.is_set()
+
+
 def test_t_code_arriving_while_the_device_drives_itself_is_dropped_whole():
     """Auto mode is the OSR2 on its own firmware, and it wins over everything
     here: a funscript, a FunTimeVR player, an Origenerator video.  So what they
