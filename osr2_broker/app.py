@@ -46,6 +46,16 @@ def is_retryable_serial_error(exc: BaseException) -> bool:
     return isinstance(exc, (serial.SerialException, PermissionError, OSError))
 
 
+def _point_mfp_at(virtual_port: str, config, logger: logging.Logger) -> None:
+    if config.mfp_config_path is None:
+        logger.info("No mfp_config_path configured; leaving MFP's port alone")
+        return
+    try:
+        ensure_mfp_serial_port(config.mfp_config_path, virtual_port, logger)
+    except Exception:
+        logger.exception("Could not update MFP serial port config")
+
+
 def main(argv: list[str] | None = None) -> int:
     config = load_config(preparse_config_path(argv))
     logger = configure_logging("osr2_broker", config.log_file("broker"))
@@ -59,18 +69,7 @@ def main(argv: list[str] | None = None) -> int:
 
     build_parser().parse_args(argv)
     virtual_port = resolve_virtual_port(config.mfp_config_path, config.virtual_port, logger)
-
-    # Point MFP at our virtual port. A courtesy, not a prerequisite: MFP's config
-    # lives under Program Files and MFP may hold it open, and being refused there
-    # must not stop us from bridging.  A config that names no MFP config has
-    # nothing to point anywhere, which is not a failure.
-    if config.mfp_config_path is None:
-        logger.info("No mfp_config_path configured; leaving MFP's port alone")
-    else:
-        try:
-            ensure_mfp_serial_port(config.mfp_config_path, virtual_port, logger)
-        except Exception:
-            logger.exception("Could not update MFP serial port config")
+    _point_mfp_at(virtual_port, config, logger)
 
     rename_last_sessions_mode_file(config.state_dir, logger)
     state_file = config.broker_mode_file
