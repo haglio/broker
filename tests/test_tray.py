@@ -605,6 +605,16 @@ def test_hovering_says_the_osr2_is_off_while_it_has_not_spoken(tray, cfg_path, m
     assert ticked.toolTip() == "Broker: running (OSR2 off)"
 
 
+@pytest.mark.parametrize(("stamp", "said"), [("osr2_not_found_file", "OSR2 unplugged"),
+                                              ("osr2_not_answering_file", "OSR2 no answer")])
+def test_hovering_names_why_the_osr2_cannot_be_heard(tray, cfg_path, stamp, said):
+    publish_stamp(getattr(load_config(cfg_path), stamp))
+
+    ticked = _ticked(tray, cfg_path, mode_written="0", osr2_spoke=False)
+
+    assert ticked.toolTip() == f"Broker: running ({said})"
+
+
 @pytest.mark.parametrize("mode_written", ["1", "﻿1\r\n"])
 def test_the_menu_says_when_the_osr2_runs_its_own_auto_mode(tray, cfg_path, mode_written):
 
