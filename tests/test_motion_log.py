@@ -118,3 +118,23 @@ class TestHandingTheDeviceOver:
 
     def test_the_sources_are_named_for_a_reader_not_for_the_code(self, log):
         assert (MFP, UDP, HOLD) == ("MFP", "T-Code UDP", "a hold")
+
+
+class TestWhetherSomethingIsDrivingTheOsr2:
+    @pytest.mark.parametrize("source", [MFP, UDP])
+    def test_a_driver_writing_is_driving_it_until_it_falls_quiet(self, log, source):
+        motion, _said, clock = log
+
+        motion.wrote(source)
+        clock.now += 1.0
+        assert motion.driven_from_outside()
+
+        clock.now += 1.5
+        assert not motion.driven_from_outside()
+
+    def test_the_brokers_own_hold_is_not_a_driver(self, log):
+        motion, _said, _clock = log
+
+        motion.wrote(HOLD)
+
+        assert not motion.driven_from_outside()

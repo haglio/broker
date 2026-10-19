@@ -12,6 +12,7 @@ from app_support import osr2_hold
 from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
 from .motion_log import HOLD, MFP, MotionLog
+from .not_answering import NotAnsweringWatch
 from .power_on import PowerOnWatch
 from .question import DeviceQuestion
 from .tcode_udp import TCodeWriteWindow, UdpTCodeListener
@@ -50,6 +51,7 @@ class BrokerSerialSession:
         sleep=time.sleep,
         tcode_udp_port: int = 0,
         question: DeviceQuestion | None = None,
+        not_answering: NotAnsweringWatch | None = None,
     ):
         self.serial_factory = serial_factory
         self.virtual_port = virtual_port
@@ -71,6 +73,7 @@ class BrokerSerialSession:
         self._tx_activity = tx_activity
         self._power_on = power_on
         self._question = question
+        self._not_answering = not_answering
         # Whether the last bytes forwarded from the virtual port stopped short
         # of a line's end: a question written then would land inside a command.
         self._mid_command = False
@@ -205,6 +208,8 @@ class BrokerSerialSession:
         thing it says is the cue to send it home.
         """
         self._rx_activity.mark()
+        if self._not_answering is not None:
+            self._not_answering.heard()
         if self._power_on.rx_broke_the_silence():
             self._holds.schedule_without_muting(PARK, "OSR2 powered on: park scheduled")
 
@@ -265,6 +270,8 @@ class BrokerSerialSession:
             self.handle_broker_command(cmd, udp_sock)
         self.end_auto_mode_once_switched_off(udp_sock)
         self._motion.tick()
+        if self._not_answering is not None:
+            self._not_answering.tick(driving=self._motion.driven_from_outside())
         if self.auto_mode.consume_deactivation():
             self._holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
         if self._holds.fire_due(real_port, serial_write_lock, self._tcode_window.mark):

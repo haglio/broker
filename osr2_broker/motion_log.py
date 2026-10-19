@@ -59,6 +59,12 @@ class MotionLog:
             self._logger.info("OSR2 driven by %s, quiet for %.1fs before that",
                               source, quiet_for)
 
+    def driven_from_outside(self) -> bool:
+        with self._lock:
+            source, last = self._source, self._last
+        return (source in (MFP, UDP) and last is not None
+                and self._monotonic() - last < self._quiet_s)
+
     def tick(self) -> None:
         """Called on the broker's own beat; closes a run out once it is over."""
         now = self._monotonic()

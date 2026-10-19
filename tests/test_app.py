@@ -424,6 +424,42 @@ class TestBrokerSingleInstance:
         mock_socket_mod.socket.assert_not_called()
 
 
+class TestMainSaysWhatKeepsTheOsr2Unheard:
+    def test_a_broker_that_cannot_find_the_osr2_says_so_where_every_app_reads_it(
+        self, broker_app_module, cfg_path,
+    ):
+        config = load_config(str(cfg_path))
+        sockets = iter([[]])
+
+        def stop_on_the_first_session(_seconds):
+            if (config.state_dir / "osr2_not_found.txt").exists():
+                raise KeyboardInterrupt
+
+        with _main_running(broker_app_module, fake_serial=make_fake_serial([]),
+                           sleep=stop_on_the_first_session,
+                           osr2_adapters=lambda: next(sockets, ["COM4"])):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        assert (config.state_dir / "osr2_not_found.txt").exists()
+
+    def test_a_broker_counts_an_unheard_osr2_being_driven_where_every_app_reads_it(
+        self, broker_app_module, cfg_path,
+    ):
+        config = load_config(str(cfg_path))
+
+        def stop_on_first_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        with (
+            _main_running(broker_app_module, fake_serial=make_fake_serial([]),
+                          sleep=stop_on_first_sleep),
+            patch.object(broker_app_module, "NotAnsweringWatch") as watch,
+        ):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        assert watch.call_args.kwargs["stamp_file"] == config.state_dir / "osr2_not_answering.txt"
+
+
 class TestMainPublishesItsStateFiles:
     def test_a_started_broker_leaves_the_mode_file_where_the_family_looks(
         self, broker_app_module, cfg_path,

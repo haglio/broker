@@ -3,6 +3,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from pathlib import Path
+
+from app_support.file_channel import publish_stamp
 
 from .ports import iter_serial_ports
 
@@ -20,6 +23,7 @@ def wait_for_the_osr2(
     stop_event: threading.Event,
     logger: logging.Logger,
     *,
+    not_found: Path,
     last_port: str | None = None,
     poll_seconds: float = PLUGGED_IN_POLL_SECONDS,
 ) -> str | None:
@@ -33,6 +37,7 @@ def wait_for_the_osr2(
         if adapters != said:
             said = adapters
             _say_why_there_is_no_osr2(adapters, logger)
+        publish_stamp(not_found)
         time.sleep(poll_seconds)
     return None
 
