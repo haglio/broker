@@ -9,9 +9,9 @@ from app_support.file_channel import publish_stamp, stamp_age
 from app_support.osr2_device import ANSWERS_ONCE_OFF_S, switched_on
 from app_support.state_files import OSR2_SERIAL_RX
 
-from osr2_broker import session as session_module
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.hold import HoldScheduler
+from osr2_broker.motion_log import UDP
 from osr2_broker.question import DeviceQuestion
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
 from tests.conftest import FakePowerOn
@@ -76,9 +76,9 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
                     rx_activity=None, tx_activity=None,
                     is_retryable_error=lambda _exc: False,
                     tcode_udp_port: int = 0, power_on=None, question=None,
-                    device_on=lambda: True, not_answering=None):
+                    device_on=lambda: True, not_answering=None, logger=None):
     auto_mode = FakeAutoMode(active=auto_active)
-    logger = MagicMock()
+    logger = logger or MagicMock()
     session = BrokerSerialSession(
         serial_factory=MagicMock(),
         virtual_port="COM15",
@@ -823,20 +823,123 @@ def test_a_configured_tcode_port_gets_a_listener_thread():
     ]
 
 
-def test_the_listener_asks_the_session_s_own_auto_mode(monkeypatch):
-    """What drops every sender's datagrams while the OSR2 runs itself is the
-    listener's question, and the answer has to be this session's own device --
-    asked afresh each time, since auto comes and goes under a running listener."""
+class _Port:
+    """A serial port that keeps what is written to it."""
 
-    handed = {}
-    monkeypatch.setattr(session_module, "UdpTCodeListener",
-                        lambda **kwargs: handed.update(kwargs))
-    _session, auto_mode, _logger = _build_session(tcode_udp_port=50557)
-    ask = handed["device_drives_itself"]
+    def __init__(self):
+        self.writes: list[bytes] = []
 
-    assert ask() is False
-    auto_mode.active = True
-    assert ask() is True
+    def write(self, data: bytes) -> None:
+        self.writes.append(data)
+
+
+def _writer(session, port, *, lock=None, session_stop=None, retry_state=None):
+    return session.tcode_writer(port, lock or threading.Lock(),
+                                session_stop or threading.Event(),
+                                retry_state or SessionRetryState())
+
+
+def test_t_code_reaches_the_osr2_one_line_at_a_time():
+    session, _auto_mode, _logger = _build_session()
+    port = _Port()
+
+    _writer(session, port)(UDP, "L05000I33")
+
+    assert port.writes == [b"L05000I33\n"]
+
+
+def test_t_code_arriving_while_the_device_drives_itself_is_dropped_whole():
+    """Auto mode is the OSR2 on its own firmware, and it wins over everything
+    here: a funscript, a FunTimeVR player, an Origenerator video.  So what they
+    send meanwhile is neither written nor counted as sent -- and the question is
+    asked afresh each time, since auto comes and goes under a running session."""
+    tx_activity = StampSpy()
+    session, auto_mode, _logger = _build_session(auto_active=True, tx_activity=tx_activity)
+    port = _Port()
+    write = _writer(session, port)
+
+    write(UDP, "L05000I33")
+    auto_mode.active = False
+    write(UDP, "L09999I33")
+
+    assert port.writes == [b"L09999I33\n"]
+    assert tx_activity.marks == 1
+
+
+def test_t_code_is_written_under_the_session_s_serial_lock():
+    """The third of the three writers to the one port. A hold's write is pinned
+    in tests/test_hold.py and MFP's below; without this one, dropping the lock
+    would leave a T-Code line free to land interleaved with either of them, which
+    the device reads as neither."""
+    session, _auto_mode, _logger = _build_session()
+    lock = threading.Lock()
+    held_during_write = []
+
+    class Port:
+        def write(self, _data):
+            held_during_write.append(lock.locked())
+
+    _writer(session, Port(), lock=lock)(UDP, "L05000I33")
+
+    assert held_during_write == [True]
+
+
+def test_written_t_code_stamps_the_tx_activity_file(tmp_path):
+    tx_file = tmp_path / "osr2_serial_tx.txt"
+    session, _auto_mode, _logger = _build_session(
+        tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
+    )
+
+    _writer(session, _Port())(UDP, "L05000I33")
+
+    assert float(tx_file.read_text()) == 1711900000.0
+
+
+def test_written_t_code_mutes_mfp_after_it():
+    """MFP and Genau both drive the same device. Whichever spoke last wins for
+    the length of the window, and here that is the T-Code."""
+    session, _auto_mode, _logger = _build_session()
+
+    _writer(session, _Port())(UDP, "L05000I33")
+
+    assert session._tcode_window.is_open() is True
+
+
+def test_written_t_code_is_told_to_the_motion_log_by_the_inlet_it_came_in_on(recorded_logger):
+    logger, heard = recorded_logger
+    session, _auto_mode, _logger = _build_session(logger=logger)
+
+    _writer(session, _Port())(UDP, "L05000I33")
+
+    assert [record.getMessage() for record in heard.records] == [f"OSR2 driven by {UDP}"]
+
+
+def test_t_code_the_port_cannot_take_ends_the_session_and_says_whether_to_retry():
+    session, _auto_mode, _logger = _build_session(is_retryable_error=lambda _exc: True)
+    session_stop, retry_state = threading.Event(), SessionRetryState()
+
+    class GonePort:
+        def write(self, _data):
+            raise OSError("the port went away")
+
+    _writer(session, GonePort(), session_stop=session_stop, retry_state=retry_state)(
+        UDP, "L05000I33")
+
+    assert session_stop.is_set()
+    assert retry_state.value is True
+
+
+def test_a_session_that_has_begun_to_end_writes_no_more_t_code():
+    """What was still on its way when the port failed is not tried against it,
+    and logged, a line at a time while the session winds down."""
+    session, _auto_mode, _logger = _build_session()
+    session_stop = threading.Event()
+    session_stop.set()
+    port = _Port()
+
+    _writer(session, port, session_stop=session_stop)(UDP, "L05000I33")
+
+    assert port.writes == []
 
 
 def test_no_tcode_port_means_no_listener_thread():

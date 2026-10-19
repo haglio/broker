@@ -3,6 +3,7 @@
 Genau drives the OSR2 straight over a loopback datagram, bypassing MFP. So does
 a fired hold. Either way the device has just been told where to go, and MFP's
 own stream has to be dropped for a moment rather than allowed to argue with it.
+How a line is written once it is in is the session's, in tests/test_session.py.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ import threading
 import time
 from unittest.mock import MagicMock
 
-from osr2_broker.activity import ActivityStamp
+from osr2_broker.motion_log import UDP
 from osr2_broker.session import SessionRetryState
 from osr2_broker.tcode_udp import TCodeWriteWindow, UdpTCodeListener
 
@@ -20,14 +21,6 @@ from osr2_broker.tcode_udp import TCodeWriteWindow, UdpTCodeListener
 # object this file builds its own sockets from. Held here before anything is
 # patched, so the stand-in has something real to delegate to.
 _REAL_SOCKET = socket.socket
-
-
-class _StampSpy:
-    def __init__(self):
-        self.marks = 0
-
-    def mark(self) -> None:
-        self.marks += 1
 
 
 def test_a_fresh_window_is_shut():
@@ -93,17 +86,28 @@ def _free_port() -> int:
     return port
 
 
-def _build_listener(port: int, *, tx_activity=None, window=None,
-                    device_drives_itself=lambda: False):
+def _build_listener(port: int):
     return UdpTCodeListener(
         port=port,
         stop_event=threading.Event(),
         logger=MagicMock(),
         is_retryable_error=lambda _exc: False,
-        window=window or TCodeWriteWindow(monotonic=lambda: 10.0),
-        tx_activity=tx_activity or _StampSpy(),
-        device_drives_itself=device_drives_itself,
     )
+
+
+class _Written:
+    """The session's writer, as the listener is handed it: what it was given,
+    and the session ended once it has been given ``enough``."""
+
+    def __init__(self, session_stop: threading.Event, *, enough: int = 1):
+        self.lines: list[tuple[str, str]] = []
+        self._session_stop = session_stop
+        self._enough = enough
+
+    def __call__(self, source: str, line: str) -> None:
+        self.lines.append((source, line))
+        if len(self.lines) >= self._enough:
+            self._session_stop.set()
 
 
 def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threading.Event) -> None:
@@ -116,8 +120,8 @@ def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threadin
     where 0.05 s was not enough.
 
     Re-offering cannot double up: the loop rereads ``session_stop`` before every
-    receive, and the fakes here set it from the write, so anything still in
-    flight is never read.
+    receive, and the writers here set it, so anything still in flight is never
+    read.
 
     Offering into a port nobody has bound draws an ICMP port-unreachable, which
     Windows reports back on the *sending* socket -- and an unhandled one here
@@ -136,193 +140,37 @@ def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threadin
     threading.Thread(target=_offer, daemon=True).start()
 
 
-def test_a_datagram_reaches_the_serial_port():
+def _listen_for(payload: bytes, *, enough: int = 1) -> list[tuple[str, str]]:
     port = _free_port()
     listener = _build_listener(port)
     session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-
-        def write(self, data: bytes):
-            self.writes.append(data)
-            session_stop.set()
-
-    real = FakeReal()
+    written = _Written(session_stop, enough=enough)
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
+    _offer_until_taken(sender, port, payload, session_stop)
 
-    listener.run(real, session_stop, retry_state, threading.Lock())
+    listener.run(written, session_stop, SessionRetryState())
 
     sender.close()
-    assert real.writes == [b"L05000I33\n"]
+    return written.lines
 
 
-def test_a_datagram_arriving_while_the_device_drives_itself_is_dropped_whole():
-    """Auto mode is the OSR2 on its own firmware, and it wins over everything
-    here: a funscript, a FunTimeVR player, an Origenerator video.  So what they
-    send meanwhile is neither written nor counted as sent.
-
-    Proved positively rather than by waiting a datagram out: the same line is
-    re-offered until one is written, and the device drives itself only for the
-    first.  A listener that ignored the question writes that first one and never
-    asks a second time; one that asked and wrote anyway asks only once too.
-    """
-    port = _free_port()
-    asked = []
-
-    def device_drives_itself() -> bool:
-        asked.append(True)
-        return len(asked) == 1
-
-    tx_activity = _StampSpy()
-    window = TCodeWriteWindow(monotonic=lambda: 10.0)
-    listener = _build_listener(port, tx_activity=tx_activity, window=window,
-                               device_drives_itself=device_drives_itself)
-    session_stop = threading.Event()
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-
-        def write(self, data: bytes):
-            self.writes.append(data)
-            session_stop.set()
-
-    real = FakeReal()
-    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    listener.run(real, session_stop, SessionRetryState(), threading.Lock())
-
-    sender.close()
-    assert len(asked) == 2
-    assert real.writes == [b"L05000I33\n"]
-    assert tx_activity.marks == 1
-
-
-def test_the_datagram_is_written_under_the_caller_s_serial_lock():
-    """The third of the three writers to the one port. A hold's write is pinned
-    in tests/test_hold.py and MFP's in tests/test_session.py; without this one,
-    dropping the lock here would leave a T-Code line free to land interleaved
-    with either of them, which the device reads as neither."""
-    port = _free_port()
-    listener = _build_listener(port)
-    session_stop = threading.Event()
-    lock = threading.Lock()
-    held_during_write = []
-
-    class FakeReal:
-        def write(self, _data):
-            held_during_write.append(lock.locked())
-            session_stop.set()
-
-    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    listener.run(FakeReal(), session_stop, SessionRetryState(), lock)
-
-    sender.close()
-    assert held_during_write == [True]
+def test_a_datagram_is_handed_on_as_t_code_udp():
+    assert _listen_for(b"L05000I33") == [(UDP, "L05000I33")]
 
 
 def test_one_datagram_carrying_several_lines_becomes_several_writes():
-    port = _free_port()
-    listener = _build_listener(port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    received: list[bytes] = []
-
-    class FakeReal:
-        def write(self, data: bytes):
-            received.append(data)
-            if len(received) >= 2:
-                session_stop.set()
-
-    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33\nL09999I33", session_stop)
-
-    listener.run(FakeReal(), session_stop, retry_state, threading.Lock())
-
-    sender.close()
-    assert received == [b"L05000I33\n", b"L09999I33\n"]
+    assert _listen_for(b"L05000I33\nL09999I33", enough=2) == [
+        (UDP, "L05000I33"), (UDP, "L09999I33"),
+    ]
 
 
 def test_blank_lines_around_a_command_are_dropped_and_it_is_not():
     """One datagram carries both, so the proof is positive and needs no waiting
-    out: if a blank line could reach the port, the writes would not be exactly
-    the one real command. Splitting them across two datagrams would leave the
-    blank half unverified whenever the socket bound between the two.
+    out: if a blank line could reach the writer, what it was handed would not be
+    exactly the one real command. Splitting them across two datagrams would leave
+    the blank half unverified whenever the socket bound between the two.
     """
-    port = _free_port()
-    listener = _build_listener(port)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-
-        def write(self, data: bytes):
-            self.writes.append(data)
-            session_stop.set()
-
-    real = FakeReal()
-    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"\n\nL05000I33\n\n", session_stop)
-
-    listener.run(real, session_stop, retry_state, threading.Lock())
-
-    sender.close()
-    assert real.writes == [b"L05000I33\n"]
-
-
-def test_a_forwarded_datagram_stamps_the_tx_activity_file(tmp_path):
-
-    port = _free_port()
-    tx_file = tmp_path / "osr2_serial_tx.txt"
-    listener = _build_listener(
-        port, tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
-    )
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    class FakeReal:
-        def write(self, data: bytes):
-            session_stop.set()
-
-    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    listener.run(FakeReal(), session_stop, retry_state, threading.Lock())
-
-    sender.close()
-    assert float(tx_file.read_text()) == 1711900000.0
-
-
-def test_a_forwarded_datagram_mutes_mfp_after_it():
-    """MFP and Genau both drive the same device. Whichever spoke last wins for
-    the length of the window, and here that is the datagram."""
-    port = _free_port()
-    window = TCodeWriteWindow(monotonic=lambda: 10.0)
-    listener = _build_listener(port, window=window)
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    class FakeReal:
-        def write(self, data: bytes):
-            session_stop.set()
-
-    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, b"L05000I33", session_stop)
-
-    listener.run(FakeReal(), session_stop, retry_state, threading.Lock())
-
-    sender.close()
-    assert window.is_open() is True
+    assert _listen_for(b"\n\nL05000I33\n\n") == [(UDP, "L05000I33")]
 
 
 class _RecordingSocket:
@@ -367,7 +215,7 @@ def test_the_listener_binds_loopback_only_and_gives_itself_a_way_out(monkeypatch
     session_stop = threading.Event()
     session_stop.set()  # one pass through the guard and out
 
-    listener.run(MagicMock(), session_stop, SessionRetryState(), threading.Lock())
+    listener.run(MagicMock(), session_stop, SessionRetryState())
 
     assert record["bound_to"] == ("127.0.0.1", port)
     assert record["timeout"] == 0.2, "the receive timeout is the session's only way out of recvfrom"
@@ -386,7 +234,7 @@ def test_a_quiet_listener_still_notices_the_session_ending():
 
     threading.Timer(0.05, session_stop.set).start()
     started = time.monotonic()
-    listener.run(MagicMock(), session_stop, SessionRetryState(), threading.Lock())
+    listener.run(MagicMock(), session_stop, SessionRetryState())
     took = time.monotonic() - started
 
     # The bound is `run()`'s own `thread_tcode.join(timeout=1.0)`: past it the join
@@ -409,7 +257,7 @@ def test_a_listener_that_cannot_bind_ends_the_session_and_says_whether_to_retry(
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
-    listener.run(MagicMock(), session_stop, retry_state, threading.Lock())
+    listener.run(MagicMock(), session_stop, retry_state)
 
     assert session_stop.is_set()
     assert retry_state.value is True

@@ -5,9 +5,6 @@ the Funestras and Origenerator. A fired hold writes to the device the same
 way. Both are "someone drove the device directly just now", which is what MFP's
 forwarder has to know: two writers fighting over one serial port make the device
 stutter between them, so the window says whose turn it is not.
-
-While the device is running its own auto mode, none of these datagrams is
-anybody's turn: auto wins over every sender, as it already does over MFP.
 """
 from __future__ import annotations
 
@@ -33,19 +30,13 @@ class TCodeWriteWindow:
 
 
 class UdpTCodeListener:
-    def __init__(self, *, port: int, stop_event, logger, is_retryable_error,
-                 window: TCodeWriteWindow, tx_activity, device_drives_itself,
-                 motion=None):
+    def __init__(self, *, port: int, stop_event, logger, is_retryable_error):
         self.port = port
         self._stop_event = stop_event
         self._logger = logger
         self._is_retryable_error = is_retryable_error
-        self._window = window
-        self._tx_activity = tx_activity
-        self._device_drives_itself = device_drives_itself
-        self._motion = motion
 
-    def run(self, real, session_stop, retry_state, serial_write_lock) -> None:
+    def run(self, write, session_stop, retry_state) -> None:
         udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp_sock.settimeout(0.2)
         try:
@@ -57,14 +48,8 @@ class UdpTCodeListener:
                     continue
                 for line in data.decode("ascii", errors="replace").split("\n"):
                     line = line.strip()
-                    if not line or self._device_drives_itself():
-                        continue
-                    self._window.mark()
-                    with serial_write_lock:
-                        real.write((line + "\n").encode("ascii"))
-                    self._tx_activity.mark()
-                    if self._motion is not None:
-                        self._motion.wrote(UDP)
+                    if line:
+                        write(UDP, line)
         except Exception as exc:
             self._logger.exception("T-Code UDP listener error")
             retry_state.value = self._is_retryable_error(exc)
