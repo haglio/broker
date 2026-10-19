@@ -89,10 +89,6 @@ class BrokerSerialSession:
             stop_event=stop_event,
             logger=logger,
             is_retryable_error=self.is_retryable_error,
-            window=self._tcode_window,
-            tx_activity=tx_activity,
-            device_drives_itself=lambda: self.auto_mode.is_active,
-            motion=self._motion,
         ) if tcode_udp_port else None
 
     @staticmethod
@@ -133,7 +129,9 @@ class BrokerSerialSession:
                     if self._tcode_listener is not None:
                         thread_tcode = self.start_thread(
                             target=self._tcode_listener.run,
-                            args=(real, session_stop, retry_state, serial_write_lock),
+                            args=(self.tcode_writer(real, serial_write_lock, session_stop,
+                                                    retry_state),
+                                  session_stop, retry_state),
                             name="broker-tcode-udp",
                         )
 
@@ -264,6 +262,24 @@ class BrokerSerialSession:
                 retry_state.value = self.is_retryable_error(exc)
                 session_stop.set()
                 return
+
+    def tcode_writer(self, real, serial_write_lock, session_stop,
+                     retry_state: SessionRetryState) -> Callable[[str, str], None]:
+        def write(source: str, line: str) -> None:
+            if session_stop.is_set() or self.auto_mode.is_active:
+                return
+            self._tcode_window.mark()
+            try:
+                with serial_write_lock:
+                    real.write(f"{line}\n".encode("ascii"))
+            except Exception as exc:
+                self.logger.exception("%s could not be written to the OSR2", source)
+                retry_state.value = self.is_retryable_error(exc)
+                session_stop.set()
+                return
+            self._tx_activity.mark()
+            self._motion.wrote(source)
+        return write
 
     def tick(self, udp_sock, *, real_port, serial_write_lock) -> None:
         for cmd in self.consume_command(self.broker_cmd_file):
