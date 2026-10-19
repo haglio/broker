@@ -367,7 +367,7 @@ def test_forward_virtual_to_real_skips_writes_while_auto_is_active():
     assert retry_state.value is False
 
 
-def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
+def test_forward_virtual_to_real_skips_writes_just_after_direct_t_code():
     clock = [9.9]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     session._tcode_window.mark()
@@ -394,7 +394,7 @@ def test_forward_virtual_to_real_skips_writes_while_tcode_udp_active():
     assert real.writes == []
 
 
-def test_forward_virtual_to_real_allows_writes_when_tcode_udp_idle():
+def test_forward_virtual_to_real_allows_writes_once_direct_t_code_has_gone_quiet():
     clock = [9.0]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     session._tcode_window.mark()
