@@ -20,6 +20,7 @@ LISTED = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"
 def test_windows_calls_the_app_by_the_name_it_shows_itself():
     assert {launcher.file: launcher.app for launcher in launchers(REPO_ROOT)} == {
         "launch_broker_tray.vbs": APP_NAME,
+        "launch_broker_from_its_shortcut.vbs": APP_NAME,
         "launch_preview_branch.vbs": f"{APP_NAME} (branch preview)",
     }
     assert set(LISTED["shortcuts"]) == {APP_NAME}

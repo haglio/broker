@@ -21,8 +21,8 @@ requires-python = ">=3.14"
 # other half had not landed turned all of them red at once. Moving to a newer
 # one is this repo's own commit, with its own suite to answer for it.
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.246",
-    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.216",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.259",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.223",
     "pyserial>=3,<4",
     "PyQt6>=6,<7",
 ]
@@ -63,8 +63,8 @@ siblings = ["app_support", "shared_ui"]
 # the broker's tray (app_support.production_update).
 [tool.haglio.production]
 
-# What launch_broker_tray.vbs starts: the file the scheduled task, the pinned
-# shortcut and Fun Time all run. The launcher is rendered from this by
+# What launch_broker_tray.vbs starts: the file the scheduled task and Fun Time
+# run. The launchers are rendered from these by
 # `python -m app_support.launcher --write`.
 [tool.haglio.launchers."launch_broker_tray.vbs"]
 app = "Broker"
@@ -72,12 +72,23 @@ interpreter = "pythonw.exe"
 named-interpreter = "Broker-Tray.exe"
 run = '-m osr2_broker.tray --config "{root}\osr2_broker_config.json"'
 
+# What the pinned shortcut runs: the same tray, with the family's loading screen
+# up from the click. The scheduled task's starts, which nobody clicked, show none.
+[tool.haglio.launchers."launch_broker_from_its_shortcut.vbs"]
+app = "Broker"
+interpreter = "pythonw.exe"
+named-interpreter = "Broker-Tray.exe"
+run = '-m osr2_broker.tray --config "{root}\osr2_broker_config.json"'
+log = 'state\broker_launcher.log'
+loading-screen = ["Updating Broker..."]
+
 [tool.haglio.launchers."launch_preview_branch.vbs"]
 app = "Broker (branch preview)"
 interpreter = "pythonw.exe"
 venv = "primary"
 run = '-m osr2_broker.tray --config "{primary}\osr2_broker_config.json"'
 log = 'state\preview_branch.log'
+loading-screen = ["Updating Broker..."]
 environment = { BROKER_BRANCH_SESSION = "1" }
 
 # What the broker relies on Windows to keep: the shortcut it is pinned from, and
@@ -85,7 +96,7 @@ environment = { BROKER_BRANCH_SESSION = "1" }
 # of it dying. `python -m app_support.windows_settings --write` makes this machine
 # match every checkout's list.
 [tool.haglio.shortcuts."Broker"]
-launcher = "launch_broker_tray.vbs"
+launcher = "launch_broker_from_its_shortcut.vbs"
 icon = "broker_icon.ico"
 app-id = "OSR2Broker"
 places = ["taskbar", "checkout"]

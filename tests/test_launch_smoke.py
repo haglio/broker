@@ -2,7 +2,8 @@
 
 The suite can be entirely green while nothing appears in the notification area,
 and this is the gap. The scheduled task, the pinned shortcut and fun_time
-all start the broker the same way -- ``launch_broker_tray.vbs`` running
+all start the broker the same way -- ``launch_broker_tray.vbs``, or for the pin
+``launch_broker_from_its_shortcut.vbs``, running
 ``pythonw -m osr2_broker.tray`` -- and ``main()`` there reaches the config, the
 logging setup and the icon through imports *inside* the function, so a break in
 any of them never touches a test that imports ``osr2_broker.tray`` and stops at

@@ -20,17 +20,19 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from shared_ui.chrome import menu_rules
 from shared_ui.colors import TEXT_SECONDARY
 from shared_ui.icons import glyph_icon
-from shared_ui.preview import Preview, preview_of, window_title
+from shared_ui.loading_window import Loading, LoadingCanceled
+from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
 
 from . import branch_session, peer_watch
 from .config import PROJECT_DIR, load_config
 from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
-from .win32 import ICON_PATH, claim_taskbar_identity
+from .win32 import APP_USER_MODEL_ID, ICON_PATH, claim_taskbar_identity
 
 # How often the watchdog checks the broker is still there.
 WATCHDOG_INTERVAL_MS = 5_000
+STEPS = (("Loading Broker...", 1.0),)
 
 
 _WHAT_THE_OSR2_IS_DOING = {
@@ -331,6 +333,15 @@ def shown_as(*, preview: bool) -> Preview | None:
     return preview_of(PROJECT_DIR) if preview else None
 
 
+def open_the_loading_screen(shown_as: Preview | None):
+    from shared_ui.loading_process import LoadingProcess  # noqa: PLC0415
+
+    return LoadingProcess.open(
+        caption="Broker Loading", wordmark=APP_NAME, icon=ICON_PATH, preview=shown_as, steps=STEPS,
+        cancel_hint="Press Esc to cancel opening Broker",
+        app_id=taskbar_identity(APP_USER_MODEL_ID, shown_as))
+
+
 def main(argv: list[str] | None = None) -> int:
     preview = branch_session.take_the_flag()
     if not preview:
@@ -359,8 +370,14 @@ def main(argv: list[str] | None = None) -> int:
 
     marked = shown_as(preview=preview)
     claim_taskbar_identity(marked)
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    loading = Loading.at_the_click(app, logger, lambda: open_the_loading_screen(marked))
+    try:
+        for step, _weight in STEPS:
+            loading.say(step)
+    except LoadingCanceled:
+        return 0
 
     tray, tray_app, _hand_back_timer = start_the_tray(
         config, logger, _mutex_handle, hands_back=preview, shown_as=marked, quit_app=app.quit)
@@ -372,6 +389,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.info("Tray started (pid %d)", os.getpid())
     tray.show()
+    loading.done()
     tray_app.tick()
     try:
         return app.exec()
