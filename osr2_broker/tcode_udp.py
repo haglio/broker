@@ -1,21 +1,26 @@
-"""T-Code arriving over loopback UDP.
+"""T-Code arriving over loopback UDP, the inlet the OSR2's slot replaces.
 
 Genau sends the OSR2 its moves as datagrams, bypassing MFP entirely, and so do
-the Funestras and Origenerator.
+the Funestras and Origenerator, until each connects to the slot instead. Until
+then the inlet stays, but only while nobody holds the slot.
 """
 from __future__ import annotations
 
 import socket
+from collections.abc import Callable
 
-from .motion_log import UDP
+from .motion_log import UDP, RunLog
 
 
 class UdpTCodeListener:
-    def __init__(self, *, port: int, stop_event, logger, is_retryable_error):
+    def __init__(self, *, port: int, stop_event, logger, is_retryable_error,
+                 held_by: Callable[[], str | None], dropped: RunLog):
         self.port = port
         self._stop_event = stop_event
         self._logger = logger
         self._is_retryable_error = is_retryable_error
+        self._held_by = held_by
+        self._dropped = dropped
 
     def run(self, write, session_stop, retry_state) -> None:
         udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -30,10 +35,17 @@ class UdpTCodeListener:
                 for line in data.decode("ascii", errors="replace").split("\n"):
                     line = line.strip()
                     if line:
-                        write(UDP, line)
+                        self._hand_on(write, line)
         except Exception as exc:
             self._logger.exception("T-Code UDP listener error")
             retry_state.value = self._is_retryable_error(exc)
             session_stop.set()
         finally:
             udp_sock.close()
+
+    def _hand_on(self, write, line: str) -> None:
+        holder = self._held_by()
+        if holder is None:
+            write(UDP, line)
+        else:
+            self._dropped.happened(holder)

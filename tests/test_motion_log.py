@@ -11,7 +11,15 @@ import logging
 
 import pytest
 
-from osr2_broker.motion_log import HOLD, MFP, UDP, MotionLog
+from osr2_broker.motion_log import (
+    HOLD,
+    MFP,
+    UDP,
+    driven_from_outside,
+    dropped_udp_log,
+    motion_log,
+    tcode_from,
+)
 
 
 class _Clock:
@@ -32,16 +40,29 @@ class _Recorder(logging.Handler):
 
 
 @pytest.fixture
-def log():
+def heard():
     logger = logging.getLogger("test.osr2_broker.motion")
     logger.handlers.clear()
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
     handler = _Recorder()
     logger.addHandler(handler)
-    clock = _Clock()
-    yield MotionLog(logger=logger, monotonic=clock), handler, clock
+    yield logger, handler
     logger.handlers.clear()
+
+
+@pytest.fixture
+def log(heard):
+    logger, handler = heard
+    clock = _Clock()
+    return motion_log(logger=logger, monotonic=clock), handler, clock
+
+
+@pytest.fixture
+def dropped(heard):
+    logger, handler = heard
+    clock = _Clock()
+    return dropped_udp_log(logger=logger, monotonic=clock), handler, clock
 
 
 class TestARunOfWrites:
@@ -49,7 +70,7 @@ class TestARunOfWrites:
         motion, said, clock = log
 
         for _ in range(50):
-            motion.wrote(UDP)
+            motion.happened(UDP)
             clock.now += 0.1
         clock.now += 5.0
         motion.tick()
@@ -63,11 +84,11 @@ class TestARunOfWrites:
         """The number the whole question turns on: how long before the motion
         he felt did nothing reach the device."""
         motion, said, clock = log
-        motion.wrote(UDP)
+        motion.happened(UDP)
         clock.now += 30.0
         motion.tick()
 
-        motion.wrote(UDP)
+        motion.happened(UDP)
 
         assert said.said[-1] == f"OSR2 driven by {UDP}, quiet for 30.0s before that"
 
@@ -76,9 +97,9 @@ class TestARunOfWrites:
         noticed by the beat that keeps running.  The length reported is the
         writes' own span, not the wait that revealed it was over."""
         motion, said, clock = log
-        motion.wrote(MFP)
+        motion.happened(MFP)
         clock.now += 1.0
-        motion.wrote(MFP)
+        motion.happened(MFP)
         clock.now += 1.0
         motion.tick()
         assert len(said.said) == 1
@@ -90,7 +111,7 @@ class TestARunOfWrites:
 
     def test_a_closed_run_is_not_closed_twice(self, log):
         motion, said, clock = log
-        motion.wrote(HOLD)
+        motion.happened(HOLD)
         clock.now += 10.0
         motion.tick()
         motion.tick()
@@ -104,11 +125,11 @@ class TestHandingTheDeviceOver:
         """Two writers inside one stretch of motion is the case a single
         'the device is moving' flag could not tell apart."""
         motion, said, clock = log
-        motion.wrote(MFP)
+        motion.happened(MFP)
         clock.now += 1.0
-        motion.wrote(MFP)
+        motion.happened(MFP)
 
-        motion.wrote(UDP)
+        motion.happened(UDP)
 
         assert said.said == [
             f"OSR2 driven by {MFP}",
@@ -118,23 +139,64 @@ class TestHandingTheDeviceOver:
 
     def test_the_sources_are_named_for_a_reader_not_for_the_code(self, log):
         assert (MFP, UDP, HOLD) == ("MFP", "T-Code UDP", "a hold")
+        assert tcode_from("portrait") == "T-Code from portrait"
 
 
 class TestWhetherSomethingIsDrivingTheOsr2:
-    @pytest.mark.parametrize("source", [MFP, UDP])
+    @pytest.mark.parametrize("source", [MFP, UDP, tcode_from("portrait")])
     def test_a_driver_writing_is_driving_it_until_it_falls_quiet(self, log, source):
         motion, _said, clock = log
 
-        motion.wrote(source)
+        motion.happened(source)
         clock.now += 1.0
-        assert motion.driven_from_outside()
+        assert driven_from_outside(motion)
 
         clock.now += 1.5
-        assert not motion.driven_from_outside()
+        assert not driven_from_outside(motion)
 
     def test_the_brokers_own_hold_is_not_a_driver(self, log):
         motion, _said, _clock = log
 
-        motion.wrote(HOLD)
+        motion.happened(HOLD)
 
-        assert not motion.driven_from_outside()
+        assert not driven_from_outside(motion)
+
+
+class TestUdpDroppedForTheSlot:
+    """A sender not yet moved to the OSR2's slot goes on sending over UDP while
+    another holds the slot, so its lines are dropped a run at a time."""
+
+    def test_a_run_of_dropped_lines_is_told_at_its_two_ends_with_how_many(self, dropped):
+        held_off, said, clock = dropped
+
+        for _ in range(3):
+            held_off.happened("portrait")
+            clock.now += 0.1
+        clock.now += 5.0
+        held_off.tick()
+
+        assert said.said == [
+            "Dropping T-Code UDP while the OSR2 is portrait's",
+            "Dropped 3 T-Code UDP lines while the OSR2 was portrait's",
+        ]
+
+    def test_one_dropped_line_is_one_line(self, dropped):
+        held_off, said, clock = dropped
+
+        held_off.happened("portrait")
+        clock.now += 5.0
+        held_off.tick()
+
+        assert said.said[-1] == "Dropped 1 T-Code UDP line while the OSR2 was portrait's"
+
+    def test_the_slot_changing_hands_ends_one_run_and_starts_the_next(self, dropped):
+        held_off, said, _clock = dropped
+
+        held_off.happened("portrait")
+        held_off.happened("main")
+
+        assert said.said == [
+            "Dropping T-Code UDP while the OSR2 is portrait's",
+            "Dropped 1 T-Code UDP line while the OSR2 was portrait's",
+            "Dropping T-Code UDP while the OSR2 is main's",
+        ]

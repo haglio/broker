@@ -8,10 +8,11 @@ from pathlib import Path
 from types import MappingProxyType
 
 from app_support import osr2_hold
+from app_support.osr2_slot import Osr2Slot
 
 from .activity import ActivityStamp
 from .hold import PARK, RETRACT, HoldScheduler
-from .motion_log import HOLD, MFP, MotionLog
+from .motion_log import HOLD, MFP, driven_from_outside, dropped_udp_log, motion_log, tcode_from
 from .not_answering import NotAnsweringWatch
 from .power_on import PowerOnWatch
 from .question import DeviceQuestion
@@ -48,6 +49,7 @@ class BrokerSerialSession:
         connected_event: threading.Event,
         is_retryable_error,
         power_on: PowerOnWatch,
+        slot: Osr2Slot,
         monotonic=time.monotonic,
         sleep=time.sleep,
         tcode_udp_port: int = 0,
@@ -73,12 +75,14 @@ class BrokerSerialSession:
         self._rx_activity = rx_activity
         self._tx_activity = tx_activity
         self._power_on = power_on
+        self._slot = slot
         self._question = question
         self._not_answering = not_answering
         # Whether the last bytes forwarded from the virtual port stopped short
         # of a line's end: a question written then would land inside a command.
         self._mid_command = False
-        self._motion = MotionLog(logger=logger, monotonic=monotonic)
+        self._motion = motion_log(logger=logger, monotonic=monotonic)
+        self._udp_dropped = dropped_udp_log(logger=logger, monotonic=monotonic)
         self._holds = HoldScheduler(monotonic=monotonic, logger=logger)
         self._tcode_window = TCodeWriteWindow(monotonic=monotonic)
         # The open failure being reported, and how many times running it has
@@ -90,6 +94,8 @@ class BrokerSerialSession:
             stop_event=stop_event,
             logger=logger,
             is_retryable_error=self.is_retryable_error,
+            held_by=lambda: self._slot.holder,
+            dropped=self._udp_dropped,
         ) if tcode_udp_port else None
 
     @staticmethod
@@ -116,6 +122,8 @@ class BrokerSerialSession:
                 virt.write_timeout = 0.1
                 self._report_recovery()
                 self.connected_event.set()
+                write = self.tcode_writer(real, serial_write_lock, session_stop, retry_state)
+                self._slot.write_through(lambda sender, line: write(tcode_from(sender), line))
                 try:
                     thread_real = self.start_thread(
                         target=self.forward_real_to_virtual,
@@ -130,9 +138,7 @@ class BrokerSerialSession:
                     if self._tcode_listener is not None:
                         thread_tcode = self.start_thread(
                             target=self._tcode_listener.run,
-                            args=(self.tcode_writer(real, serial_write_lock, session_stop,
-                                                    retry_state),
-                                  session_stop, retry_state),
+                            args=(write, session_stop, retry_state),
                             name="broker-tcode-udp",
                         )
 
@@ -150,6 +156,7 @@ class BrokerSerialSession:
                             udp_sock, real_port=real, serial_write_lock=serial_write_lock,
                         )
                 finally:
+                    self._slot.write_through(None)
                     session_stop.set()
                     if thread_real is not None:
                         thread_real.join(timeout=1.0)
@@ -251,13 +258,14 @@ class BrokerSerialSession:
                     continue
                 if (not self.auto_mode.is_active
                         and not self._tcode_window.is_open()
+                        and self._slot.holder is None
                         and not self._holds.suppresses_mfp()):
                     with serial_write_lock:
                         real.write(data)
                         self._mid_command = not data.endswith(b"\n")
                     if queued:
                         self._tx_activity.mark()
-                        self._motion.wrote(MFP)
+                        self._motion.happened(MFP)
             except Exception as exc:
                 self.logger.exception("VIRT->REAL error")
                 retry_state.value = self.is_retryable_error(exc)
@@ -279,7 +287,7 @@ class BrokerSerialSession:
                 session_stop.set()
                 return
             self._tx_activity.mark()
-            self._motion.wrote(source)
+            self._motion.happened(source)
         return write
 
     def tick(self, udp_sock, *, real_port, serial_write_lock) -> None:
@@ -287,12 +295,13 @@ class BrokerSerialSession:
             self.handle_broker_command(cmd, udp_sock)
         self.end_auto_mode_once_switched_off(udp_sock)
         self._motion.tick()
+        self._udp_dropped.tick()
         if self._not_answering is not None:
-            self._not_answering.tick(driving=self._motion.driven_from_outside())
+            self._not_answering.tick(driving=driven_from_outside(self._motion))
         if self.auto_mode.consume_deactivation():
             self._holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
         if self._holds.fire_due(real_port, serial_write_lock, self._tcode_window.mark):
-            self._motion.wrote(HOLD)
+            self._motion.happened(HOLD)
         self._ask_the_device(real_port, serial_write_lock)
 
     def _ask_the_device(self, real_port, serial_write_lock) -> None:
@@ -329,9 +338,11 @@ class BrokerSerialSession:
         self.logger.info("OmniPause: broker resumed")
 
     def _park(self, _udp_sock) -> None:
+        self._slot.kick("The park")
         self._holds.schedule(PARK, "OmniPause: park scheduled")
 
     def _retract(self, _udp_sock) -> None:
+        self._slot.kick("The retract")
         self._holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
     # The whole vocabulary. Every app asks with app_support.osr2_hold's verbs;

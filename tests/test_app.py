@@ -5,6 +5,7 @@ import importlib
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -287,10 +288,11 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
     `configure_logging` and `install_exception_logging` replace both excepthooks
     and open a rotating file handler inside a state directory the test is about
     to delete, so they are patched here rather than cleaned up afterwards; the
-    mutex is granted; the monitor's Win32 message pump is skipped; and `socket`
-    is a stand-in so no datagram leaves the machine. `sleep` is how a test ends
-    the run loop -- raising KeyboardInterrupt out of it is main()'s ordinary
-    shutdown path.
+    mutex is granted; the monitor's Win32 message pump is skipped; `socket` is a
+    stand-in so no datagram leaves the machine; and the OSR2's slot listens on a
+    port the machine picks, never the one the broker running on this machine
+    holds. `sleep` is how a test ends the run loop -- raising KeyboardInterrupt
+    out of it is main()'s ordinary shutdown path.
 
     `osr2_adapters` answers for the machine's real COM ports, which the broker
     asks before every session; it is answered here so a suite run on a desk with
@@ -299,6 +301,7 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
     returning them.
     """
     patches = [
+        patch.object(broker_app_module, "OSR2_SLOT", 0),
         patch.object(broker_app_module, "configure_logging",
                      return_value=logging.getLogger("test.broker")),
         patch.object(broker_app_module, "install_exception_logging"),
@@ -515,6 +518,60 @@ class TestMainPublishesItsStateFiles:
 
         assert not (config.state_dir / "genau_mode.txt").exists()
         assert (config.state_dir / "broker_mode.txt").read_text(encoding="utf-8") == "0"
+
+
+def _stop_on_first_sleep(_seconds):
+    raise KeyboardInterrupt
+
+
+class TestMainHoldsTheOsr2Slot:
+    def test_the_session_is_handed_a_slot_that_listens_while_the_broker_runs(
+        self, broker_app_module, cfg_path,
+    ):
+        """One slot for the broker's whole run, not one per serial session, so a
+        sender stays connected while the session opens again after a port
+        error."""
+        built: dict = {}
+        listening = []
+
+        def record(**kwargs):
+            built.update(kwargs)
+            return MagicMock()
+
+        def stop_once_seen(_seconds):
+            listening.append(built["slot"].address)
+            raise KeyboardInterrupt
+
+        with (
+            _main_running(broker_app_module, fake_serial=make_fake_serial([]),
+                          sleep=stop_once_seen),
+            patch.object(broker_app_module, "BrokerSerialSession", side_effect=record),
+        ):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        [address] = listening
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as nothing_listens_there:
+            nothing_listens_there.bind(address)
+
+    def test_a_broker_whose_slot_cannot_listen_still_bridges_the_osr2(
+        self, broker_app_module, cfg_path,
+    ):
+        """Every sender not yet moved to the slot still reaches the device over
+        UDP, and MFP through the virtual port, so a port somebody else holds is
+        no reason for the broker to stop."""
+        open_ports: list[str] = []
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as somebody_else:
+            somebody_else.bind(("127.0.0.1", 0))
+            somebody_else.listen()
+            with (
+                _main_running(broker_app_module, fake_serial=make_fake_serial(open_ports),
+                              sleep=_stop_on_first_sleep),
+                patch.object(broker_app_module, "OSR2_SLOT", somebody_else.getsockname()[1]),
+            ):
+                broker_app_module.main(["--config", str(cfg_path)])
+
+        assert "COM4" in open_ports
 
 
 class TestMainWatchesForThePowerOn:

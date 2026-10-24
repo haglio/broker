@@ -18,7 +18,7 @@ from app_support.threading_utils import wait_until
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.protocol import BrokerAutoController
 from osr2_broker.session import BrokerSerialSession
-from tests.conftest import FakePowerOn
+from tests.conftest import FakePowerOn, idle_slot
 
 
 class FakeSerialPort:
@@ -178,7 +178,7 @@ def _build_stack(tmp_path: Path):
         tx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_tx.txt"),
         connected_event=threading.Event(),
         is_retryable_error=lambda _exc: False,
-        power_on=FakePowerOn(),
+        power_on=FakePowerOn(), slot=idle_slot(),
         monotonic=clock,
         # Not a no-op: with nothing to read the run loop and both forwarding
         # threads would spin at full tilt for as long as the test lasts. A
