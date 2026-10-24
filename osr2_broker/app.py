@@ -11,6 +11,8 @@ from app_support import osr2_device
 from app_support.cli import preparse_config_path
 from app_support.file_channel import consume_command_file, publish_whole
 from app_support.logging_utils import configure_logging, install_exception_logging
+from app_support.osr2_slot import Osr2Slot
+from app_support.ports import OSR2_SLOT
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import mutex_name, try_acquire_mutex
 
@@ -86,7 +88,9 @@ def main(argv: list[str] | None = None) -> int:
         write_mode=write_mode,
         udp_send=udp_send,
     )
+    slot = Osr2Slot(port=OSR2_SLOT, logger=logger, start_thread=start_daemon_thread)
     session = BrokerSerialSession(
+        slot=slot,
         serial_factory=serial.Serial,
         virtual_port=virtual_port,
         baud=config.baud,
@@ -129,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Starting broker on %s", virtual_port)
     logger.info("Genau UDP target: %s:%s", config.udp_host, config.udp_port)
     logger.info("T-Code UDP listener: 127.0.0.1:%s", config.tcode_udp_port)
+    slot.start()
 
     try:
         osr2_port = None
@@ -143,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Broker interrupted")
     finally:
         stop_event.set()
+        slot.close()
         heartbeat_thread.join(timeout=1.0)
         udp_sock.close()
 

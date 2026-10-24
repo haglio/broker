@@ -29,12 +29,29 @@ def _free_port() -> int:
     return port
 
 
-def _build_listener(port: int):
+def _nobody() -> None:
+    """Who holds the OSR2's slot, where nobody does."""
+
+
+class _Dropped:
+    """The log of what was dropped while the slot was held: whose it was, a line
+    at a time."""
+
+    def __init__(self):
+        self.while_held_by: list[str] = []
+
+    def happened(self, holder: str) -> None:
+        self.while_held_by.append(holder)
+
+
+def _build_listener(port: int, *, held_by=_nobody, dropped=None):
     return UdpTCodeListener(
         port=port,
         stop_event=threading.Event(),
         logger=MagicMock(),
         is_retryable_error=lambda _exc: False,
+        held_by=held_by,
+        dropped=dropped or _Dropped(),
     )
 
 
@@ -83,9 +100,9 @@ def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threadin
     threading.Thread(target=_offer, daemon=True).start()
 
 
-def _listen_for(payload: bytes, *, enough: int = 1) -> list[tuple[str, str]]:
+def _listen_for(payload: bytes, *, enough: int = 1, **listener) -> list[tuple[str, str]]:
     port = _free_port()
-    listener = _build_listener(port)
+    listener = _build_listener(port, **listener)
     session_stop = threading.Event()
     written = _Written(session_stop, enough=enough)
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -99,6 +116,27 @@ def _listen_for(payload: bytes, *, enough: int = 1) -> list[tuple[str, str]]:
 
 def test_a_datagram_is_handed_on_as_t_code_udp():
     assert _listen_for(b"L05000I33") == [(UDP, "L05000I33")]
+
+
+def test_a_datagram_arriving_while_a_sender_holds_the_slot_is_dropped_and_told():
+    """The UDP inlet stays for the senders not yet moved to the OSR2's slot, and
+    only while nobody holds it.
+
+    Proved positively rather than by waiting a datagram out: the same line is
+    re-offered until one is written, and the slot is held only for the first.
+    """
+    asked = []
+
+    def held_by() -> str | None:
+        asked.append(True)
+        return "portrait" if len(asked) == 1 else None
+
+    dropped = _Dropped()
+
+    written = _listen_for(b"L05000I33", held_by=held_by, dropped=dropped)
+
+    assert dropped.while_held_by == ["portrait"]
+    assert written == [(UDP, "L05000I33")]
 
 
 def test_one_datagram_carrying_several_lines_becomes_several_writes():

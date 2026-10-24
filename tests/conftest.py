@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from app_support.osr2_slot import Osr2Slot
 from PyQt6.QtWidgets import QApplication
 
 from tests.scratch import scratch_dir
@@ -58,6 +59,13 @@ class FakePowerOn:
 
     def rx_broke_the_silence(self) -> bool:
         return self.breaks_silence
+
+
+def idle_slot() -> Osr2Slot:
+    """The OSR2's slot for a session whose test is not about it: never opened,
+    so nobody holds it and whatever the session lends it goes unused."""
+    return Osr2Slot(port=0, logger=logging.getLogger("test.osr2_broker.idle_slot"),
+                    start_thread=None)
 
 
 @pytest.fixture(autouse=True)

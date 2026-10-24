@@ -21,7 +21,7 @@ import serial
 from osr2_broker import app as broker_app
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.session import BrokerSerialSession
-from tests.conftest import FakePowerOn
+from tests.conftest import FakePowerOn, idle_slot
 
 MISSING_PORT = "could not open port COM4"
 
@@ -43,7 +43,7 @@ def _session(logger, serial_factory) -> BrokerSerialSession:
         tx_activity=ActivityStamp(Path("tx.txt")),
         connected_event=threading.Event(),
         is_retryable_error=broker_app.is_retryable_serial_error,
-        power_on=FakePowerOn(),
+        power_on=FakePowerOn(), slot=idle_slot(),
     )
 
 

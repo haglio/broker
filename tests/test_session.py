@@ -9,12 +9,13 @@ from app_support.file_channel import publish_stamp, stamp_age
 from app_support.osr2_device import ANSWERS_ONCE_OFF_S, switched_on
 from app_support.state_files import OSR2_SERIAL_RX
 
+from osr2_broker import session as session_module
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.hold import HoldScheduler
 from osr2_broker.motion_log import UDP
 from osr2_broker.question import DeviceQuestion
 from osr2_broker.session import BrokerSerialSession, SessionRetryState
-from tests.conftest import FakePowerOn
+from tests.conftest import FakePowerOn, idle_slot
 
 
 class NotActuallyRunning:
@@ -76,10 +77,11 @@ def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
                     rx_activity=None, tx_activity=None,
                     is_retryable_error=lambda _exc: False,
                     tcode_udp_port: int = 0, power_on=None, question=None,
-                    device_on=lambda: True, not_answering=None, logger=None):
+                    device_on=lambda: True, not_answering=None, logger=None, slot=None):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = logger or MagicMock()
     session = BrokerSerialSession(
+        slot=slot or idle_slot(),
         serial_factory=MagicMock(),
         virtual_port="COM15",
         baud=115200,
@@ -955,6 +957,157 @@ def test_a_session_that_has_begun_to_end_writes_no_more_t_code():
     _writer(session, port, session_stop=session_stop)(UDP, "L05000I33")
 
     assert port.writes == []
+
+
+class _SlotSpy:
+    """The OSR2's slot, as far as a serial session uses it: who holds it, the
+    writer it was lent, and who took the OSR2 from it, in among whatever else
+    ``events`` is keeping."""
+
+    def __init__(self, events: list | None = None, *, holder: str | None = None):
+        self.holder = holder
+        self.writers: list = []
+        self.events = [] if events is None else events
+
+    def write_through(self, writer) -> None:
+        self.writers.append(writer)
+
+    def kick(self, taker: str) -> None:
+        self.events.append(f"{taker} took the OSR2")
+
+
+def test_mfp_is_not_forwarded_while_a_sender_holds_the_slot():
+    """The slot's holder is the one stream that reaches the device; MFP joining
+    in is the two streams the slot is there to end."""
+    slot = _SlotSpy(holder="portrait")
+    session, _auto_mode, _logger = _build_session(slot=slot)
+    real = _Port()
+
+    _forward(session, real, threading.Lock(), b"L05000I33\n")
+    slot.holder = None
+    _forward(session, real, threading.Lock(), b"L09999I33\n")
+
+    assert real.writes == [b"L09999I33\n"]
+
+
+def test_the_udp_inlet_asks_the_session_s_slot_who_holds_it(monkeypatch):
+    handed = {}
+    monkeypatch.setattr(session_module, "UdpTCodeListener", lambda **kwargs: handed.update(kwargs))
+    slot = _SlotSpy(holder="portrait")
+
+    _build_session(tcode_udp_port=50557, slot=slot)
+    held_by = handed["held_by"]
+
+    assert held_by() == "portrait"
+    slot.holder = None
+    assert held_by() is None
+
+
+def test_udp_dropped_while_the_slot_is_held_is_told_when_the_tick_finds_the_run_over(
+        monkeypatch, recorded_logger):
+    handed = {}
+    monkeypatch.setattr(session_module, "UdpTCodeListener", lambda **kwargs: handed.update(kwargs))
+    logger, heard = recorded_logger
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=50557, logger=logger,
+                                                  monotonic=lambda: clock[0])
+
+    handed["dropped"].happened("portrait")
+    clock[0] += 5.0
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
+
+    assert [record.getMessage() for record in heard.records] == [
+        "Dropping T-Code UDP while the OSR2 is portrait's",
+        "Dropped 1 T-Code UDP line while the OSR2 was portrait's",
+    ]
+
+
+def _a_session_telling(events: list, **kwargs):
+    """A session whose slot and log both tell ``events``, in the order they happen."""
+    logger = MagicMock()
+    logger.info.side_effect = lambda message, *_args: events.append(message)
+    return _build_session(slot=_SlotSpy(events), logger=logger, **kwargs)[0]
+
+
+def test_a_park_takes_the_osr2_from_whoever_holds_the_slot_before_it_is_scheduled():
+    events: list = []
+
+    _a_session_telling(events).handle_broker_command("PARK", object())
+
+    assert events == ["The park took the OSR2", "OmniPause: park scheduled"]
+
+
+def test_a_retract_takes_the_osr2_from_whoever_holds_the_slot_before_it_is_scheduled():
+    events: list = []
+
+    _a_session_telling(events).handle_broker_command("RETRACT", object())
+
+    assert events == ["The retract took the OSR2", "OmniPause: retract scheduled"]
+
+
+def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot():
+    """Nobody was driving a device that was switched off, and whoever connects
+    to drive it now must not be thrown off by its waking up."""
+    events: list = []
+    session = _a_session_telling(events, power_on=FakePowerOn(breaks_silence=True))
+    session_stop = threading.Event()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"hello\n"
+
+    session.forward_real_to_virtual(FakeReal(), MagicMock(), object(), session_stop,
+                                    SessionRetryState())
+
+    assert events == ["OSR2 powered on: park scheduled"]
+
+
+def test_the_park_when_auto_mode_ends_takes_nothing_from_the_slot():
+    events: list = []
+    session = _a_session_telling(events, auto_active=True, device_on=lambda: False)
+
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
+
+    assert "Auto mode deactivated: park scheduled" in events
+    assert not [event for event in events if "took the OSR2" in event]
+
+
+class _OpenPort(_Port):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return None
+
+    def read(self, _size):
+        return b""
+
+    @property
+    def dsr(self):
+        return True
+
+
+def test_the_osr2_s_slot_writes_through_a_session_only_while_its_ports_are_open(recorded_logger):
+    logger, heard = recorded_logger
+    slot = _SlotSpy()
+    session, _auto_mode, _logger = _build_session(slot=slot, logger=logger)
+    ports = {"COM15": _OpenPort(), "COM4": _OpenPort()}
+    session.serial_factory = lambda name, *_a, **_kw: ports[name]
+    session.start_thread = lambda **_kw: NotActuallyRunning()
+
+    def _sleep(_seconds):
+        slot.writers[-1]("portrait", "L05000I33")
+        session.stop_event.set()
+
+    session.sleep = _sleep
+    session.run(object(), "COM4")
+
+    assert ports["COM4"].writes == [b"L05000I33\n"]
+    assert slot.writers[-1] is None
+    assert "OSR2 driven by T-Code from portrait" in [r.getMessage() for r in heard.records]
 
 
 def test_no_tcode_port_means_no_listener_thread():
