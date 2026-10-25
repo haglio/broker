@@ -89,6 +89,7 @@ venv = "primary"
 run = '-m osr2_broker.tray --config "{primary}\osr2_broker_config.json"'
 log = 'state\preview_branch.log'
 loading-screen = ["Updating Broker..."]
+preview = true
 environment = { BROKER_BRANCH_SESSION = "1" }
 
 # What the broker relies on Windows to keep: the shortcut it is pinned from, and

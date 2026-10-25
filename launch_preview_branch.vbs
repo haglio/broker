@@ -4,7 +4,7 @@
 
 Option Explicit
 
-Dim fso, shell, root, app, interpreter, directory, arguments, base, updater, gates, held(), primary, logPath, screenFolder, screenUp
+Dim fso, shell, root, app, interpreter, directory, arguments, base, updater, gates, held(), primary, logPath, screenFolder, screenUp, picturesFolder
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
@@ -21,6 +21,7 @@ Sub Decide()
   primary = fso.GetParentFolderName(fso.GetParentFolderName(fso.GetParentFolderName(root)))
   logPath = fso.BuildPath(root, "state\preview_branch.log")
   screenFolder = fso.BuildPath(root, "state\preview_branch.screen")
+  picturesFolder = fso.BuildPath(primary, "state\preview_branch.screen\preview")
   arguments = "-m osr2_broker.tray --config """ & primary & "\osr2_broker_config.json"""
   interpreter = fso.BuildPath(primary, ".venv\Scripts\pythonw.exe")
   directory = root
@@ -45,6 +46,7 @@ Sub Report()
   Next
   WScript.Echo "loading screen: " & LoadingScreen()
   WScript.Echo "screen: " & screenFolder
+  WScript.Echo "pictures: " & picturesFolder
 End Sub
 
 Sub Launch()
@@ -140,13 +142,14 @@ End Function
 Sub ShowLoadingScreen()
   Dim name
   shell.Environment("Process").Item("HAGLIO_LOADING_SCREEN") = screenFolder
+  shell.Environment("Process").Item("HAGLIO_LOADING_SCREEN_PICTURES") = picturesFolder
   shell.Environment("Process").Item("HAGLIO_LOADING_SCREEN_LINES") = "[""Updating Broker...""]"
   If Not fso.FolderExists(fso.GetParentFolderName(screenFolder)) Then fso.CreateFolder fso.GetParentFolderName(screenFolder)
   If Not fso.FolderExists(screenFolder) Then fso.CreateFolder screenFolder
   For Each name In Array("shown.json", "taken", "started", "ended", "canceled", "updated")
     If fso.FileExists(fso.BuildPath(screenFolder, name)) Then fso.DeleteFile fso.BuildPath(screenFolder, name)
   Next
-  If fso.FileExists(updater) And fso.FileExists(fso.BuildPath(screenFolder, "pictures.json")) Then
+  If fso.FileExists(updater) And fso.FileExists(fso.BuildPath(picturesFolder, "pictures.json")) Then
     shell.Run LoadingScreen(), 1, False
     screenUp = True
   End If
