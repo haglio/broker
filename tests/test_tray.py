@@ -366,9 +366,10 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
 
     supervisor = FakeSupervisor(running=True)
     quit_calls = []
-    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
+    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
+                        quit_app=lambda: quit_calls.append(True))
 
-    app.quit(quit_app=lambda: quit_calls.append(True))
+    app.quit()
 
     assert supervisor.stops == 1
     assert not tray.isVisible()
@@ -384,9 +385,10 @@ def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
     stood_down, handed_back, quit_calls = [], [], []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
                         stand_down=lambda: stood_down.append(True),
-                        hand_back=lambda: handed_back.append(True))
+                        hand_back=lambda: handed_back.append(True),
+                        quit_app=lambda: quit_calls.append(True))
 
-    app.quit(quit_app=lambda: quit_calls.append(True))
+    app.quit()
 
     assert handed_back == [True]
     assert stood_down == []
@@ -401,11 +403,11 @@ def test_making_way_for_an_update_stops_the_broker_before_the_next_tray_is_start
     supervisor = FakeSupervisor(running=True)
     stood_down, started_with_the_broker_running, quit_calls = [], [], []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
-                        stand_down=lambda: stood_down.append(True))
+                        stand_down=lambda: stood_down.append(True),
+                        quit_app=lambda: quit_calls.append(True))
 
     app.make_way_for_an_update(
-        start_the_next_tray=lambda: started_with_the_broker_running.append(supervisor.running),
-        quit_app=lambda: quit_calls.append(True))
+        start_the_next_tray=lambda: started_with_the_broker_running.append(supervisor.running))
 
     assert started_with_the_broker_running == [False]
     assert stood_down == []

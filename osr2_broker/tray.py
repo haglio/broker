@@ -165,7 +165,8 @@ class BrokerTrayApp:
     """Policy: keep a broker alive, and keep the tray telling the truth."""
 
     def __init__(self, config, supervisor, tray: BrokerTray, *, open_file=None,
-                 peer=None, updates=None, stand_down=peer_watch.stand_broker_down, hand_back=None):
+                 peer=None, updates=None, stand_down=peer_watch.stand_broker_down, hand_back=None,
+                 quit_app=QApplication.quit):
         self._config = config
         self._supervisor = supervisor
         self._tray = tray
@@ -174,6 +175,7 @@ class BrokerTrayApp:
         self._updates = updates
         self._stand_down = stand_down
         self._hand_back = hand_back
+        self._quit_app = quit_app
         self._paused = False
 
         tray.start_action.triggered.connect(self.start_or_restart)
@@ -223,7 +225,7 @@ class BrokerTrayApp:
         log_path.touch(exist_ok=True)
         self._open_file(log_path)
 
-    def quit(self, quit_app) -> None:
+    def quit(self) -> None:
         """Take the broker down too — nothing else would supervise it.
 
         And leave the mark that tells Evolver this was asked for, so it does not
@@ -239,13 +241,13 @@ class BrokerTrayApp:
             self._stand_down()
             self._supervisor.stop()
         self._tray.hide()
-        quit_app()
+        self._quit_app()
 
-    def make_way_for_an_update(self, *, start_the_next_tray, quit_app) -> None:
+    def make_way_for_an_update(self, *, start_the_next_tray) -> None:
         self._supervisor.stop()
         start_the_next_tray()
         self._tray.hide()
-        quit_app()
+        self._quit_app()
 
 
 def launch_broker(argv: list[str], config, logger) -> None:
@@ -324,15 +326,14 @@ def start_the_tray(config, logger, claim: int, *, hands_back: bool, shown_as: Pr
         PROJECT_DIR, a_good_moment=lambda: mode(config.state_dir) is Osr2Mode.OFF,
         start_again=lambda: tray_app.make_way_for_an_update(
             start_the_next_tray=lambda: production_update.start_again_after(
-                os.getpid(), PROJECT_DIR / "launch_broker_tray.vbs"),
-            quit_app=quit_app),
+                os.getpid(), PROJECT_DIR / "launch_broker_tray.vbs")),
         logger=logger)
     tray_app = BrokerTrayApp(
         config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger), updates=updates,
-        hand_back=(lambda: branch_session.hand_back(config, claim)) if hands_back else None)
-    tray.quit_action.triggered.connect(lambda: tray_app.quit(quit_app))
-    hand_back_timer = (branch_session.hand_back_later(lambda: tray_app.quit(quit_app))
-                       if hands_back else None)
+        hand_back=(lambda: branch_session.hand_back(config, claim)) if hands_back else None,
+        quit_app=quit_app)
+    tray.quit_action.triggered.connect(tray_app.quit)
+    hand_back_timer = branch_session.hand_back_later(tray_app.quit) if hands_back else None
     return tray, tray_app, hand_back_timer
 
 

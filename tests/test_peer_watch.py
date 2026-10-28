@@ -164,7 +164,7 @@ class TestWhereTheLauncherComesFrom:
 class TestTheTrayKeepsTheWatch:
     def _app(self, cfg_path, tray, *, peer=None, stand_down=None, running=True):
 
-        kwargs = {"peer": peer}
+        kwargs = {"peer": peer, "quit_app": lambda: None}
         if stand_down is not None:
             kwargs["stand_down"] = stand_down
         return BrokerTrayApp(
@@ -196,7 +196,7 @@ class TestTheTrayKeepsTheWatch:
         stood_down: list[str] = []
 
         app = self._app(cfg_path, tray, stand_down=lambda: stood_down.append("marked"))
-        app.quit(lambda: None)
+        app.quit()
 
         assert stood_down == ["marked"]
 
@@ -209,8 +209,8 @@ class TestTheTrayKeepsTheWatch:
 
 
         app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
-                            stand_down=lambda: order.append("marked"))
-        app.quit(lambda: None)
+                            stand_down=lambda: order.append("marked"), quit_app=lambda: None)
+        app.quit()
 
         assert order == ["marked", "stopped"]
 
@@ -218,7 +218,7 @@ class TestTheTrayKeepsTheWatch:
                                                        stand_down_marker):
         wrote, _ = stand_down_marker
 
-        self._app(cfg_path, tray).quit(lambda: None)
+        self._app(cfg_path, tray).quit()
 
         assert wrote.call_args[0][0] == "broker"
 
