@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from app_support.lint import assert_config_is_the_familys, assert_lint_is_clean
+
+pytestmark = pytest.mark.repo_check
 
 ROOT = Path(__file__).resolve().parent.parent
 

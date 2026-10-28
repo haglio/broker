@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from app_support import unread
 from app_support.dead_code import (
     assert_every_package_is_scanned,
@@ -12,6 +13,8 @@ from app_support.dead_code import (
     assert_nothing_is_imported_or_assigned_and_left_unread,
     assert_whitelist_is_live,
 )
+
+pytestmark = pytest.mark.repo_check
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGES = (ROOT / "osr2_broker",)
