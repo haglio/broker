@@ -6,6 +6,8 @@ from pathlib import Path
 from app_support import ports, state_files
 from app_support.config_reader import read_json_config, require_path, require_typed, resolve_path
 
+from . import contract
+
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_DIR / "osr2_broker_config.json"
 
@@ -71,6 +73,10 @@ class BrokerConfig:
     @property
     def broker_checkout_file(self) -> Path:
         return self.state_dir / "broker_checkout.txt"
+
+    @property
+    def stop_request_file(self) -> Path:
+        return self.state_dir / contract.STOP_REQUEST
 
     def log_file(self, name: str) -> Path:
         return self.state_dir / f"{name}.log"

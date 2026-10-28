@@ -33,6 +33,9 @@ TRAY_MODULE = f"{__package__}.tray"
 #: The file that starts the tray, which starts the broker.
 TRAY_LAUNCHER = "launch_broker_tray.vbs"
 
+#: Put in the state directory by an app asking the broker and its tray to stop.
+STOP_REQUEST = "broker_stop_request.txt"
+
 #: Where this app's state files sit, as a path under the checkout named
 #: here rather than under this one.  Three apps meet at that directory -- this
 #: one writes the files, a session and Origenerator read them -- and only one of
@@ -54,6 +57,7 @@ def declaration() -> dict[str, str]:
         "broker_module": BROKER_MODULE,
         "tray_module": TRAY_MODULE,
         "tray_launcher": TRAY_LAUNCHER,
+        "stop_request": STOP_REQUEST,
         "state_dir": {"checkout": STATE_DIR_CHECKOUT, "name": STATE_DIR_NAME},
     }
 
