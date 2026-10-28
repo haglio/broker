@@ -4,6 +4,7 @@
   "broker_module": "osr2_broker.app",
   "tray_module": "osr2_broker.tray",
   "tray_launcher": "launch_broker_tray.vbs",
+  "stop_request": "broker_stop_request.txt",
   "state_dir": {
     "checkout": "fun_time",
     "name": "state"

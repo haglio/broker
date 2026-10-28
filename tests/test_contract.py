@@ -13,6 +13,7 @@ import tomllib
 from pathlib import Path, PurePosixPath
 
 from osr2_broker import contract
+from osr2_broker.config import load_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,6 +45,10 @@ def test_both_module_paths_it_names_are_importable_files_here():
 
 def test_the_launcher_it_names_is_the_one_in_this_checkout():
     assert (REPO_ROOT / contract.declaration()["tray_launcher"]).is_file()
+
+
+def test_the_stop_request_it_names_is_the_file_the_tray_answers(cfg_path):
+    assert _document()["stop_request"] == load_config(cfg_path).stop_request_file.name
 
 
 def test_the_launcher_starts_the_tray_module_the_document_names():

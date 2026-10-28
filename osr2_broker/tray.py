@@ -177,6 +177,7 @@ class BrokerTrayApp:
         self._hand_back = hand_back
         self._quit_app = quit_app
         self._paused = False
+        _taken(config.stop_request_file)
 
         tray.start_action.triggered.connect(self.start_or_restart)
         tray.pause_action.triggered.connect(self.pause)
@@ -190,6 +191,9 @@ class BrokerTrayApp:
         door. The watch throttles itself to its own interval, so passing every
         five-second beat through it costs one comparison.
         """
+        if _taken(self._config.stop_request_file):
+            self._stop_as_asked()
+            return
         if not self._paused:
             self._supervisor.start()
         if self._peer is not None:
@@ -248,6 +252,19 @@ class BrokerTrayApp:
         start_the_next_tray()
         self._tray.hide()
         self._quit_app()
+
+    def _stop_as_asked(self) -> None:
+        self._supervisor.stop()
+        self._tray.hide()
+        self._quit_app()
+
+
+def _taken(request: Path) -> bool:
+    try:
+        request.unlink()
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def launch_broker(argv: list[str], config, logger) -> None:

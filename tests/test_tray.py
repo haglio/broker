@@ -415,6 +415,37 @@ def test_making_way_for_an_update_stops_the_broker_before_the_next_tray_is_start
     assert quit_calls == [True]
 
 
+def test_a_stop_another_app_asks_for_ends_the_broker_and_the_tray_on_the_next_beat(tray, cfg_path):
+    config = load_config(cfg_path)
+    supervisor = FakeSupervisor(running=True)
+    stood_down, quit_calls = [], []
+    app = BrokerTrayApp(config, supervisor, tray, stand_down=lambda: stood_down.append(True),
+                        quit_app=lambda: quit_calls.append(True))
+    publish_stamp(config.stop_request_file)
+
+    app.tick()
+
+    assert (supervisor.stops, supervisor.starts) == (1, 0)
+    assert stood_down == []
+    assert not tray.isVisible()
+    assert quit_calls == [True]
+    assert not config.stop_request_file.exists()
+
+
+def test_a_stop_asked_for_before_the_tray_started_is_dropped_rather_than_answered(tray, cfg_path):
+    config = load_config(cfg_path)
+    publish_stamp(config.stop_request_file)
+    supervisor = FakeSupervisor(running=False)
+    quit_calls = []
+    app = BrokerTrayApp(config, supervisor, tray, quit_app=lambda: quit_calls.append(True))
+
+    app.tick()
+
+    assert supervisor.starts == 1
+    assert quit_calls == []
+    assert not config.stop_request_file.exists()
+
+
 class FakeUpdateWatch:
     def __init__(self):
         self.ticks = 0
