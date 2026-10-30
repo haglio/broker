@@ -4,7 +4,8 @@ The scheduled task and Fun Time start the tray through launch_broker_tray.vbs,
 and the pinned shortcut through launch_broker_from_its_shortcut.vbs, so their
 names and places are pinned here.  Each is
 rendered from its spec in pyproject.toml by app_support.launcher, whose own tests
-hold what every launcher does; what is the broker's is asked of this one.
+hold what every launcher does, and the family's gates hold that each is what its
+spec renders; what is the broker's is asked of this one.
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from app_support.launcher import assert_launchers_match_their_specs, dry_run
+from app_support.launcher import dry_run
 
 from osr2_broker import branch_session
 
@@ -27,10 +28,6 @@ on_windows = pytest.mark.skipif(sys.platform != "win32", reason="the Windows scr
 def test_the_launchers_are_where_the_scheduled_task_and_the_pin_point():
     assert LAUNCHER.is_file()
     assert SHORTCUT_LAUNCHER.is_file()
-
-
-def test_the_launcher_is_what_its_spec_renders():
-    assert_launchers_match_their_specs(REPO_ROOT)
 
 
 @on_windows

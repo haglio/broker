@@ -45,8 +45,8 @@ dev = [
 # --timeout-method=thread is the half that pays for itself: it dumps the stack
 # of the test that stopped, which turns a stalled required check into a
 # one-line diagnosis.
-# app_support.clocks holds all three halves of it.
-addopts = "-p no:cacheprovider --timeout=60 --timeout-method=thread -p app_support.sanitize.pytest_plugin -p app_support.clocks.pytest_plugin -p app_support.coverage_gate --cov --cov-report="
+# app_support.gates holds all three halves of it.
+addopts = "-p no:cacheprovider --timeout=60 --timeout-method=thread -p app_support.sanitize.pytest_plugin -p app_support.gates.pytest_plugin -p app_support.coverage_gate --cov --cov-report="
 testpaths = ["tests"]
 
 # The family checkouts this one is installed beside: app_support (logging,
@@ -54,9 +54,16 @@ testpaths = ["tests"]
 # the idle-warning dialog paint themselves with). Neither is published, so
 # neither can go in [project.dependencies]; a comment was the record until it
 # decayed across the family, so this is the record, and
-# tests/test_dependencies.py holds it against the tree.
+# the family's dependency gate holds it against the tree.
 [tool.haglio]
 siblings = ["app_support", "shared_ui"]
+
+# What the family's gates (app_support.gates) let stand here, each for the
+# reason beside it. An entry nothing is reported for any more fails the gate.
+[tool.haglio.dead-code]
+# --config is read off argv by app_support.cli.preparse_config_path, before the
+# parser runs; the declaration is there for --help.
+unread-command-line-options = ["config"]
 
 # Declared, so that every launcher here brings this checkout up to what has
 # shipped, and waits out an update of it already under way, before it starts
