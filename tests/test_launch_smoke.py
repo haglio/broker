@@ -78,6 +78,7 @@ def _run_the_launchs_way(statements: list[str]) -> subprocess.CompletedProcess:
         env=env,
         capture_output=True,
         text=True,
+        check=False,
     )
 
 
