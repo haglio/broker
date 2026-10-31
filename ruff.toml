@@ -4,9 +4,24 @@ target-version = "py312"
 [lint]
 select = ["F", "E", "W", "I", "UP", "B", "C4", "SIM", "RUF", "PL", "PT", "DTZ", "PIE", "PERF", "FLY", "ISC", "RET", "FURB", "EXE"]
 ignore = ["E501", "BLE001", "S110",
-    # This repo's ratchet: what the family config found here, to be worked off rule by rule.
-    "PLR2004", "PLR0913", "B018", "SIM105", "PERF102", "PT022", "PLW0108", "RUF059", "ISC004", "RUF002", "PT018", "RUF001"]
-external = ["ARG", "N", "S", "E501", "BLE001", "S110", "PLR2004", "PLR0913", "B018", "SIM105", "PERF102", "PT022", "PLW0108", "RUF059", "ISC004", "RUF002", "PT018", "RUF001"]
+    # This repo's ratchet: each rule the family config still finds here, and its places today.
+    "PLR0913",  # 8
+    "SIM105",  # 3
+    "PERF102",  # 3
+    "PT022",  # 1
+    "PLW0108",  # 3
+    "RUF059",  # 3
+    "ISC004",  # 2
+    "RUF002",  # 1
+    "PT018",  # 2
+    "RUF001",  # 2
+]
+external = ["ARG", "N", "S", "E501", "BLE001", "S110", "PLR0913", "SIM105", "PERF102", "PT022", "PLW0108", "RUF059", "ISC004", "RUF002", "PT018", "RUF001"]
+
+[lint.per-file-ignores]
+"**/vulture_whitelist.py" = ["B018", "F821"]
+"**/tests/**" = ["PLR2004"]
+"**/test_*.py" = ["PLR2004"]
 
 [format]
 quote-style = "double"

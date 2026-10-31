@@ -8,11 +8,11 @@ from __future__ import annotations
 
 # -- Win32 ctypes struct fields (WNDCLASSW) ----------------------------------
 # Required by RegisterClassW; ctypes reads them from the struct layout.
-lpfnWndProc  # noqa: F821
-hInstance  # noqa: F821
-lpszClassName  # noqa: F821
+lpfnWndProc
+hInstance
+lpszClassName
 
 # -- pyserial property --------------------------------------------------------
 # Set on the virtual serial port object; pyserial uses it internally.
-write_timeout  # noqa: F821
+write_timeout
 
