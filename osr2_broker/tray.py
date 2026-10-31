@@ -19,7 +19,7 @@ from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from shared_ui.chrome import menu_rules
 from shared_ui.colors import TEXT_SECONDARY
-from shared_ui.icons import glyph_icon
+from shared_ui.icons import qt_icon
 from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
@@ -67,7 +67,7 @@ def build_menu() -> QMenu:
 
 
 def _family_mark(name: str) -> QIcon:
-    return glyph_icon(name, color=TEXT_SECONDARY)
+    return qt_icon(name, color=TEXT_SECONDARY)
 
 
 class BrokerSupervisor:

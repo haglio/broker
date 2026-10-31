@@ -12,7 +12,7 @@ from app_support.win32 import mutex_name
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QIcon, QImage
 from shared_ui.colors import BG_TERTIARY, BLUE, TEXT_SECONDARY
-from shared_ui.icons import glyph_pixmap
+from shared_ui.icons import icon_pixmap
 from shared_ui.palette import PREVIEW_INK
 from shared_ui.preview import Preview
 
@@ -106,7 +106,7 @@ def _drawn(icon: QIcon) -> QImage:
 
 
 def _family_mark(name: str) -> QImage:
-    return glyph_pixmap(name, 48, TEXT_SECONDARY).toImage()
+    return icon_pixmap(name, 48, TEXT_SECONDARY).toImage()
 
 
 def test_each_command_wears_the_family_s_mark_as_the_evolver_s_menu_does(qapp):
