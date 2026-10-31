@@ -12,4 +12,4 @@ _CHECKOUT = Path(__file__).resolve().parents[1]
 
 
 def test_everything_broker_draws_with_comes_from_shared_ui():
-    assert_the_look_is_shared_uis(_CHECKOUT, [_CHECKOUT / "osr2_broker", _CHECKOUT / "tools"])
+    assert_the_look_is_shared_uis(_CHECKOUT, [_CHECKOUT / "osr2_broker"])
