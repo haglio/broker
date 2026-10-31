@@ -340,7 +340,7 @@ def test_a_failed_beat_does_not_stop_the_watchdog(tray, cfg_path):
 
     app = BrokerTrayApp(load_config(cfg_path), ExplodingSupervisor(), tray)
 
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="WMI hiccup"):
         app.tick()
 
     _guarded_tick(app, logging.getLogger("test-watchdog"))

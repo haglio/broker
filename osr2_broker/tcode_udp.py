@@ -32,8 +32,8 @@ class UdpTCodeListener:
                     data, _addr = udp_sock.recvfrom(4096)
                 except TimeoutError:
                     continue
-                for line in data.decode("ascii", errors="replace").split("\n"):
-                    line = line.strip()
+                for part in data.decode("ascii", errors="replace").split("\n"):
+                    line = part.strip()
                     if line:
                         self._hand_on(write, line)
         except Exception as exc:
