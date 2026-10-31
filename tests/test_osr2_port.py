@@ -83,7 +83,8 @@ class TestWaitingForTheOsr2:
         assert found == "COM6"
         warnings = [r.getMessage() for r in handler.records if r.levelno == logging.WARNING]
         assert len(warnings) == 1
-        assert "COM4" in warnings[0] and "COM6" in warnings[0]
+        assert "COM4" in warnings[0]
+        assert "COM6" in warnings[0]
 
     def test_a_second_adapter_plugged_in_leaves_the_osr2_where_it_was(self, recorded_logger, tmp_path):
         logger, handler = recorded_logger
