@@ -4,7 +4,7 @@
 # The guard is `app_support.sanitize`, installed with the package. This file
 # only finds an interpreter that can import it, and gets out of the way.
 #
-# Installed by pointing core.hooksPath here (see tools/githooks/install.py), NOT
+# Installed by pointing core.hooksPath here (python -m app_support.githooks), NOT
 # by copying into .git/hooks: a copy goes stale the moment this file changes, and
 # every worktree would need its own. core.hooksPath lives in the shared config,
 # so one setting covers the primary checkout and every worktree at once.

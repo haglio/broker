@@ -23,7 +23,7 @@ from app_support.dependencies import (
 pytestmark = pytest.mark.repo_check
 
 ROOT = Path(__file__).resolve().parent.parent
-TREES = [ROOT / "osr2_broker", ROOT / "tests", ROOT / "tools", ROOT / "scripts",
+TREES = [ROOT / "osr2_broker", ROOT / "tests", ROOT / "scripts",
          ROOT / "vulture_whitelist.py"]
 
 
