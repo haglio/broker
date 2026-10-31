@@ -311,7 +311,8 @@ def test_a_park_arriving_mid_check_keeps_the_mute_it_just_asked_for():
     reader.join(timeout=5.0)
     ticker.join(timeout=5.0)
 
-    assert not reader.is_alive() and not ticker.is_alive()
+    assert not reader.is_alive()
+    assert not ticker.is_alive()
     assert holds.suppresses_mfp() is True
 
 
