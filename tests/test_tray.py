@@ -105,21 +105,21 @@ def _drawn(icon: QIcon) -> QImage:
     return icon.pixmap(QSize(48, 48), QIcon.Mode.Normal).toImage()
 
 
-def _family_mark(name: str) -> QImage:
+def _family_icon(name: str) -> QImage:
     return icon_pixmap(name, 48, TEXT_SECONDARY).toImage()
 
 
-def test_each_command_wears_the_family_s_mark_as_the_evolver_s_menu_does(qapp):
-    """The two menus sit side by side in the tray, and the Evolver's marks every
+def test_each_command_wears_the_family_s_icon_as_the_evolver_s_menu_does(qapp):
+    """The two menus sit side by side in the tray, and the Evolver's icons every
     command it offers; the status line, which cannot be clicked, carries none."""
 
     tray = BrokerTray()
 
     assert tray.status_action.icon().isNull()
-    assert _drawn(tray.start_action.icon()) == _family_mark("play")
-    assert _drawn(tray.pause_action.icon()) == _family_mark("pause")
-    assert _drawn(tray.log_action.icon()) == _family_mark("log")
-    assert _drawn(tray.quit_action.icon()) == _family_mark("power")
+    assert _drawn(tray.start_action.icon()) == _family_icon("play")
+    assert _drawn(tray.pause_action.icon()) == _family_icon("pause")
+    assert _drawn(tray.log_action.icon()) == _family_icon("log")
+    assert _drawn(tray.quit_action.icon()) == _family_icon("power")
 
 
 def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
@@ -663,7 +663,7 @@ def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
 
     assert tray.status_action.text() == "Broker status: running (but OSR2 in auto mode)"
     assert tray.start_action.text() == "Restart Broker"
-    assert _drawn(tray.start_action.icon()) == _family_mark("restart")
+    assert _drawn(tray.start_action.icon()) == _family_icon("restart")
     assert tray.pause_action.isEnabled()
     assert tray.toolTip() == "Broker: running (but OSR2 in auto mode)"
 
@@ -675,7 +675,7 @@ def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
 
     assert tray.status_action.text() == "Broker status: stopped"
     assert tray.start_action.text() == "Start Broker"
-    assert _drawn(tray.start_action.icon()) == _family_mark("play")
+    assert _drawn(tray.start_action.icon()) == _family_icon("play")
     assert not tray.pause_action.isEnabled()
     assert tray.toolTip() == "Broker: stopped"
 

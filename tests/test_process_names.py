@@ -43,7 +43,7 @@ class TestWhatTheRowsSay:
         assert (NAMER.exe_name("pythonw.exe", TRAY_ROLE)
                 != NAMER.exe_name("pythonw.exe", BROKER_ROLE))
 
-    def test_the_mark_is_the_broker_s_own(self):
+    def test_the_icon_is_the_broker_s_own(self):
         assert NAMER.icon == PROJECT_DIR / "broker_icon.ico"
         assert NAMER.icon.is_file()
 
@@ -51,7 +51,7 @@ class TestWhatTheRowsSay:
 class TestTheTray:
     def test_prepares_the_copy_its_launcher_will_use(self, tmp_path: Path):
         """From the windowed interpreter, which is what the launcher runs;
-        described as the app and its part; carrying the broker's mark; and never
+        described as the app and its part; carrying the broker's icon; and never
         taking the tray down when there is nothing to copy from."""
         assert_the_app_names_its_process(
             _name_this_process, tmp_path, app_name=APP_NAME, role=TRAY_ROLE,
