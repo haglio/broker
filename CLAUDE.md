@@ -106,6 +106,7 @@ This repo is public at `github.com/haglio/broker` with a merge-queue ruleset on
   (`osr2_broker.tray`, app_support's `UpdateWatch`), which brings the checkout
   up first. So a change reaches the Broker within minutes of shipping, at the
   first moment the OSR2 is off, and worktrees update with `git rebase origin/main`.
+- **`glossary.json` lists the things on this app's screen and their words, and `tests/test_glossary.py` holds the code to it.** A noun for a drawn thing is a row there before it is a word in the code; a rename moves the old word from the row's `code_today` to its `retired`.
 - **A red required check** (`.github/workflows/merge-gate.yml`) can't land.
 
 Everything else in the global CLAUDE.md — work in a worktree, green tests before
