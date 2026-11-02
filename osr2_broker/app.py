@@ -28,7 +28,7 @@ from .protocol import BrokerAutoController
 from .question import DeviceQuestion
 from .session import BrokerSerialSession
 from .single_instance import MUTEX_BROKER
-from .state_files import heartbeat_loop, rename_last_sessions_mode_file, write_mode
+from .state_files import heartbeat_loop, write_mode
 from .win32 import ShutdownGuard
 
 SERIAL_RETRY_DELAY_SECONDS = 1.0
@@ -73,7 +73,6 @@ def main(argv: list[str] | None = None) -> int:
     virtual_port = resolve_virtual_port(config.mfp_config_path, config.virtual_port, logger)
     _point_mfp_at(virtual_port, config, logger)
 
-    rename_last_sessions_mode_file(config.state_dir, logger)
     state_file = config.broker_mode_file
     broker_cmd_file = config.broker_cmd_file
     heartbeat_file = config.broker_heartbeat_file
