@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from unittest.mock import MagicMock, patch
 
-from shared_ui import loading_process
-from shared_ui.loading_window import Loading, LoadingCanceled
+from shared_ui.loading_window import LoadingCanceled
 from shared_ui.preview import taskbar_identity
+from shared_ui.testing import loading_at_the_click, loading_process_opened
 
 from osr2_broker import tray as tray_module
 from osr2_broker.win32 import APP_USER_MODEL_ID, ICON_PATH
@@ -40,7 +40,7 @@ def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, lis
          patch.object(tray_module, "try_acquire_mutex", return_value=7), \
          patch.object(tray_module.peer_watch, "clear_broker_stand_down"), \
          patch.object(tray_module, "claim_taskbar_identity"), \
-         patch.object(Loading, "at_the_click", return_value=_Loading(happened, canceled=canceled)), \
+         loading_at_the_click(_Loading(happened, canceled=canceled)), \
          patch.object(tray_module, "start_the_tray", side_effect=built), \
          patch.object(type(qapp), "exec", return_value=0):
         exit_code = tray_module.main(["--config", str(cfg_path)])
@@ -62,7 +62,7 @@ def test_esc_on_the_loading_screen_starts_no_tray(qapp, cfg_path):
 
 
 def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_the_brokers_taskbar_button():
-    with patch.object(loading_process.LoadingProcess, "open") as opened:
+    with loading_process_opened() as opened:
         tray_module.open_the_loading_screen(None)
 
     opened.assert_called_once_with(
