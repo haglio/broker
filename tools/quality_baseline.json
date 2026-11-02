@@ -4,13 +4,7 @@
     "osr2_broker/session.py::BrokerSerialSession": 32
   },
   "fan_out": {},
-  "library_patches": {
-    "tests/conftest.py": 2,
-    "tests/test_idle_warning.py": 3,
-    "tests/test_loading.py": 2,
-    "tests/test_peer_watch.py": 4,
-    "tests/test_state_files.py": 1
-  },
+  "library_patches": {},
   "methods": {},
   "mocks": {
     "tests/test_app.py": 3,
@@ -34,17 +28,15 @@
   },
   "mutables_imported": {},
   "patches": {
-    "tests/conftest.py": 2,
     "tests/test_app.py": 27,
     "tests/test_branch_session.py": 3,
-    "tests/test_idle_warning.py": 11,
-    "tests/test_loading.py": 10,
+    "tests/test_idle_warning.py": 8,
+    "tests/test_loading.py": 8,
     "tests/test_not_answering.py": 1,
     "tests/test_osr2_port.py": 14,
-    "tests/test_peer_watch.py": 18,
+    "tests/test_peer_watch.py": 14,
     "tests/test_ports.py": 25,
     "tests/test_process_names.py": 2,
-    "tests/test_state_files.py": 1,
     "tests/test_tray.py": 10,
     "tests/test_win32.py": 4
   },
