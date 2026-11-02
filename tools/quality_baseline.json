@@ -78,7 +78,6 @@
     "tests/test_hold.py": 58,
     "tests/test_idle_warning.py": 4,
     "tests/test_launch_smoke.py": 39,
-    "tests/test_launcher_contract.py": 11,
     "tests/test_monitor.py": 21,
     "tests/test_motion_log.py": 15,
     "tests/test_peer_watch.py": 16,
