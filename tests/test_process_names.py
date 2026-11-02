@@ -23,7 +23,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app_support.launcher import launchers
-from app_support.process_identity_check import assert_the_app_names_its_process
+from app_support.process_identity_check import ProcessName, assert_the_process_is_named
 
 from osr2_broker.process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
 from osr2_broker.tray import BrokerSupervisor, _name_this_process, terminate_broker
@@ -53,9 +53,16 @@ class TestTheTray:
         """From the windowed interpreter, which is what the launcher runs;
         described as the app and its part; carrying the broker's icon; and never
         taking the tray down when there is nothing to copy from."""
-        assert_the_app_names_its_process(
-            _name_this_process, tmp_path, app_name=APP_NAME, role=TRAY_ROLE,
-            interpreter=LAUNCHER.interpreter, row=f"{APP_NAME} – Tray", icon=NAMER.icon)
+        assert_the_process_is_named(
+            _name_this_process, tmp_path,
+            ProcessName(
+                app_name=APP_NAME,
+                role=TRAY_ROLE,
+                interpreter=LAUNCHER.interpreter,
+                row=f"{APP_NAME} – Tray",
+                icon=NAMER.icon,
+            ),
+        )
 
     def test_the_launcher_prefers_that_copy(self):
         assert LAUNCHER.named_interpreter == NAMER.exe_name(LAUNCHER.interpreter, TRAY_ROLE)
