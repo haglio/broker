@@ -4,11 +4,11 @@ The suite can be entirely green while nothing appears in the notification area,
 and this is the gap. The scheduled task, the pinned shortcut and fun_time
 all start the broker the same way -- ``launch_broker_tray.vbs``, or for the pin
 ``launch_broker_from_its_shortcut.vbs``, running
-``pythonw -m osr2_broker.tray`` -- and ``main()`` there reaches the config, the
-logging setup and the icon through imports *inside* the function, so a break in
-any of them never touches a test that imports ``osr2_broker.tray`` and stops at
-module level. The tray then spawns the broker itself as ``-m osr2_broker.app``,
-so that module is on the same launch path.
+``pythonw -m osr2_broker.tray`` -- and a launch reaches what a window needs
+through imports *inside* its functions, so a break in any of them never touches a
+test that imports ``osr2_broker.tray`` and stops at module level. The tray then
+spawns the broker itself as ``-m osr2_broker.app``, so that module is on the same
+launch path.
 
 ``pythonw`` is what makes this invisible rather than merely broken: it has no
 console, so an import that fails writes its traceback nowhere at all and the
@@ -50,14 +50,12 @@ LAUNCH_FILES = (
     REPO_ROOT / PACKAGE / "idle_warning.py",
 )
 
-# Reached only from inside a main(), so a module-level import test never saw
+# Reached only from inside a function, so a module-level import test never saw
 # them. Asserted present, so a walk that silently found nothing -- a renamed
 # file, a parse that returned an empty tree -- cannot pass as a clean launch.
-_REACHED_ONLY_FROM_INSIDE_MAIN = (
-    "osr2_broker.config",
-    "osr2_broker.win32",
-    "osr2_broker.monitor",
+_REACHED_ONLY_INSIDE_A_FUNCTION = (
     "shared_ui.alert",
+    "shared_ui.loading_process",
 )
 
 
@@ -89,11 +87,11 @@ def test_the_launch_imports_everything_it_names():
         _run_the_launchs_way, launch_imports(PACKAGE, LAUNCH_FILES))
 
 
-def test_the_walk_reaches_the_imports_buried_in_main():
+def test_the_walk_reaches_the_imports_buried_in_functions():
     """The guard above is only worth anything if the walk found the lazy ones --
-    which is where the config, the icon and the shutdown guard are."""
+    which is where the idle warning's window and the tray's loading screen are."""
     assert_the_walk_reached(
-        launch_imports(PACKAGE, LAUNCH_FILES), _REACHED_ONLY_FROM_INSIDE_MAIN)
+        launch_imports(PACKAGE, LAUNCH_FILES), _REACHED_ONLY_INSIDE_A_FUNCTION)
 
 
 def test_a_launch_import_that_cannot_resolve_fails_here():
