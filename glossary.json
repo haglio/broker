@@ -1,0 +1,158 @@
+{
+  "app": "Broker",
+  "drafted": "2026-11-02",
+  "columns": {
+    "thing": "where it is on the screen and what it looks like",
+    "screen": "the words on the screen that name it (a label, a button, a tooltip), quoted; null when no label names it",
+    "his_word": "the word the user says for it, from his own messages and the spoken commands; null when he has none yet",
+    "code_today": "the words the code says for it now; each has to be in the code, or the row is stale",
+    "code_word": "the one word the code is to say for it; null while unruled",
+    "status": "ruled: his word, given where `ruled` says | his_word: a word he has used, not yet put to him as the code's | agreed: screen, user and code already say one word | unruled: no word of his yet, the row waits for him | kept: a name from outside this app, or a thing he has no word for, so the code keeps its own",
+    "retired": "code words for it that are gone and stay gone; `keep` lists the tokens that may still carry the letters (another thing's name)"
+  },
+  "things": [
+    {
+      "screen": [
+        "Broker status:",
+        "Start Broker",
+        "Pause Broker",
+        "Restart Broker",
+        "Open Broker Log"
+      ],
+      "his_word": "Broker",
+      "code_word": "broker",
+      "id": "broker",
+      "thing": "this app: the program that stands between the other apps and the OSR2, with an icon in the tray and no window of its own",
+      "code_today": [
+        "broker"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": [
+        "OSR2 off",
+        "OSR2 unplugged",
+        "OSR2 no answer",
+        "controlling OSR2"
+      ],
+      "his_word": "OSR2",
+      "code_word": "osr2",
+      "id": "osr2",
+      "thing": "the device the Broker talks to",
+      "code_today": [
+        "osr2"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": null,
+      "his_word": "tray (2026-09-28, 2026-10-11)",
+      "code_word": "tray",
+      "id": "tray",
+      "thing": "Windows' notification area at the right of the taskbar, and the Broker's icon and right-click menu in it",
+      "code_today": [
+        "tray"
+      ],
+      "status": "kept",
+      "ruled": "Windows' own word"
+    },
+    {
+      "screen": null,
+      "his_word": "production (2026-10-10)",
+      "code_word": "production",
+      "id": "production",
+      "thing": "the copy of the Broker he runs every day, and the folder it runs from",
+      "code_today": [
+        "production tray"
+      ],
+      "status": "ruled",
+      "ruled": "2026-10-10, his words, for the whole family",
+      "retired": [
+        "usual tray",
+        "everyday"
+      ]
+    },
+    {
+      "screen": null,
+      "his_word": "preview",
+      "code_word": "preview",
+      "id": "preview",
+      "thing": "a branch's copy of the Broker, run in place of production while he tries it",
+      "code_today": [
+        "preview"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": [
+        "Your OSR2 has been idle for",
+        "Did you forget to turn it off?",
+        "I don't know, did you?"
+      ],
+      "his_word": null,
+      "code_word": "idle warning",
+      "id": "idle_warning",
+      "thing": "the window that asks whether he forgot to turn the OSR2 off, after it sat on and unused",
+      "code_today": [
+        "idle warning"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": null,
+      "his_word": "icon (2026-10-13, 2026-10-16, 2026-10-18)",
+      "code_word": "icon",
+      "id": "icon",
+      "thing": "the small picture on a menu row of the tray",
+      "code_today": [
+        "icon"
+      ],
+      "status": "ruled",
+      "ruled": "2026-10-16, his words, for the whole family: icon, never mark or glyph",
+      "retired": [
+        "family mark",
+        "start mark",
+        "restart mark"
+      ]
+    },
+    {
+      "screen": [
+        "Broker Loading",
+        "Loading Broker..."
+      ],
+      "his_word": "loading screen (2026-10-13)",
+      "code_word": "loading screen",
+      "id": "loading_screen",
+      "thing": "the window that shows while the tray starts",
+      "code_today": [
+        "loading"
+      ],
+      "status": "ruled",
+      "ruled": "2026-10-16, his words, for the whole family"
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": "slot",
+      "id": "slot",
+      "thing": "the OSR2's one place on the Broker, which one app at a time holds; no screen shows it",
+      "code_today": [
+        "slot"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": null,
+      "id": "other_words",
+      "thing": "words the code uses for things no screen shows or names: a console window, a Qt style sheet, Python's strip",
+      "code_today": [
+        "console",
+        "sheet",
+        "strip"
+      ],
+      "status": "kept"
+    }
+  ]
+}
