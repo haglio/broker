@@ -11,7 +11,6 @@ from app_support import production_update
 from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.osr2_device import Osr2Mode, Osr2Trouble, mode, trouble
-from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
 from PyQt6.QtCore import QTimer
@@ -26,7 +25,7 @@ from shared_ui.preview_icon import app_icon
 
 from . import branch_session, peer_watch
 from .config import PROJECT_DIR, load_config
-from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
+from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE, end_the_processes_running
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 from .win32 import APP_USER_MODEL_ID, ICON_PATH, claim_taskbar_identity
 
@@ -298,18 +297,7 @@ def terminate_broker(logger) -> None:
     launched under, because the two cannot be allowed to drift: a broker running
     under a name this sweep does not know is a broker nothing here can stop.
     """
-    subprocess.run(
-        [
-            "powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
-            "Get-CimInstance Win32_Process | Where-Object { "
-            f"$_.Name -match '{NAMER.process_name_pattern}' -and "
-            "$_.CommandLine -match 'osr2_broker\\.app' "
-            "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
-            "-ErrorAction SilentlyContinue }",
-        ],
-        check=False,
-        **hidden_subprocess_kwargs(),
-    )
+    end_the_processes_running("osr2_broker.app")
     logger.info("Terminated broker")
 
 
