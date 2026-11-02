@@ -12,7 +12,10 @@ def test_the_window_holding_up_a_shutdown_is_titled_broker():
         patch.object(win32, "_SetTimer"),
         patch.object(win32, "_GetMessageW", return_value=0),
     ):
-        win32.ShutdownGuard(should_block_fn=lambda: False).run()
+        win32.ShutdownGuard(
+                should_block_fn=lambda: False, poll_fn=lambda: None,
+                poll_interval_ms=1000, block_reason="Made up.",
+            ).run()
 
     _style, _class_name, title, *_rest = create_window.call_args.args
     assert title == "Broker"

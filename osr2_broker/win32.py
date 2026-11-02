@@ -33,7 +33,6 @@ def claim_taskbar_identity(shown_as: Preview | None) -> None:
             "Could not claim the taskbar identity", exc_info=True)
 
 
-# --- Shutdown blocking via hidden window ---
 
 WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
@@ -121,10 +120,11 @@ class ShutdownGuard:
 
     def __init__(
         self,
+        *,
         should_block_fn,
-        poll_fn=None,
-        poll_interval_ms: int = 10_000,
-        block_reason: str = "OSR2 is still powered on!",
+        poll_fn,
+        poll_interval_ms: int,
+        block_reason: str,
     ):
         self._should_block_fn = should_block_fn
         self._poll_fn = poll_fn
@@ -146,8 +146,7 @@ class ShutdownGuard:
             return 0
 
         if msg == WM_TIMER:
-            if self._poll_fn is not None:
-                self._poll_fn()
+            self._poll_fn()
             return 0
 
         if msg == WM_DESTROY:
