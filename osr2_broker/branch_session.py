@@ -10,7 +10,7 @@ from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import try_acquire_mutex
 from PyQt6.QtCore import QTimer
 
-from .process_names import NAMER
+from .process_names import end_the_processes_running
 from .single_instance import MUTEX_TRAY
 
 FLAG = "BROKER_BRANCH_SESSION"
@@ -39,20 +39,7 @@ def take_the_tray_over(*, claim=try_acquire_mutex, end_the_other_trays,
 
 
 def end_the_other_trays() -> None:
-    subprocess.run(
-        [
-            "powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
-            "Get-CimInstance Win32_Process | Where-Object { "
-            f"$_.Name -match '{NAMER.process_name_pattern}' -and "
-            "$_.CommandLine -match 'osr2_broker\\.tray' -and "
-            f"$_.ProcessId -ne {os.getpid()} -and "
-            f"$_.ProcessId -ne {os.getppid()} "
-            "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
-            "-ErrorAction SilentlyContinue }",
-        ],
-        check=False,
-        **hidden_subprocess_kwargs(),
-    )
+    end_the_processes_running("osr2_broker.tray", sparing=(os.getpid(), os.getppid()))
 
 
 def let_go_of(claim: int) -> None:
