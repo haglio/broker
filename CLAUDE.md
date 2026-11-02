@@ -33,18 +33,18 @@ The monitor runs on a dedicated daemon thread with its own Win32 message pump (S
 
 Every worktree carries `launch_preview_branch.vbs` (tracked, rendered from its
 spec in `pyproject.toml`). Double-clicking it runs that worktree's tray in place
-of the one the user runs every day, on the everyday checkout's venv and config,
-and that tray runs the worktree's broker in place of the everyday one: a tray
+of the production one, on the production checkout's venv and config,
+and that tray runs the worktree's broker in place of the production one: a tray
 replaces any broker another checkout started, which each broker records in
-`broker_checkout.txt` in the state directory. The usual tray is ended as the
+`broker_checkout.txt` in the state directory. The production tray is ended as the
 preview starts, and started again when the preview is quit, or on its own an
-hour later (`osr2_broker/branch_session.py`), and it takes the everyday broker
+hour later (`osr2_broker/branch_session.py`), and it takes the production broker
 back the same way. That shape is the user's choice (2026-09-28), the same one
 Evolver's preview has. Never launch the preview yourself.
 
 Never start a broker yourself either, not even on a scratch config with ports
 that do not exist: a missing virtual port makes it fall back to the machine's
-one broker-side com0com port, which is the everyday broker's, and once running
+one broker-side com0com port, which is the production broker's, and once running
 it wears the broker's process name, so no tool an agent may use can stop it
 (2026-10-11: one sat waiting on a scratch port until the user said to end it).
 `tests/test_launch_smoke.py` checks the launch path without starting anything.

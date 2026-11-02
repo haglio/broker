@@ -235,7 +235,7 @@ class BrokerTrayApp:
         start the tray again a quarter of an hour later. Every other way the tray
         dies leaves no mark and is undone, which is the point of the pairing.
 
-        A preview's quit is the exception: the usual tray takes the broker back,
+        A preview's quit is the exception: the production tray takes the broker back,
         still running.
         """
         if self._hand_back is not None:
