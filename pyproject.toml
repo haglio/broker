@@ -73,6 +73,9 @@ unread-command-line-options = ["config"]
 # What launch_broker_tray.vbs starts: the file the scheduled task and Fun Time
 # run. The launchers are rendered from these by
 # `python -m app_support.launcher --write`.
+[tool.haglio.launcher-gate]
+without-a-log = ["launch_broker_tray.vbs"]
+
 [tool.haglio.launchers."launch_broker_tray.vbs"]
 app = "Broker"
 interpreter = "pythonw.exe"
