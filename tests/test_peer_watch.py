@@ -13,6 +13,7 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
+from app_support.testing import stood_down, stood_down_asking
 
 from osr2_broker import peer_watch
 from osr2_broker import tray as tray_module
@@ -104,7 +105,7 @@ class TestTheWatch:
 
     def test_an_evolver_that_is_gone_is_started(self, cfg_path):
         with patch.object(peer_watch, "evolver_is_up", return_value=False), \
-             patch("app_support.peer_watch.is_stood_down", return_value=False), \
+             stood_down(False), \
              patch.object(peer_watch, "launch_evolver") as launch:
             self._watch(cfg_path).tick()
 
@@ -113,7 +114,7 @@ class TestTheWatch:
     def test_it_starts_the_launcher_the_config_names(self, cfg_path):
 
         with patch.object(peer_watch, "evolver_is_up", return_value=False), \
-             patch("app_support.peer_watch.is_stood_down", return_value=False), \
+             stood_down(False), \
              patch.object(peer_watch, "launch_evolver") as launch:
             self._watch(cfg_path).tick()
 
@@ -121,7 +122,7 @@ class TestTheWatch:
 
     def test_an_evolver_the_user_closed_is_left_closed(self, cfg_path):
         with patch.object(peer_watch, "evolver_is_up", return_value=False), \
-             patch("app_support.peer_watch.is_stood_down", return_value=True), \
+             stood_down(True), \
              patch.object(peer_watch, "launch_evolver") as launch:
             self._watch(cfg_path).tick()
 
@@ -131,8 +132,7 @@ class TestTheWatch:
         asked: list[str] = []
 
         with patch.object(peer_watch, "evolver_is_up", return_value=False), \
-             patch("app_support.peer_watch.is_stood_down",
-                   side_effect=lambda key, **kw: asked.append(key) or False), \
+             stood_down_asking(side_effect=lambda key, **kw: asked.append(key) or False), \
              patch.object(peer_watch, "launch_evolver"):
             self._watch(cfg_path).tick()
 

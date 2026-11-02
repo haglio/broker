@@ -10,7 +10,9 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+from app_support.testing import file_channel_clock_at
 
 from osr2_broker.state_files import heartbeat_loop, write_heartbeat, write_mode
 
@@ -50,7 +52,7 @@ class TestHeartbeat:
     def test_the_heartbeat_is_the_wall_clock_as_text(self, tmp_path: Path):
         heartbeat_file = tmp_path / "state" / "broker_heartbeat.txt"
 
-        with patch("app_support.file_channel.time.time", return_value=123.45):
+        with file_channel_clock_at(123.45):
             write_heartbeat(heartbeat_file, LOGGER)
 
         assert heartbeat_file.read_text(encoding="utf-8") == "123.45"

@@ -6,10 +6,10 @@ import os
 import sys
 import threading
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from app_support.osr2_slot import Osr2Slot
+from app_support.testing import stand_down_cleared, stand_down_written
 from PyQt6.QtWidgets import QApplication
 
 from tests.scratch import scratch_dir
@@ -122,8 +122,8 @@ def stand_down_marker():
     the broker's half stays real and a test can watch it being used.
     """
     with (
-        patch("app_support.peer_watch.stand_down") as wrote,
-        patch("app_support.peer_watch.clear_stand_down") as cleared,
+        stand_down_written() as wrote,
+        stand_down_cleared() as cleared,
     ):
         yield wrote, cleared
 

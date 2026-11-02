@@ -8,6 +8,7 @@ from app_support.win32 import mutex_name
 from shared_ui.alert import Level
 from shared_ui.palette import MAGENTA, PREVIEW_INK
 from shared_ui.preview import Preview, preview_of
+from shared_ui.testing import alert_shown
 
 from osr2_broker import idle_warning, win32
 from osr2_broker.config import PROJECT_DIR, load_config
@@ -101,7 +102,7 @@ def test_a_second_warning_does_not_cover_one_still_showing(cfg_path):
 
 
 def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon(qapp):
-    with patch("shared_ui.alert.show_alert") as show_alert:
+    with alert_shown() as show_alert:
         idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=None)
 
@@ -122,7 +123,7 @@ def test_the_process_claims_its_taskbar_identity_before_the_dialog_appears():
             win32, "set_app_user_model_id",
             side_effect=lambda aumid: order.append(aumid),
         ),
-        patch("shared_ui.alert.show_alert", side_effect=lambda *a, **k: order.append("dialog")),
+        alert_shown(side_effect=lambda *a, **k: order.append("dialog")),
     ):
         idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=None)
@@ -139,7 +140,7 @@ def test_a_previews_warning_names_the_feature_it_demos_and_wears_the_preview_ink
     claimed = []
     with (
         patch.object(win32, "set_app_user_model_id", side_effect=claimed.append),
-        patch("shared_ui.alert.show_alert") as show_alert,
+        alert_shown() as show_alert,
     ):
         idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=Preview(feature="the new idle warning"))
