@@ -142,9 +142,9 @@ def test_a_previews_warning_names_the_feature_it_demos_and_wears_the_preview_ink
         patch("shared_ui.alert.show_alert") as show_alert,
     ):
         idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
-                                  shown_as=Preview(feature="the new idle alert"))
+                                  shown_as=Preview(feature="the new idle warning"))
 
     title, _message = show_alert.call_args.args
-    assert title == "Broker — preview of the new idle alert"
+    assert title == "Broker — preview of the new idle warning"
     assert _middle_of(show_alert.call_args.kwargs["icon"]) == PREVIEW_INK
     assert claimed == [f"{win32.APP_USER_MODEL_ID}.Preview"]

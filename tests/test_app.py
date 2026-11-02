@@ -172,14 +172,14 @@ def _an_idle_spell_already_due(config):
     now = _time.time()
     monitor_mod.save_idle_state(
         config.osr2_idle_state_file,
-        idle_since=now - config.idle_minutes * 60.0 - 1.0, alerted=False, saved_at=now,
+        idle_since=now - config.idle_minutes * 60.0 - 1.0, warned=False, saved_at=now,
     )
     config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # device on
 
 
 def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_module, cfg_path):
     """The idle state seeded from osr2_idle_state.txt must feed the poll: a
-    countdown that had already elapsed before the restart alerts on the first
+    countdown that had already elapsed before the restart warns on the first
     beat instead of starting the 15 minutes over."""
 
 
@@ -195,10 +195,10 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
     with patch.object(idle_warning, "show_until_closed", side_effect=closed):
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
         captured["poll_fn"]()
-        assert warned.wait(timeout=5.0), "the idle alert never reached the warning"
+        assert warned.wait(timeout=5.0), "the idle warning never reached the warning"
 
     persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
-    assert persisted["alerted"] is True
+    assert persisted["warned"] is True
 
 
 def test_a_broker_started_long_after_the_last_counts_15_minutes_from_its_own_start(
@@ -208,7 +208,7 @@ def test_a_broker_started_long_after_the_last_counts_15_minutes_from_its_own_sta
     config = load_config(str(cfg_path))
     now = _time.time()
     monitor_mod.save_idle_state(config.osr2_idle_state_file, idle_since=now - 7200.0,
-                                alerted=True, saved_at=now - 3600.0)
+                                warned=True, saved_at=now - 3600.0)
     config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # already on
 
     with patch.object(idle_warning, "show_until_closed") as shown:
@@ -217,7 +217,7 @@ def test_a_broker_started_long_after_the_last_counts_15_minutes_from_its_own_sta
 
     shown.assert_not_called()
     persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
-    assert persisted["alerted"] is False
+    assert persisted["warned"] is False
     assert persisted["idle_since"] >= now
 
 
@@ -251,11 +251,11 @@ def test_the_broker_logs_when_it_starts_and_stops_hearing_the_osr2(broker_app_mo
         heard.first_saying("counted as switched off", timeout=1.0)
 
 
-def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_path):
+def test_no_idle_warning_before_the_threshold_has_elapsed(broker_app_module, cfg_path):
     config = load_config(str(cfg_path))
     now = _time.time()
     monitor_mod.save_idle_state(
-        config.osr2_idle_state_file, idle_since=now - 300.0, alerted=False, saved_at=now,
+        config.osr2_idle_state_file, idle_since=now - 300.0, warned=False, saved_at=now,
     )
     config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")
 
@@ -267,7 +267,7 @@ def test_no_idle_alert_before_the_threshold_has_elapsed(broker_app_module, cfg_p
 
     assert warned == []
     persisted = json.loads(config.osr2_idle_state_file.read_text(encoding="utf-8"))
-    assert persisted["alerted"] is False
+    assert persisted["warned"] is False
 
 
 def test_the_broker_process_never_loads_qt_widgets():

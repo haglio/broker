@@ -520,12 +520,12 @@ def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qap
 
     tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        hands_back=True, shown_as=Preview(feature="the new idle alert"),
+        hands_back=True, shown_as=Preview(feature="the new idle warning"),
         quit_app=lambda: quits.append(True))
     tray.set_status(running=False, osr2="OSR2 off")
     tray.quit_action.trigger()
 
-    assert tray.toolTip() == "Broker — preview of the new idle alert: stopped"
+    assert tray.toolTip() == "Broker — preview of the new idle warning: stopped"
     assert handed_back == [42]
     assert quits == [True]
     assert hand_back_timer.interval() == branch_session.HAND_BACK_AFTER_MINUTES * 60_000
@@ -689,7 +689,7 @@ def test_a_preview_s_tray_says_so_on_hover(qapp):
 
 
 def test_a_preview_tray_wears_what_its_checkout_describes(monkeypatch):
-    described = Preview(feature="the new idle alert")
+    described = Preview(feature="the new idle warning")
     monkeypatch.setattr(tray_module, "preview_of", lambda checkout: described)
 
     assert tray_module.shown_as(preview=True) is described
