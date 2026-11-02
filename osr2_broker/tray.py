@@ -65,7 +65,7 @@ def build_menu() -> QMenu:
     return menu
 
 
-def _family_mark(name: str) -> QIcon:
+def _family_icon(name: str) -> QIcon:
     return qt_icon(name, color=TEXT_SECONDARY)
 
 
@@ -132,20 +132,20 @@ class BrokerTray(QSystemTrayIcon):
 
         self._menu.addSeparator()
 
-        self._start_mark = _family_mark("play")
-        self._restart_mark = _family_mark("restart")
-        self.start_action = QAction(self._start_mark, "Start Broker", self._menu)
+        self._start_icon = _family_icon("play")
+        self._restart_icon = _family_icon("restart")
+        self.start_action = QAction(self._start_icon, "Start Broker", self._menu)
         self._menu.addAction(self.start_action)
 
-        self.pause_action = QAction(_family_mark("pause"), "Pause Broker", self._menu)
+        self.pause_action = QAction(_family_icon("pause"), "Pause Broker", self._menu)
         self._menu.addAction(self.pause_action)
 
-        self.log_action = QAction(_family_mark("log"), "Open Broker Log", self._menu)
+        self.log_action = QAction(_family_icon("log"), "Open Broker Log", self._menu)
         self._menu.addAction(self.log_action)
 
         self._menu.addSeparator()
 
-        self.quit_action = QAction(_family_mark("power"), "Quit", self._menu)
+        self.quit_action = QAction(_family_icon("power"), "Quit", self._menu)
         self._menu.addAction(self.quit_action)
 
         self.setContextMenu(self._menu)
@@ -156,7 +156,7 @@ class BrokerTray(QSystemTrayIcon):
         self.setToolTip(f"{self._name}: {status}")
 
         self.start_action.setText("Restart Broker" if running else "Start Broker")
-        self.start_action.setIcon(self._restart_mark if running else self._start_mark)
+        self.start_action.setIcon(self._restart_icon if running else self._start_icon)
         self.pause_action.setEnabled(running)
 
 
