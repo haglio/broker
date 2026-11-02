@@ -19,10 +19,8 @@ REARM_SECONDS = 60.0
 
 class MonitorState:
     def __init__(self, idle_threshold: float = 900.0,
-                 rearm_seconds: float = REARM_SECONDS, idle_since: float | None = None,
-                 warned: bool = False):
+                 idle_since: float | None = None, warned: bool = False):
         self._idle_threshold = idle_threshold
-        self._rearm_seconds = rearm_seconds
         self._device_on = False
         self._device_on_since: float | None = None
         self._idle_since: float | None = idle_since
@@ -66,7 +64,7 @@ class MonitorState:
             self._idle_since = None
             if self._not_idle_since is None:
                 self._not_idle_since = now
-            if (now - self._not_idle_since) >= self._rearm_seconds:
+            if (now - self._not_idle_since) >= REARM_SECONDS:
                 self._warned = False
             return None
         self._not_idle_since = None

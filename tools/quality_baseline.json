@@ -52,7 +52,6 @@
   "private_reaches": {},
   "prose_lines": {
     "osr2_broker/activity.py": 6,
-    "osr2_broker/app.py": 4,
     "osr2_broker/config.py": 9,
     "osr2_broker/contract.py": 30,
     "osr2_broker/hold.py": 61,
@@ -61,7 +60,7 @@
     "osr2_broker/motion_log.py": 19,
     "osr2_broker/osr2_port.py": 2,
     "osr2_broker/peer_watch.py": 39,
-    "osr2_broker/ports.py": 19,
+    "osr2_broker/ports.py": 17,
     "osr2_broker/power_on.py": 12,
     "osr2_broker/process_names.py": 14,
     "osr2_broker/protocol.py": 3,
@@ -72,7 +71,7 @@
     "osr2_broker/tcode_udp.py": 5,
     "osr2_broker/tcode_window.py": 7,
     "osr2_broker/tray.py": 50,
-    "osr2_broker/win32.py": 17,
+    "osr2_broker/win32.py": 16,
     "tests/conftest.py": 32,
     "tests/heard.py": 1,
     "tests/scratch.py": 4,
@@ -126,11 +125,11 @@
     "osr2_broker/app.py": 2,
     "osr2_broker/hold.py": 1,
     "osr2_broker/monitor.py": 2,
-    "osr2_broker/ports.py": 8,
+    "osr2_broker/ports.py": 4,
     "osr2_broker/protocol.py": 1,
     "osr2_broker/session.py": 7,
-    "osr2_broker/state_files.py": 4,
+    "osr2_broker/state_files.py": 1,
     "osr2_broker/tray.py": 1,
-    "osr2_broker/win32.py": 21
+    "osr2_broker/win32.py": 20
   }
 }

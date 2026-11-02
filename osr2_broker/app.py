@@ -126,7 +126,6 @@ def main(argv: list[str] | None = None) -> int:
         name="broker-heartbeat",
     )
 
-    # --- Monitor (idle warning + shutdown blocking) ---
     _start_monitor(config, auto_mode, logger)
 
     logger.info("Starting broker on %s", virtual_port)
@@ -153,10 +152,6 @@ def main(argv: list[str] | None = None) -> int:
 
     return 0
 
-
-# ---------------------------------------------------------------------------
-# Monitor integration
-# ---------------------------------------------------------------------------
 
 MONITOR_POLL_INTERVAL_MS = 10_000
 
