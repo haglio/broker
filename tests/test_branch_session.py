@@ -1,4 +1,4 @@
-"""A branch's tray, run in place of the one the user runs every day."""
+"""A branch's tray, run in place of the production one."""
 from __future__ import annotations
 
 import os
@@ -15,14 +15,14 @@ from osr2_broker.single_instance import MUTEX_TRAY
 
 def test_reading_the_flag_keeps_it_from_everything_the_preview_starts(monkeypatch):
     """The broker it restarts and the Evolver it revives would otherwise carry
-    it, and an Evolver carrying it hands it to the next usual tray it starts."""
+    it, and an Evolver carrying it hands it to the next production tray it starts."""
     monkeypatch.setenv(branch_session.FLAG, "1")
 
     assert branch_session.take_the_flag() is True
     assert branch_session.FLAG not in os.environ
 
 
-def test_a_tray_launched_without_the_flag_is_the_usual_one(monkeypatch):
+def test_a_tray_launched_without_the_flag_is_the_production_one(monkeypatch):
     monkeypatch.delenv(branch_session.FLAG, raising=False)
 
     assert branch_session.take_the_flag() is False
@@ -60,15 +60,15 @@ def test_a_preview_that_cannot_take_the_tray_over_gives_up():
     assert now[0] >= branch_session.PATIENCE_SECONDS
 
 
-def test_handing_back_lets_go_of_the_tray_before_starting_the_usual_one(cfg_path):
-    """The usual tray gives up at once on a tray that is still claimed."""
+def test_handing_back_lets_go_of_the_tray_before_starting_the_production_one(cfg_path):
+    """The production tray gives up at once on a tray that is still claimed."""
     config = load_config(cfg_path)
     happened = []
 
     branch_session.hand_back(
         config, 42,
         release=lambda handle: happened.append(("let go of", handle)),
-        start_the_usual_tray=lambda started: happened.append(("started", started)),
+        start_the_production_tray=lambda started: happened.append(("started", started)),
     )
 
     assert happened == [("let go of", 42), ("started", config)]
@@ -106,25 +106,25 @@ def test_letting_go_of_a_claim_frees_it_for_the_next_tray():
     assert not is_mutex_held(name)
 
 
-def test_the_usual_tray_starts_from_the_everyday_checkout_and_not_as_a_preview(
+def test_the_production_tray_starts_from_the_production_checkout_and_not_as_a_preview(
         cfg_path, monkeypatch):
     config = load_config(cfg_path)
     monkeypatch.setenv(branch_session.FLAG, "1")
 
     with patch.object(branch_session.subprocess, "Popen") as popen:
-        branch_session.start_the_usual_tray(config)
+        branch_session.start_the_production_tray(config)
 
     (argv,), kwargs = popen.call_args
     assert argv == ["wscript.exe", str(config.project_dir / "launch_broker_tray.vbs")]
     assert branch_session.FLAG not in kwargs["env"]
 
 
-def test_the_usual_tray_loads_its_own_modules_rather_than_the_preview_s(cfg_path, monkeypatch):
+def test_the_production_tray_loads_its_own_modules_rather_than_the_preview_s(cfg_path, monkeypatch):
     config = load_config(cfg_path)
     monkeypatch.setenv("PYTHONPATH", "C:/workspace/shared_ui/.claude/worktrees/a-change")
 
     with patch.object(branch_session.subprocess, "Popen") as popen:
-        branch_session.start_the_usual_tray(config)
+        branch_session.start_the_production_tray(config)
 
     (_argv,), kwargs = popen.call_args
     assert "PYTHONPATH" not in kwargs["env"]

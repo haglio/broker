@@ -210,7 +210,7 @@ def test_start_leaves_a_live_broker_alone(cfg_path):
 
 def test_start_replaces_a_broker_another_checkout_started(cfg_path, tmp_path):
     """How a branch's preview tray comes to run the branch's broker, and how the
-    usual tray takes the usual broker back after it."""
+    production tray takes the production broker back after it."""
     supervisor, calls = _supervisor(cfg_path, running=True, running_from=tmp_path / "elsewhere")
 
     supervisor.start()
@@ -377,7 +377,7 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
 
 
 def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
-    """The usual tray takes the broker over again: stopping it would take the
+    """The production tray takes the broker over again: stopping it would take the
     device away, and standing it down would stop Evolver bringing that tray
     back."""
 
@@ -496,10 +496,10 @@ def test_a_second_tray_stands_down(cfg_path):
     acquire.assert_called_once_with(tray_module.MUTEX_TRAY)
 
 
-def test_a_preview_takes_the_tray_over_and_leaves_the_everyday_interpreter_unnamed(
+def test_a_preview_takes_the_tray_over_and_leaves_the_production_interpreter_unnamed(
         cfg_path, monkeypatch):
-    """Naming would write a copy of the interpreter into the everyday
-    checkout's venv, which the usual tray names for itself."""
+    """Naming would write a copy of the interpreter into the production
+    checkout's venv, which the production tray names for itself."""
     monkeypatch.setenv(branch_session.FLAG, "1")
 
     with patch.object(tray_module, "configure_logging",
@@ -540,7 +540,7 @@ def test_a_preview_s_tray_wears_the_brokers_letter_in_the_preview_ink(qapp, cfg_
     assert (middle_bar_of_the_b.red(), middle_bar_of_the_b.green(), middle_bar_of_the_b.blue()) == PREVIEW_INK
 
 
-def test_the_usual_tray_never_hands_itself_back(qapp, cfg_path):
+def test_the_production_tray_never_hands_itself_back(qapp, cfg_path):
     _tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
         hands_back=False, shown_as=None, quit_app=lambda: None)
@@ -563,7 +563,7 @@ def an_update_waiting(monkeypatch):
     return happened
 
 
-def test_the_usual_tray_starts_again_for_an_update_waiting_on_its_checkout(qapp, cfg_path, an_update_waiting):
+def test_the_production_tray_starts_again_for_an_update_waiting_on_its_checkout(qapp, cfg_path, an_update_waiting):
     _tray, tray_app, _ = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
         hands_back=False, shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
@@ -574,7 +574,7 @@ def test_the_usual_tray_starts_again_for_an_update_waiting_on_its_checkout(qapp,
         "stopped the broker", f"launch_broker_tray.vbs once {os.getpid()} has ended", "quit"]
 
 
-def test_the_usual_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path, an_update_waiting):
+def test_the_production_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path, an_update_waiting):
     config = load_config(cfg_path)
     publish_stamp(config.osr2_serial_rx_file)
     _tray, tray_app, _ = tray_module.start_the_tray(
@@ -596,7 +596,7 @@ def test_a_preview_never_starts_again_for_an_update(qapp, cfg_path, an_update_wa
     assert an_update_waiting == []
 
 
-def test_hovering_the_usual_tray_names_the_app_broker(qapp, cfg_path):
+def test_hovering_the_production_tray_names_the_app_broker(qapp, cfg_path):
     tray, _, _hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), 42,
         hands_back=False, shown_as=None, quit_app=lambda: None)
@@ -695,7 +695,7 @@ def test_a_preview_tray_wears_what_its_checkout_describes(monkeypatch):
     assert tray_module.shown_as(preview=True) is described
 
 
-def test_the_usual_tray_wears_no_preview_wherever_it_runs_from(monkeypatch):
+def test_the_production_tray_wears_no_preview_wherever_it_runs_from(monkeypatch):
     monkeypatch.setattr(tray_module, "preview_of", lambda checkout: Preview(feature="unused"))
 
     assert tray_module.shown_as(preview=False) is None

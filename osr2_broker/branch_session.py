@@ -49,7 +49,7 @@ def let_go_of(claim: int) -> None:
 _WHAT_ONLY_A_PREVIEW_RUNS_WITH = (FLAG, "PYTHONPATH")
 
 
-def start_the_usual_tray(config) -> None:
+def start_the_production_tray(config) -> None:
     environment = {key: value for key, value in os.environ.items()
                    if key not in _WHAT_ONLY_A_PREVIEW_RUNS_WITH}
     subprocess.Popen(["wscript.exe", str(config.project_dir / "launch_broker_tray.vbs")],
@@ -58,9 +58,9 @@ def start_the_usual_tray(config) -> None:
 
 
 def hand_back(config, claim: int, *, release=let_go_of,
-              start_the_usual_tray=start_the_usual_tray) -> None:
+              start_the_production_tray=start_the_production_tray) -> None:
     release(claim)
-    start_the_usual_tray(config)
+    start_the_production_tray(config)
 
 
 def hand_back_later(quit_the_preview) -> QTimer:
