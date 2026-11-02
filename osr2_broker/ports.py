@@ -4,12 +4,12 @@ import json
 import re
 from pathlib import Path
 
-from serial.tools import list_ports
-
 RE_COM0COM_PORT = re.compile(r"COM0COM\\PORT\\(CNC[AB])(\d+)", re.IGNORECASE)
 
 
 def iter_serial_ports():
+    from serial.tools import list_ports  # noqa: PLC0415
+
     return list(list_ports.comports())
 
 
