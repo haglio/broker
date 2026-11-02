@@ -86,7 +86,14 @@ def test_ending_the_other_trays_spares_this_one_and_its_launcher():
     assert r"-match 'osr2_broker\.tray'" in sweep
     assert f"$_.ProcessId -ne {os.getpid()}" in sweep
     assert f"$_.ProcessId -ne {os.getppid()}" in sweep
-    assert "Stop-Process" in sweep
+    assert sweep == (
+        "Get-CimInstance Win32_Process | Where-Object { "
+        f"$_.Name -match '{NAMER.process_name_pattern}' -and "
+        "$_.CommandLine -match 'osr2_broker\\.tray' -and "
+        f"$_.ProcessId -ne {os.getpid()} -and "
+        f"$_.ProcessId -ne {os.getppid()} "
+        "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
+        "-ErrorAction SilentlyContinue }")
 
 
 def test_letting_go_of_a_claim_frees_it_for_the_next_tray():

@@ -90,6 +90,12 @@ class TestTheBroker:
             terminate_broker(logging.getLogger("test"))
 
         assert NAMER.process_name_pattern in run.call_args.args[0][-1]
+        assert run.call_args.args[0][-1] == (
+            "Get-CimInstance Win32_Process | Where-Object { "
+            f"$_.Name -match '{NAMER.process_name_pattern}' -and "
+            "$_.CommandLine -match 'osr2_broker\\.app' "
+            "} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
+            "-ErrorAction SilentlyContinue }")
         assert re.match(NAMER.process_name_pattern,
                         NAMER.exe_name("pythonw.exe", BROKER_ROLE))
 
