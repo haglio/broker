@@ -126,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         name="broker-heartbeat",
     )
 
-    # --- Monitor (idle alert + shutdown blocking) ---
+    # --- Monitor (idle warning + shutdown blocking) ---
     _start_monitor(config, auto_mode, logger)
 
     logger.info("Starting broker on %s", virtual_port)
@@ -167,15 +167,15 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
     tx_file = config.osr2_serial_tx_file
     idle_state_file = config.osr2_idle_state_file
 
-    idle_since, alerted = load_idle_state(idle_state_file, now=time.time())
+    idle_since, warned = load_idle_state(idle_state_file, now=time.time())
     state = MonitorState(
         idle_threshold=idle_threshold,
         idle_since=idle_since,
-        alerted=alerted,
+        warned=warned,
     )
 
-    def _show_idle_alert():
-        logger.info("OSR2 idle for %.0f minutes — showing alert", idle_threshold / 60)
+    def _show_idle_warning():
+        logger.info("OSR2 idle for %.0f minutes — showing the idle warning", idle_threshold / 60)
 
         def _show_and_acknowledge():
             ended = idle_warning.show_until_closed(config)
@@ -203,7 +203,7 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
             last_tx=read_timestamp(tx_file),
             auto_active=auto_mode.is_active,
             idle_state_file=idle_state_file,
-            on_alert=_show_idle_alert,
+            on_warning=_show_idle_warning,
             on_heard=_say_whether_the_osr2_is_heard,
         )
 

@@ -11,7 +11,7 @@ IN_USE_THRESHOLD = 30.0
 class MonitorOutcome(Enum):
     """What a tick of the idle monitor asks its caller to do, when it asks anything."""
 
-    IDLE_ALERT = auto()
+    IDLE_WARNING = auto()
 
 
 REARM_SECONDS = 60.0
@@ -20,14 +20,14 @@ REARM_SECONDS = 60.0
 class MonitorState:
     def __init__(self, idle_threshold: float = 900.0,
                  rearm_seconds: float = REARM_SECONDS, idle_since: float | None = None,
-                 alerted: bool = False):
+                 warned: bool = False):
         self._idle_threshold = idle_threshold
         self._rearm_seconds = rearm_seconds
         self._device_on = False
         self._device_on_since: float | None = None
         self._idle_since: float | None = idle_since
         self._not_idle_since: float | None = None
-        self._alerted = alerted
+        self._warned = warned
         self._warning_pending = False
 
     @property
@@ -39,8 +39,8 @@ class MonitorState:
         return self._idle_since
 
     @property
-    def alerted(self) -> bool:
-        return self._alerted
+    def warned(self) -> bool:
+        return self._warned
 
     def acknowledge(self) -> None:
         self._warning_pending = False
@@ -67,7 +67,7 @@ class MonitorState:
             if self._not_idle_since is None:
                 self._not_idle_since = now
             if (now - self._not_idle_since) >= self._rearm_seconds:
-                self._alerted = False
+                self._warned = False
             return None
         self._not_idle_since = None
 
@@ -80,10 +80,10 @@ class MonitorState:
             else:
                 self._idle_since = now
 
-        if not self._alerted and not self._warning_pending and (now - self._idle_since) >= self._idle_threshold:
-            self._alerted = True
+        if not self._warned and not self._warning_pending and (now - self._idle_since) >= self._idle_threshold:
+            self._warned = True
             self._warning_pending = True
-            return MonitorOutcome.IDLE_ALERT
+            return MonitorOutcome.IDLE_WARNING
 
         return None
 
@@ -96,16 +96,16 @@ def run_monitor_poll(
     last_tx: float | None,
     auto_active: bool,
     idle_state_file: Path,
-    on_alert: Callable[[], None],
+    on_warning: Callable[[], None],
     on_heard: Callable[[bool], None],
 ) -> None:
     was_heard = state.device_on
     outcome = state.update(now, device_on, last_tx, auto_active)
     if state.device_on != was_heard:
         on_heard(state.device_on)
-    save_idle_state(idle_state_file, state.idle_since, state.alerted, saved_at=now)
-    if outcome == MonitorOutcome.IDLE_ALERT:
-        on_alert()
+    save_idle_state(idle_state_file, state.idle_since, state.warned, saved_at=now)
+    if outcome == MonitorOutcome.IDLE_WARNING:
+        on_warning()
 
 
 def read_timestamp(path: Path) -> float | None:
@@ -115,10 +115,10 @@ def read_timestamp(path: Path) -> float | None:
         return None
 
 
-def save_idle_state(path: Path, idle_since: float | None, alerted: bool, *, saved_at: float) -> None:
+def save_idle_state(path: Path, idle_since: float | None, warned: bool, *, saved_at: float) -> None:
     try:
         path.write_text(
-            json.dumps({"idle_since": idle_since, "alerted": alerted, "saved_at": saved_at}),
+            json.dumps({"idle_since": idle_since, "warned": warned, "saved_at": saved_at}),
             encoding="utf-8",
         )
     except OSError:
@@ -132,6 +132,6 @@ def load_idle_state(path: Path, *, now: float) -> tuple[float | None, bool]:
             return None, False
         idle_since = data["idle_since"]
         idle_since = float(idle_since) if idle_since is not None else None
-        return idle_since, bool(data["alerted"])
+        return idle_since, bool(data["warned"])
     except (OSError, ValueError, KeyError, TypeError):
         return None, False
