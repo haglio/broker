@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,8 +56,8 @@ class DeviceWatches:
 class SessionRuntime:
     logger: object
     start_thread: Callable
-    monotonic: Callable[[], float] = time.monotonic
-    sleep: Callable[[float], None] = time.sleep
+    monotonic: Callable[[], float]
+    sleep: Callable[[float], None]
 
 
 @dataclass(frozen=True)
