@@ -14,35 +14,9 @@ from osr2_broker.activity import ActivityStamp
 from osr2_broker.hold import HoldScheduler
 from osr2_broker.motion_log import UDP
 from osr2_broker.question import DeviceQuestion
-from osr2_broker.session import BrokerSerialSession, SessionRetryState
-from tests.conftest import FakePowerOn, idle_slot
-
-
-class NotActuallyRunning:
-    """What `start_thread` hands back when a test only needs `run` to get on.
-
-    `run` does nothing with a worker but join it, so a stub is enough -- and
-    starting real threads here would make these tests the first to fall over
-    when the process is already carrying the ones another test left spinning.
-    """
-
-    def join(self, timeout=None) -> None:
-        pass
-
-
-class StampSpy:
-    """Stands in for an ActivityStamp where the test is not about the stamp.
-
-    The stamp's own file, throttle and clock are covered in
-    tests/test_activity.py; the tests here that do care about what lands on disk
-    hand the session a real ActivityStamp over a tmp_path instead.
-    """
-
-    def __init__(self):
-        self.marks = 0
-
-    def mark(self) -> None:
-        self.marks += 1
+from osr2_broker.session import SessionRetryState
+from tests.conftest import FakePowerOn
+from tests.sessions import NotActuallyRunning, StampSpy, make_session
 
 
 class FakeAutoMode:
@@ -73,36 +47,10 @@ class FakeAutoMode:
         return False
 
 
-def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0,
-                    rx_activity=None, tx_activity=None,
-                    is_retryable_error=lambda _exc: False,
-                    tcode_udp_port: int = 0, power_on=None, question=None,
-                    device_on=lambda: True, not_answering=None, logger=None, slot=None):
+def _build_session(*, auto_active: bool = False, monotonic=lambda: 10.0, logger=None, **given):
     auto_mode = FakeAutoMode(active=auto_active)
     logger = logger or MagicMock()
-    session = BrokerSerialSession(
-        slot=slot or idle_slot(),
-        serial_factory=MagicMock(),
-        virtual_port="COM15",
-        baud=115200,
-        broker_cmd_file=Path("broker.cmd"),
-        stop_event=threading.Event(),
-        broker_paused=threading.Event(),
-        auto_mode=auto_mode,
-        logger=logger,
-        start_thread=MagicMock(),
-        consume_command=lambda _path: [],
-        monotonic=monotonic,
-        rx_activity=rx_activity or StampSpy(),
-        tx_activity=tx_activity or StampSpy(),
-        connected_event=threading.Event(),
-        is_retryable_error=is_retryable_error,
-        tcode_udp_port=tcode_udp_port,
-        power_on=power_on or FakePowerOn(),
-        question=question,
-        device_on=device_on,
-        not_answering=not_answering,
-    )
+    session = make_session(auto_mode=auto_mode, monotonic=monotonic, logger=logger, **given)
     return session, auto_mode, logger
 
 
@@ -121,7 +69,7 @@ def test_handle_broker_command_sets_pause_and_resume():
 
 def test_park_schedules_delayed_write():
     clock = [10.0]
-    session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
     sock = object()
@@ -210,7 +158,7 @@ def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
 
 def test_auto_mode_deactivation_schedules_park():
     clock = [10.0]
-    session, auto_mode, _logger = _build_session(auto_active=True, monotonic=lambda: clock[0],
+    session, _auto_mode, _logger = _build_session(auto_active=True, monotonic=lambda: clock[0],
                                                  device_on=lambda: False)
     real_port = MagicMock()
     lock = threading.Lock()
@@ -542,7 +490,7 @@ def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
 
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = _sleep
-    session.start_thread = lambda *, target, args, name: NotActuallyRunning()
+    session.start_thread = lambda **_kw: NotActuallyRunning()
 
     session.run(object(), "COM4")
 
@@ -996,11 +944,11 @@ def test_the_udp_inlet_asks_the_session_s_slot_who_holds_it(monkeypatch):
     slot = _SlotSpy(holder="portrait")
 
     _build_session(tcode_udp_port=50557, slot=slot)
-    held_by = handed["held_by"]
+    lets_through = handed["lets_through"]
 
-    assert held_by() == "portrait"
+    assert lets_through() is False
     slot.holder = None
-    assert held_by() is None
+    assert lets_through() is True
 
 
 def test_udp_dropped_while_the_slot_is_held_is_told_when_the_tick_finds_the_run_over(
@@ -1010,9 +958,10 @@ def test_udp_dropped_while_the_slot_is_held_is_told_when_the_tick_finds_the_run_
     logger, heard = recorded_logger
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(tcode_udp_port=50557, logger=logger,
+                                                  slot=_SlotSpy(holder="portrait"),
                                                   monotonic=lambda: clock[0])
 
-    handed["dropped"].happened("portrait")
+    handed["lets_through"]()
     clock[0] += 5.0
     session.tick(object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
 
@@ -1320,7 +1269,7 @@ def test_the_devices_answer_is_stamped_as_it_arrives(tmp_path):
 
 
 def test_the_devices_own_auto_mode_outlasts_a_quiet_spell_while_it_is_switched_on():
-    session, auto_mode, logger = _build_session(auto_active=True, device_on=lambda: True)
+    session, auto_mode, _logger = _build_session(auto_active=True, device_on=lambda: True)
 
     session.end_auto_mode_once_switched_off(object())
 

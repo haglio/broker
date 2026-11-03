@@ -156,7 +156,7 @@ def resolve_mfp_serial_port(mfp_config_path: Path, virtual_port: str, logger) ->
     if selected_match:
         selected_role = selected_match.group(1).upper()
         selected_index = selected_match.group(2)
-        for _device, (_desc, hwid) in com0com_ports.items():
+        for _desc, hwid in com0com_ports.values():
             hwid_match = RE_COM0COM_PORT.search(hwid)
             if hwid_match and hwid_match.group(1).upper() == selected_role and hwid_match.group(2) == selected_index:
                 return selected_port
@@ -169,7 +169,7 @@ def resolve_mfp_serial_port(mfp_config_path: Path, virtual_port: str, logger) ->
         if broker_match:
             desired_role = "CNCA" if broker_match.group(1).upper() == "CNCB" else "CNCB"
             desired_index = broker_match.group(2)
-            for _device, (_desc, hwid) in com0com_ports.items():
+            for _desc, hwid in com0com_ports.values():
                 hwid_match = RE_COM0COM_PORT.search(hwid)
                 if hwid_match and hwid_match.group(1).upper() == desired_role and hwid_match.group(2) == desired_index:
                     logger.warning(
@@ -181,7 +181,7 @@ def resolve_mfp_serial_port(mfp_config_path: Path, virtual_port: str, logger) ->
                     return hwid
 
     cnca_hwids: list[str] = []
-    for _device, (_desc, hwid) in com0com_ports.items():
+    for _desc, hwid in com0com_ports.values():
         hwid_match = RE_COM0COM_PORT.search(hwid)
         if hwid_match and hwid_match.group(1).upper() == "CNCA":
             cnca_hwids.append(hwid)

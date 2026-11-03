@@ -13,37 +13,21 @@ loop waits for the OSR2 to be plugged in rather than hammering the open.
 from __future__ import annotations
 
 import logging
-import threading
-from pathlib import Path
 
 import serial
 
 from osr2_broker import app as broker_app
-from osr2_broker.activity import ActivityStamp
 from osr2_broker.session import BrokerSerialSession
-from tests.conftest import FakePowerOn, idle_slot
+from tests.sessions import make_session
 
 MISSING_PORT = "could not open port COM4"
 
 
 def _session(logger, serial_factory) -> BrokerSerialSession:
-    return BrokerSerialSession(
+    return make_session(
         serial_factory=serial_factory,
-        virtual_port="COM8",
-        baud=115200,
-        broker_cmd_file=Path("broker_cmd.txt"),
-        device_on=lambda: True,
-        stop_event=threading.Event(),
-        broker_paused=threading.Event(),
-        auto_mode=None,
         logger=logger,
-        start_thread=lambda **_kw: None,
-        consume_command=lambda _p: [],
-        rx_activity=ActivityStamp(Path("rx.txt")),
-        tx_activity=ActivityStamp(Path("tx.txt")),
-        connected_event=threading.Event(),
         is_retryable_error=broker_app.is_retryable_serial_error,
-        power_on=FakePowerOn(), slot=idle_slot(),
     )
 
 

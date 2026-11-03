@@ -19,14 +19,21 @@ from app_support.win32 import mutex_name, try_acquire_mutex
 from . import idle_warning
 from .activity import ActivityStamp
 from .config import PROJECT_DIR, load_config
-from .monitor import MonitorState, load_idle_state, read_timestamp, run_monitor_poll
+from .monitor import MonitorReading, MonitorState, load_idle_state, read_timestamp, run_monitor_poll
 from .not_answering import NotAnsweringWatch
 from .osr2_port import wait_for_the_osr2
 from .ports import ensure_mfp_serial_port, resolve_virtual_port
 from .power_on import PowerOnWatch
 from .protocol import BrokerAutoController
 from .question import DeviceQuestion
-from .session import BrokerSerialSession
+from .session import (
+    BrokerSerialSession,
+    DeviceWatches,
+    Senders,
+    SerialLink,
+    SessionControls,
+    SessionRuntime,
+)
 from .single_instance import MUTEX_BROKER
 from .state_files import heartbeat_loop, write_mode
 from .win32 import ShutdownGuard
@@ -81,39 +88,39 @@ def main(argv: list[str] | None = None) -> int:
     connected = threading.Event()
     auto_mode = BrokerAutoController(
         state_file=state_file,
-        udp_host=config.udp_host,
-        udp_port=config.udp_port,
+        udp_target=(config.udp_host, config.udp_port),
         logger=logger,
         write_mode=write_mode,
         udp_send=udp_send,
     )
     slot = Osr2Slot(port=OSR2_SLOT, logger=logger, start_thread=start_daemon_thread)
     session = BrokerSerialSession(
-        slot=slot,
-        serial_factory=serial.Serial,
-        virtual_port=virtual_port,
-        baud=config.baud,
-        broker_cmd_file=broker_cmd_file,
-        device_on=lambda: osr2_device.switched_on(config.state_dir),
-        stop_event=stop_event,
-        broker_paused=broker_paused,
-        auto_mode=auto_mode,
-        logger=logger,
-        start_thread=start_daemon_thread,
-        consume_command=consume_command_file,
-        monotonic=time.monotonic,
-        sleep=time.sleep,
-        is_retryable_error=is_retryable_serial_error,
-        rx_activity=ActivityStamp(config.osr2_serial_rx_file),
-        tx_activity=ActivityStamp(config.osr2_serial_tx_file),
-        connected_event=connected,
-        tcode_udp_port=config.tcode_udp_port,
-        power_on=PowerOnWatch(rx_stamp_file=config.osr2_serial_rx_file,
-                              monotonic=time.monotonic),
-        question=DeviceQuestion(answer_file=config.osr2_serial_answer_file,
-                                monotonic=time.monotonic, logger=logger),
-        not_answering=NotAnsweringWatch(stamp_file=config.osr2_not_answering_file,
-                                        monotonic=time.monotonic, logger=logger),
+        link=SerialLink(
+            serial_factory=serial.Serial,
+            virtual_port=virtual_port,
+            baud=config.baud,
+            is_retryable_error=is_retryable_serial_error,
+        ),
+        controls=SessionControls(
+            broker_cmd_file=broker_cmd_file,
+            consume_command=consume_command_file,
+            stop_event=stop_event,
+            broker_paused=broker_paused,
+            connected_event=connected,
+        ),
+        watches=DeviceWatches(
+            device_on=lambda: osr2_device.switched_on(config.state_dir),
+            rx_activity=ActivityStamp(config.osr2_serial_rx_file),
+            tx_activity=ActivityStamp(config.osr2_serial_tx_file),
+            power_on=PowerOnWatch(rx_stamp_file=config.osr2_serial_rx_file,
+                                  monotonic=time.monotonic),
+            question=DeviceQuestion(answer_file=config.osr2_serial_answer_file,
+                                    monotonic=time.monotonic, logger=logger),
+            not_answering=NotAnsweringWatch(stamp_file=config.osr2_not_answering_file,
+                                            monotonic=time.monotonic, logger=logger),
+        ),
+        runtime=SessionRuntime(logger=logger, start_thread=start_daemon_thread),
+        senders=Senders(auto_mode=auto_mode, slot=slot, tcode_udp_port=config.tcode_udp_port),
     )
 
     write_mode(state_file, "0", logger)
@@ -193,10 +200,12 @@ def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
         now = time.time()
         run_monitor_poll(
             state,
-            now=now,
-            device_on=osr2_device.switched_on(config.state_dir, now=now),
-            last_tx=read_timestamp(tx_file),
-            auto_active=auto_mode.is_active,
+            MonitorReading(
+                now=now,
+                device_on=osr2_device.switched_on(config.state_dir, now=now),
+                last_tx=read_timestamp(tx_file),
+                auto_active=auto_mode.is_active,
+            ),
             idle_state_file=idle_state_file,
             on_warning=_show_idle_warning,
             on_heard=_say_whether_the_osr2_is_heard,

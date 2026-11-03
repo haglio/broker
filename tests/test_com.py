@@ -17,8 +17,7 @@ from app_support.threading_utils import wait_until
 
 from osr2_broker.activity import ActivityStamp
 from osr2_broker.protocol import BrokerAutoController
-from osr2_broker.session import BrokerSerialSession
-from tests.conftest import FakePowerOn, idle_slot
+from tests.sessions import make_session
 
 
 class FakeSerialPort:
@@ -144,8 +143,7 @@ def _build_stack(tmp_path: Path):
 
     controller = BrokerAutoController(
         state_file=state_file,
-        udp_host="127.0.0.1",
-        udp_port=9001,
+        udp_target=("127.0.0.1", 9001),
         logger=logger,
         write_mode=capture_write,
         udp_send=capture_udp,
@@ -162,10 +160,8 @@ def _build_stack(tmp_path: Path):
     stop_event = threading.Event()
     broker_paused = threading.Event()
 
-    session = BrokerSerialSession(
+    session = make_session(
         serial_factory=serial_factory,
-        virtual_port="COM15",
-        baud=115200,
         broker_cmd_file=broker_cmd_file,
         device_on=lambda: osr2_device.switched_on(tmp_path / "state"),
         stop_event=stop_event,
@@ -173,17 +169,9 @@ def _build_stack(tmp_path: Path):
         auto_mode=controller,
         logger=logger,
         start_thread=_start_real_thread,
-        consume_command=lambda _path: [],
         rx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_rx.txt"),
         tx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_tx.txt"),
-        connected_event=threading.Event(),
-        is_retryable_error=lambda _exc: False,
-        power_on=FakePowerOn(), slot=idle_slot(),
         monotonic=clock,
-        # Not a no-op: with nothing to read the run loop and both forwarding
-        # threads would spin at full tilt for as long as the test lasts. A
-        # millisecond on the stop event yields the core and returns the moment
-        # the test asks them to stop.
         sleep=lambda _s: stop_event.wait(0.001),
     )
 

@@ -76,7 +76,7 @@ def watch_evolver(config, logger: logging.Logger, **kwargs) -> peer_watch.PeerWa
     """
     return peer_watch.PeerWatch(
         peer_key=EVOLVER_KEY,
-        is_up=lambda: evolver_is_up(),
+        is_up=evolver_is_up,
         launch=lambda: launch_evolver(config.evolver_launcher, logger),
         logger=logger,
         **kwargs,

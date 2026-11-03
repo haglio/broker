@@ -18,8 +18,7 @@ def test_set_auto_writes_mode_and_sends_udp_messages():
     logger = MagicMock()
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
-        udp_host="127.0.0.1",
-        udp_port=9001,
+        udp_target=("127.0.0.1", 9001),
         logger=logger,
         write_mode=lambda path, value, _logger: writes.append((path, value)),
         udp_send=lambda _sock, _host, _port, msg: sends.append(msg),
@@ -37,8 +36,7 @@ def test_set_auto_skips_transition_log_when_value_is_unchanged():
     logger = MagicMock()
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
-        udp_host="127.0.0.1",
-        udp_port=9001,
+        udp_target=("127.0.0.1", 9001),
         logger=logger,
         write_mode=lambda _path, _value, _logger: None,
         udp_send=lambda _sock, _host, _port, _msg: None,
@@ -54,8 +52,7 @@ def test_handle_line_infers_auto_mode_from_bpm_message():
     sends: list[str] = []
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
-        udp_host="127.0.0.1",
-        udp_port=9001,
+        udp_target=("127.0.0.1", 9001),
         logger=MagicMock(),
         write_mode=lambda _path, _value, _logger: None,
         udp_send=lambda _sock, _host, _port, msg: sends.append(msg),
@@ -71,8 +68,7 @@ def test_handle_line_infers_auto_mode_from_motion_message():
     sends: list[str] = []
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
-        udp_host="127.0.0.1",
-        udp_port=9001,
+        udp_target=("127.0.0.1", 9001),
         logger=MagicMock(),
         write_mode=lambda _path, _value, _logger: None,
         udp_send=lambda _sock, _host, _port, msg: sends.append(msg),
@@ -93,8 +89,7 @@ def test_handle_line_sends_bpm_and_sync_messages():
     sends: list[str] = []
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
-        udp_host="127.0.0.1",
-        udp_port=9001,
+        udp_target=("127.0.0.1", 9001),
         logger=MagicMock(),
         write_mode=lambda path, value, _logger: writes.append((path, value)),
         udp_send=lambda _sock, _host, _port, msg: sends.append(msg),
@@ -118,8 +113,7 @@ def test_handle_line_applies_auto_transition():
     sends: list[str] = []
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
-        udp_host="127.0.0.1",
-        udp_port=9001,
+        udp_target=("127.0.0.1", 9001),
         logger=MagicMock(),
         write_mode=lambda _path, _value, _logger: None,
         udp_send=lambda _sock, _host, _port, msg: sends.append(msg),

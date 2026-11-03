@@ -282,7 +282,7 @@ def test_the_broker_process_never_loads_qt_widgets():
 
 @contextmanager
 def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=None,
-                  retry_delay_seconds=None, osr2_adapters=("COM4",)):
+                  osr2_adapters=("COM4",)):
     """main(), with everything it installs process-wide held off.
 
     `configure_logging` and `install_exception_logging` replace both excepthooks
@@ -316,11 +316,8 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
         if callable(osr2_adapters)
         else patch("osr2_broker.osr2_port.osr2_adapters", return_value=list(osr2_adapters)),
         patch.object(broker_app_module.time, "sleep", side_effect=sleep),
+        patch.object(broker_app_module, "SERIAL_RETRY_DELAY_SECONDS", 0.0),
     ]
-    if retry_delay_seconds is not None:
-        patches.append(
-            patch.object(broker_app_module, "SERIAL_RETRY_DELAY_SECONDS", retry_delay_seconds),
-        )
     with ExitStack() as stack:
         for each in patches:
             stack.enter_context(each)
@@ -347,8 +344,7 @@ class TestMainReconnect:
             if sleep_calls["count"] >= 4:
                 raise KeyboardInterrupt
 
-        with _main_running(broker_app_module, fake_serial=FakeSerial, sleep=fake_sleep,
-                           retry_delay_seconds=0.0):
+        with _main_running(broker_app_module, fake_serial=FakeSerial, sleep=fake_sleep,):
             result = broker_app_module.main(["--config", str(cfg_path)])
 
         assert result == 0
@@ -372,7 +368,6 @@ class TestMainReconnect:
                 raise KeyboardInterrupt
 
         with _main_running(broker_app_module, fake_serial=FakeSerial, sleep=fake_sleep,
-                           retry_delay_seconds=0.0,
                            osr2_adapters=lambda: next(sockets, ["COM5"])):
             broker_app_module.main(["--config", str(cfg_path)])
 
@@ -537,7 +532,7 @@ class TestMainHoldsTheOsr2Slot:
             return MagicMock()
 
         def stop_once_seen(_seconds):
-            listening.append(built["slot"].address)
+            listening.append(built["senders"].slot.address)
             raise KeyboardInterrupt
 
         with (
@@ -600,7 +595,7 @@ class TestMainWatchesForThePowerOn:
             patch.object(broker_app_module, "BrokerSerialSession", side_effect=record),
         ):
             broker_app_module.main(["--config", str(cfg_path)])
-        return built["power_on"]
+        return built["watches"].power_on
 
     def test_a_broker_starting_after_a_silence_treats_the_next_line_as_a_power_on(
         self, broker_app_module, cfg_path,
