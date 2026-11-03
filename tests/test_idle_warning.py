@@ -33,8 +33,6 @@ def test_the_warning_is_shown_by_a_process_of_its_own(cfg_path):
 
 
 def test_the_warnings_process_gets_no_console_and_is_not_told_to_start_hidden(cfg_path):
-    """A hidden start would hide the dialog itself: Windows shows a process's
-    first window the way its STARTUPINFO says to."""
     config = load_config(str(cfg_path))
     started = []
 
@@ -114,8 +112,6 @@ def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon(qapp):
 
 
 def test_the_process_claims_its_taskbar_identity_before_the_dialog_appears():
-    """Windows reads the identity when a window of this process first appears,
-    so claiming it after the dialog is up is claiming it too late."""
     order = []
 
     with (

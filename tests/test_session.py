@@ -75,11 +75,9 @@ def test_park_schedules_delayed_write():
     sock = object()
 
     session.handle_broker_command("PARK", sock)
-    # Not written yet — still pending
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
-    # Advance past the delay
     clock[0] = 12.0
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I1000\n")
@@ -113,11 +111,6 @@ def test_resume_cancels_pending_park():
 
 
 def test_retract_schedules_the_far_end_instead_of_home():
-    """RETRACT is PARK's antonym: same settle delay, opposite end of the travel.
-
-    Park sends the device home (position 0); retract sends it as far away as it
-    goes (9999), which is what the sensation emergency asks for.
-    """
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
@@ -135,12 +128,6 @@ def test_retract_schedules_the_far_end_instead_of_home():
 
 
 def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
-    """The log names the end the device went to, so a retract is never read back
-    as a park at position 0 when someone is tracing where the OSR2 went.
-
-    It names only that: the reason belongs to the line that scheduled the hold,
-    and several different reasons reach the same write, so a reason baked into it
-    misattributes all but one of them."""
     clock = [10.0]
     session, _auto_mode, logger = _build_session(monotonic=lambda: clock[0])
     lock = threading.Lock()
@@ -164,30 +151,24 @@ def test_auto_mode_deactivation_schedules_park():
     lock = threading.Lock()
     sock = object()
 
-    # The device switched off, which ends its own auto mode
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
 
-    # Park is pending now (auto went inactive), and the settle delay is not up
     real_port.write.assert_not_called()
 
-    # Advance past delay
     clock[0] = 12.0
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
 def test_auto_mode_deactivation_between_ticks_schedules_park():
-    """Auto mode going inactive on the real thread (between ticks) must still be detected."""
     clock = [10.0]
     session, auto_mode, _logger = _build_session(auto_active=True, monotonic=lambda: clock[0])
     real_port = MagicMock()
     lock = threading.Lock()
     sock = object()
 
-    # Simulate auto mode going inactive on the real-serial thread
     auto_mode.set_auto(sock, False)
 
-    # Next tick should detect the deactivation via the flag
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_not_called()
 
@@ -197,9 +178,6 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
 
 
 def test_a_verb_the_broker_does_not_know_is_ignored():
-    """The command file is a shared channel: fun_time, genau and genaumacher all
-    write into it, and one of them growing a verb this broker has no handler for
-    must be a no-op, not a crash inside the 50 ms tick."""
     session, _auto_mode, logger = _build_session()
 
     session.handle_broker_command("TELEPORT", object())
@@ -210,8 +188,6 @@ def test_a_verb_the_broker_does_not_know_is_ignored():
 
 
 def test_an_empty_tick_with_no_command_is_a_no_op():
-    """Almost every tick reads no command at all -- twenty times a second, all
-    session long -- so `None` has to fall through the whole table quietly."""
     session, _auto_mode, logger = _build_session()
 
     session.handle_broker_command(None, object())
@@ -231,8 +207,6 @@ def test_the_devices_own_auto_mode_ends_once_it_is_switched_off():
 
 
 def test_end_auto_mode_once_switched_off_leaves_a_paused_broker_alone():
-    """Paused means the user took over; even a device gone quiet must not
-    flip AUTO without them knowing."""
     session, auto_mode, logger = _build_session(auto_active=True, device_on=lambda: False)
     session.broker_paused.set()
 
@@ -321,7 +295,7 @@ def test_forward_virtual_to_real_skips_writes_just_after_direct_t_code():
     clock = [9.9]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     session._tcode_window.mark()
-    clock[0] = 10.0  # 0.1s ago — within suppression window
+    clock[0] = 10.0
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -348,7 +322,7 @@ def test_forward_virtual_to_real_allows_writes_once_direct_t_code_has_gone_quiet
     clock = [9.0]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     session._tcode_window.mark()
-    clock[0] = 10.0  # 1.0s ago — outside suppression window
+    clock[0] = 10.0
     session_stop = threading.Event()
     retry_state = SessionRetryState()
 
@@ -372,40 +346,6 @@ def test_forward_virtual_to_real_allows_writes_once_direct_t_code_has_gone_quiet
 
 
 def test_park_suppression_heals_when_mfp_active_after_grace():
-    """A lost RESUME must not mute MFP forever. Within the grace window after a
-    PARK, MFP is swallowed (so it can't immediately un-park the device); once the
-    window elapses, sustained MFP data clears the latch and forwarding resumes."""
-    clock = [100.0]
-    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
-    session.handle_broker_command("PARK", object())  # suppressed at t=100
-    session_stop = threading.Event()
-    retry_state = SessionRetryState()
-
-    class FakeVirt:
-        def __init__(self):
-            self.in_waiting = 1
-
-        def read(self, _size):
-            session_stop.set()
-            return b"L05000\n"
-
-    class FakeReal:
-        def __init__(self):
-            self.writes: list[bytes] = []
-
-        def write(self, data: bytes):
-            self.writes.append(data)
-
-    clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS + 0.1  # past grace
-    real = FakeReal()
-    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
-
-    assert real.writes == [b"L05000\n"]
-
-
-def test_park_suppression_holds_within_grace_window():
-    """The tail of an in-flight script right after PARK is still swallowed, so the
-    park write is not immediately undone by MFP's continuing stream."""
     clock = [100.0]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     session.handle_broker_command("PARK", object())
@@ -427,7 +367,36 @@ def test_park_suppression_holds_within_grace_window():
         def write(self, data: bytes):
             self.writes.append(data)
 
-    clock[0] = 100.0 + 1.0  # still within grace
+    clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS + 0.1
+    real = FakeReal()
+    session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
+
+    assert real.writes == [b"L05000\n"]
+
+
+def test_park_suppression_holds_within_grace_window():
+    clock = [100.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
+    session.handle_broker_command("PARK", object())
+    session_stop = threading.Event()
+    retry_state = SessionRetryState()
+
+    class FakeVirt:
+        def __init__(self):
+            self.in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"L05000\n"
+
+    class FakeReal:
+        def __init__(self):
+            self.writes: list[bytes] = []
+
+        def write(self, data: bytes):
+            self.writes.append(data)
+
+    clock[0] = 100.0 + 1.0
     real = FakeReal()
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
@@ -435,9 +404,6 @@ def test_park_suppression_holds_within_grace_window():
 
 
 def test_resume_hands_mfp_back_without_waiting_out_the_grace():
-    """RESUME undoes the whole hold. Cancelling only the pending write would
-    leave MFP muted for the rest of the grace window with nothing on the way to
-    clear it -- the user asks for motion and the device stays still."""
     clock = [100.0]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     sock = object()
@@ -461,7 +427,7 @@ def test_resume_hands_mfp_back_without_waiting_out_the_grace():
         def write(self, data: bytes):
             self.writes.append(data)
 
-    clock[0] = 100.0 + 1.0  # still well inside the grace window
+    clock[0] = 100.0 + 1.0
     real = FakeReal()
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
@@ -469,10 +435,6 @@ def test_resume_hands_mfp_back_without_waiting_out_the_grace():
 
 
 def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
-    """The heartbeat file is only written while this event is set, and fun_time
-    reads that file to decide whether the broker is alive. Only the clearing
-    half was pinned, so a session that never set it would have looked fine here
-    and shown up as a broker that never starts."""
     session, _auto_mode, _logger = _build_session()
     seen_inside: list[bool] = []
 
@@ -499,9 +461,6 @@ def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
 
 
 def test_a_retryable_read_error_asks_the_caller_for_another_session():
-    """The classifier is the caller's -- app.py's is_retryable_serial_error --
-    and the forwarding thread's only job is to run it over what it caught and
-    put the answer where `run` will return it."""
     session, _auto_mode, _logger = _build_session(is_retryable_error=lambda _exc: True)
     session_stop = threading.Event()
     retry_state = SessionRetryState()
@@ -736,11 +695,6 @@ def test_forward_virtual_to_real_uses_serial_write_lock():
 
 
 def _thread_names_started_by_one_run(session) -> list[str]:
-    """Drive `run` through a single poll and report what it put on threads.
-
-    The names are recorded rather than run: `run` only ever joins what it is
-    handed back.
-    """
     started: list[str] = []
 
     class FakePort:
@@ -763,9 +717,6 @@ def _thread_names_started_by_one_run(session) -> list[str]:
 
 
 def test_a_configured_tcode_port_gets_a_listener_thread():
-    """Genau's datagrams arrive on a thread of their own, and nothing else in
-    the suite starts one -- so without this the port could stop being listened
-    on and every other test would stay green."""
     session, _auto_mode, _logger = _build_session(tcode_udp_port=50557)
 
     assert _thread_names_started_by_one_run(session) == [
@@ -774,8 +725,6 @@ def test_a_configured_tcode_port_gets_a_listener_thread():
 
 
 class _Port:
-    """A serial port that keeps what is written to it."""
-
     def __init__(self):
         self.writes: list[bytes] = []
 
@@ -799,10 +748,6 @@ def test_t_code_reaches_the_osr2_one_line_at_a_time():
 
 
 def test_a_line_that_is_not_ascii_is_dropped_without_ending_the_session():
-    """The inlets read what they are sent as ASCII, standing in for what is not.
-    Written out, the stand-in could still read to the device as a move to
-    somewhere nobody sent it; failing to write it ended the session as a failure
-    not worth retrying, and the broker with it."""
     session, _auto_mode, _logger = _build_session()
     session_stop = threading.Event()
     port = _Port()
@@ -814,10 +759,6 @@ def test_a_line_that_is_not_ascii_is_dropped_without_ending_the_session():
 
 
 def test_t_code_arriving_while_the_device_drives_itself_is_dropped_whole():
-    """Auto mode is the OSR2 on its own firmware, and it wins over everything
-    here: a funscript, a FunTimeVR player, an Origenerator video.  So what they
-    send meanwhile is neither written nor counted as sent -- and the question is
-    asked afresh each time, since auto comes and goes under a running session."""
     tx_activity = StampSpy()
     session, auto_mode, _logger = _build_session(auto_active=True, tx_activity=tx_activity)
     port = _Port()
@@ -832,10 +773,6 @@ def test_t_code_arriving_while_the_device_drives_itself_is_dropped_whole():
 
 
 def test_t_code_is_written_under_the_session_s_serial_lock():
-    """The third of the three writers to the one port. A hold's write is pinned
-    in tests/test_hold.py and MFP's below; without this one, dropping the lock
-    would leave a T-Code line free to land interleaved with either of them, which
-    the device reads as neither."""
     session, _auto_mode, _logger = _build_session()
     lock = threading.Lock()
     held_during_write = []
@@ -861,8 +798,6 @@ def test_written_t_code_stamps_the_tx_activity_file(tmp_path):
 
 
 def test_written_t_code_mutes_mfp_after_it():
-    """MFP and Genau both drive the same device. Whichever spoke last wins for
-    the length of the window, and here that is the T-Code."""
     session, _auto_mode, _logger = _build_session()
 
     _writer(session, _Port())(UDP, "L05000I33")
@@ -895,8 +830,6 @@ def test_t_code_the_port_cannot_take_ends_the_session_and_says_whether_to_retry(
 
 
 def test_a_session_that_has_begun_to_end_writes_no_more_t_code():
-    """What was still on its way when the port failed is not tried against it,
-    and logged, a line at a time while the session winds down."""
     session, _auto_mode, _logger = _build_session()
     session_stop = threading.Event()
     session_stop.set()
@@ -908,10 +841,6 @@ def test_a_session_that_has_begun_to_end_writes_no_more_t_code():
 
 
 class _SlotSpy:
-    """The OSR2's slot, as far as a serial session uses it: who holds it, the
-    writer it was lent, and who took the OSR2 from it, in among whatever else
-    ``events`` is keeping."""
-
     def __init__(self, events: list | None = None, *, holder: str | None = None):
         self.holder = holder
         self.writers: list = []
@@ -925,8 +854,6 @@ class _SlotSpy:
 
 
 def test_mfp_is_not_forwarded_while_a_sender_holds_the_slot():
-    """The slot's holder is the one stream that reaches the device; MFP joining
-    in is the two streams the slot is there to end."""
     slot = _SlotSpy(holder="portrait")
     session, _auto_mode, _logger = _build_session(slot=slot)
     real = _Port()
@@ -972,7 +899,6 @@ def test_udp_dropped_while_the_slot_is_held_is_told_when_the_tick_finds_the_run_
 
 
 def _a_session_telling(events: list, **kwargs):
-    """A session whose slot and log both tell ``events``, in the order they happen."""
     logger = MagicMock()
     logger.info.side_effect = lambda message, *_args: events.append(message)
     return _build_session(slot=_SlotSpy(events), logger=logger, **kwargs)[0]
@@ -995,8 +921,6 @@ def test_a_retract_takes_the_osr2_from_whoever_holds_the_slot_before_it_is_sched
 
 
 def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot():
-    """Nobody was driving a device that was switched off, and whoever connects
-    to drive it now must not be thrown off by its waking up."""
     events: list = []
     session = _a_session_telling(events, power_on=FakePowerOn(breaks_silence=True))
     session_stop = threading.Event()
@@ -1060,17 +984,12 @@ def test_the_osr2_s_slot_writes_through_a_session_only_while_its_ports_are_open(
 
 
 def test_no_tcode_port_means_no_listener_thread():
-    """Port 0 is how the listener is turned off; binding it would take an
-    ephemeral port nobody can address and spin a thread on nothing."""
     session, _auto_mode, _logger = _build_session(tcode_udp_port=0)
 
     assert _thread_names_started_by_one_run(session) == ["broker-real", "broker-virtual"]
 
 
 def test_the_osr2_speaking_after_a_silence_schedules_a_park():
-    """Switched on, the OSR2 comes up half way along its travel; the broker
-    sends it home so the user does not have to nudge it there a
-    button-press at a time."""
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
         monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),
@@ -1100,8 +1019,6 @@ def test_the_osr2_speaking_after_a_silence_schedules_a_park():
 
 
 def test_the_osr2_talking_on_without_a_silence_is_left_alone():
-    """Ordinary chatter is not a power-on, and parking on it would fight
-    whatever is driving the device."""
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
         monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=False),
@@ -1131,9 +1048,6 @@ def test_the_osr2_talking_on_without_a_silence_is_left_alone():
 
 
 def test_a_park_on_power_on_leaves_the_script_feed_running():
-    """A device that was switched off had nothing driving it, so there is no
-    in-flight tail to swallow -- and muting would only stall whatever picks the
-    device up now."""
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
         monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),

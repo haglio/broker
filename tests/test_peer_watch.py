@@ -1,11 +1,3 @@
-"""The broker's half of the pair: what it checks, what it starts, and when it doesn't.
-
-The policy — the throttle, the stand-down, the guard around a failing launcher —
-is app_support's and is tested there. What is tested here is the part only the
-broker can get wrong: which mutex answers "is Evolver up", which file is run to
-start one, and that the watchdog beat reaches the watch without the broker's own
-pause silencing it.
-"""
 from __future__ import annotations
 
 import logging
@@ -28,7 +20,6 @@ LOG = logging.getLogger("test.peer_watch")
 
 @pytest.fixture
 def tray(qapp):
-
     return BrokerTray()
 
 
@@ -40,8 +31,6 @@ class TestIsEvolverUp:
         assert peer_watch.evolver_is_up(is_held=lambda name: False) is False
 
     def test_it_asks_after_the_name_evolver_actually_holds(self):
-        """Unqualified, so it resolves in the logon session's own namespace —
-        which is the only place either app runs."""
         asked: list[str] = []
 
         peer_watch.evolver_is_up(is_held=lambda name: asked.append(name) or True)
@@ -93,7 +82,6 @@ class TestStartingEvolver:
 
 class TestTheWatch:
     def _watch(self, cfg_path):
-
         return peer_watch.watch_evolver(load_config(cfg_path), LOG)
 
     def test_an_evolver_that_is_up_is_left_alone(self, cfg_path):
@@ -112,7 +100,6 @@ class TestTheWatch:
         launch.assert_called_once()
 
     def test_it_starts_the_launcher_the_config_names(self, cfg_path):
-
         with patch.object(peer_watch, "evolver_is_up", return_value=False), \
              stood_down(False), \
              patch.object(peer_watch, "launch_evolver") as launch:
@@ -141,20 +128,17 @@ class TestTheWatch:
 
 class TestWhereTheLauncherComesFrom:
     def test_it_defaults_to_the_sibling_checkout(self, cfg_path):
-
         launcher = load_config(cfg_path).evolver_launcher
 
         assert launcher.parent.name == "evolver"
 
     def test_it_starts_the_launcher_that_leaves_an_evolver_already_running_alone(
             self, cfg_path):
-
         launcher = load_config(cfg_path).evolver_launcher
 
         assert launcher.name == "launch_evolver_if_not_running.vbs"
 
     def test_a_config_may_name_another(self, tmp_path):
-
         elsewhere = tmp_path / "somewhere" / "launch_evolver.vbs"
         config_path = _write_config(tmp_path, {"evolver_launcher": str(elsewhere)})
 
@@ -163,7 +147,6 @@ class TestWhereTheLauncherComesFrom:
 
 class TestTheTrayKeepsTheWatch:
     def _app(self, cfg_path, tray, *, peer=None, stand_down=None, running=True):
-
         hooks = {"peer": peer, "quit_app": lambda: None}
         if stand_down is not None:
             hooks["stand_down"] = stand_down
@@ -178,7 +161,6 @@ class TestTheTrayKeepsTheWatch:
         peer.tick.assert_called_once()
 
     def test_pausing_the_broker_does_not_stop_watching_evolver(self, tray, cfg_path):
-        """The pause is about the OSR2, and says nothing about the app next door."""
         peer = MagicMock()
         app = self._app(cfg_path, tray, peer=peer)
 
@@ -189,7 +171,6 @@ class TestTheTrayKeepsTheWatch:
         peer.tick.assert_called_once()
 
     def test_a_tray_with_no_peer_still_beats(self, tray, cfg_path):
-        """Every existing caller builds one this way; it must stay a no-op."""
         self._app(cfg_path, tray).tick()
 
     def test_quitting_stands_the_broker_down(self, tray, cfg_path):
@@ -201,12 +182,9 @@ class TestTheTrayKeepsTheWatch:
         assert stood_down == ["marked"]
 
     def test_quitting_stands_down_before_the_broker_goes(self, tray, cfg_path):
-        """Written first, so a tray killed mid-quit still leaves the mark rather
-        than a broker that is down with nothing recording that it was meant to be."""
         order: list[str] = []
         supervisor = FakeSupervisor(running=True)
         supervisor.stop = lambda: order.append("stopped")
-
 
         app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: order.append("marked"), quit_app=lambda: None))
         app.quit()
@@ -225,10 +203,6 @@ class TestTheTrayKeepsTheWatch:
 class TestStartingTheTray:
     def test_a_relaunch_over_a_live_tray_leaves_the_stand_down_alone(
             self, cfg_path, stand_down_marker):
-        """The scheduled task relaunches this every couple of minutes, and each
-        relaunch exits at the mutex. If those cleared the marker, quitting the
-        tray would stand the broker down for two minutes and no longer."""
-
 
         with patch.object(tray_module, "configure_logging", return_value=LOG),              patch.object(tray_module, "install_exception_logging"),              patch.object(tray_module, "_name_this_process"),              patch.object(tray_module, "try_acquire_mutex", return_value=None):
             assert tray_module.main(["--config", str(cfg_path)]) == 0

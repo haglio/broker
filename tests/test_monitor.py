@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -56,15 +55,12 @@ class TestIdleWarning:
         assert action is None
 
     def test_sustained_activity_resets_warning(self):
-        """Sustained TX (>60s) after acknowledged warning re-arms idle detection."""
         state = MonitorState(idle_threshold=900.0)
         state.update(now=1000.0, device_on=True, last_tx=998.0, auto_mode=False)
         state.update(now=1998.0, device_on=True, last_tx=998.0, auto_mode=False)
         state.acknowledge()
-        # Sustained TX activity for 70 seconds (polls every 10s)
         for t in range(2000, 2080, 10):
             state.update(now=float(t), device_on=True, last_tx=float(t - 1), auto_mode=False)
-        # Activity stops, device idle again
         action = state.update(now=3100.0, device_on=True, last_tx=2079.0, auto_mode=False)
         assert action == MonitorOutcome.IDLE_WARNING
 
@@ -102,49 +98,37 @@ class TestIdleWarning:
         assert action is None
 
     def test_no_second_warning_after_brief_tx(self):
-        """Brief TX (e.g. MFP keepalive) after acknowledged warning must not re-arm."""
         state = MonitorState(idle_threshold=900.0)
         state.update(now=1000.0, device_on=True, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, device_on=True, last_tx=998.0, auto_mode=False)
         assert action == MonitorOutcome.IDLE_WARNING
         state.acknowledge()
-        # Brief TX blip (single poll with in_use=True)
         state.update(now=2000.0, device_on=True, last_tx=1999.0, auto_mode=False)
-        # TX fades, device idle again
         state.update(now=2040.0, device_on=True, last_tx=1999.0, auto_mode=False)
-        # 15+ min later — should NOT fire a second warning
         action = state.update(now=3000.0, device_on=True, last_tx=1999.0, auto_mode=False)
         assert action is None
 
     def test_no_second_warning_after_rx_gap(self):
-        """Brief RX gap (device appears off momentarily) must not re-arm the warning."""
         state = MonitorState(idle_threshold=900.0)
         state.update(now=1000.0, device_on=True, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, device_on=True, last_tx=998.0, auto_mode=False)
         assert action == MonitorOutcome.IDLE_WARNING
         state.acknowledge()
-        # RX goes stale — device appears off
         state.update(now=2040.0, device_on=False, last_tx=998.0, auto_mode=False)
         assert not state.device_on
-        # RX resumes — device back on
         state.update(now=2045.0, device_on=True, last_tx=998.0, auto_mode=False)
         assert state.device_on
-        # 15+ min idle — should NOT fire a second warning
         action = state.update(now=3045.0, device_on=True, last_tx=998.0, auto_mode=False)
         assert action is None
 
     def test_second_warning_after_the_device_is_switched_off(self):
-        """A power cycle ends the idle episode, so the warning that already fired
-        for the previous one must not silence this one."""
         state = MonitorState(idle_threshold=900.0)
         state.update(now=1000.0, device_on=True, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, device_on=True, last_tx=998.0, auto_mode=False)
         assert action == MonitorOutcome.IDLE_WARNING
         state.acknowledge()
-        # Switched off: RX stops for well over the re-arm window.
         for t in range(2000, 2200, 10):
             state.update(now=float(t), device_on=False, last_tx=998.0, auto_mode=False)
-        # Switched back on and left idle again.
         state.update(now=2200.0, device_on=True, last_tx=998.0, auto_mode=False)
         action = state.update(now=3200.0, device_on=True, last_tx=998.0, auto_mode=False)
         assert action == MonitorOutcome.IDLE_WARNING
@@ -159,15 +143,11 @@ class TestIdleWarning:
 
 class TestRestartPersistence:
     def test_seeded_idle_since_continues_countdown_across_restart(self):
-        """A restarted broker must resume the idle countdown from the persisted
-        idle_since, not re-anchor it to 'now' (which would reset the 15-min clock)."""
         state = MonitorState(idle_threshold=900.0, idle_since=1000.0)
         action = state.update(now=1950.0, device_on=True, last_tx=500.0, auto_mode=False)
         assert action == MonitorOutcome.IDLE_WARNING
 
     def test_seeded_warned_suppresses_second_warning_across_restart(self):
-        """If the warning already fired before a restart, seeding warned=True must
-        stop the restarted broker from re-nagging for the same idle episode."""
         state = MonitorState(idle_threshold=900.0,
                              idle_since=1000.0, warned=True)
         action = state.update(now=1950.0, device_on=True, last_tx=500.0, auto_mode=False)
@@ -225,8 +205,6 @@ class TestIdleStatePersistence:
         assert load_idle_state(p, now=2000.0 + REARM_SECONDS) == (1000.0, True)
 
     def test_a_countdown_saved_longer_ago_than_a_re_arm_takes_starts_fresh(self, tmp_path):
-        """No broker watched the OSR2 in between, so it may have been switched
-        off long enough to re-arm, and on again."""
         p = tmp_path / "idle_state.txt"
         save_idle_state(p, idle_since=1000.0, warned=True, saved_at=2000.0)
         assert load_idle_state(p, now=2000.0 + REARM_SECONDS + 1.0) == (None, False)

@@ -1,15 +1,3 @@
-"""The retry loop while the OSR2's port is away.
-
-Every open against a port Windows does not have raises the same
-SerialException.  Retried once a second with a traceback apiece, that wrote four
-megabytes into the broker log in forty minutes -- rolling it three times, so the
-outage erased every record that came before it and the one thing a reader came
-for was the one thing gone.
-
-These pin one half of the answer, that a run of identical failures is reported
-once and then only counted; tests/test_osr2_port.py pins the other, that the
-loop waits for the OSR2 to be plugged in rather than hammering the open.
-"""
 from __future__ import annotations
 
 import logging
@@ -92,7 +80,7 @@ class TestRepeatedOpenFailuresAreCollapsed:
                 return False
 
         session.serial_factory = lambda *_a, **_kw: _Opened()
-        session.stop_event.set()  # the session loop sees it and returns at once
+        session.stop_event.set()
         session.run(udp_sock=None, osr2_port="COM4")
 
         assert [r.getMessage() for r in handler.records if r.levelno == logging.INFO] == [

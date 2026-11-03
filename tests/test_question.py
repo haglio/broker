@@ -1,4 +1,3 @@
-"""Asking the OSR2 a question only a switched-on device can answer."""
 from __future__ import annotations
 
 from pathlib import Path
