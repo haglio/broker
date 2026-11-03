@@ -301,3 +301,10 @@ class TestMfpConfigEdgeCases:
         monkeypatch.setattr("osr2_broker.ports.iter_serial_ports", lambda: [FakePort()])
         result = collect_com0com_ports()
         assert "COM7" in result
+
+
+def test_a_config_holding_anything_but_an_object_reads_as_hands_off(tmp_path):
+    mfp_config = tmp_path / "MultiFunPlayer.config.json"
+    mfp_config.write_text("[1, 2]", encoding="utf-8")
+
+    assert _read_mfp_config_payload(mfp_config) is None

@@ -38,7 +38,6 @@ def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, lis
          patch.object(tray_module, "install_exception_logging"), \
          patch.object(tray_module, "_name_this_process"), \
          patch.object(tray_module, "try_acquire_mutex", return_value=7), \
-         patch.object(tray_module.peer_watch, "clear_broker_stand_down"), \
          patch.object(tray_module, "claim_taskbar_identity"), \
          loading_at_the_click(_Loading(happened, canceled=canceled)), \
          patch.object(tray_module, "start_the_tray", side_effect=built), \
@@ -68,3 +67,10 @@ def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_the_brokers_tas
     opened.assert_called_once_with(
         caption="Broker Loading", wordmark="Broker", icon=ICON_PATH, preview=None, steps=tray_module.STEPS,
         cancel_hint="Press Esc to cancel opening Broker", app_id=taskbar_identity(APP_USER_MODEL_ID, None))
+
+
+def test_starting_the_tray_forgets_an_earlier_stand_down(qapp, cfg_path, stand_down_marker):
+    _start_the_tray(qapp, cfg_path)
+
+    _, cleared = stand_down_marker
+    cleared.assert_called_once()

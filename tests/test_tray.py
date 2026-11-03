@@ -443,7 +443,7 @@ def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qap
 
     tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=42,
-         shown_as=Preview(feature="the new idle warning"),
+        shown_as=Preview(feature="the new idle warning"),
         quit_app=lambda: quits.append(True))
     tray.set_status(running=False, osr2="OSR2 off")
     tray.quit_action.trigger()
@@ -457,7 +457,7 @@ def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qap
 def test_a_preview_s_tray_wears_the_brokers_letter_in_the_preview_ink(qapp, cfg_path):
     tray, _, _hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=42,
-         shown_as=Preview(feature=None), quit_app=lambda: None)
+        shown_as=Preview(feature=None), quit_app=lambda: None)
 
     middle_bar_of_the_b = tray.icon().pixmap(256, 256).toImage().pixelColor(128, 128)
     assert (middle_bar_of_the_b.red(), middle_bar_of_the_b.green(), middle_bar_of_the_b.blue()) == PREVIEW_INK
@@ -466,7 +466,7 @@ def test_a_preview_s_tray_wears_the_brokers_letter_in_the_preview_ink(qapp, cfg_
 def test_the_production_tray_never_hands_itself_back(qapp, cfg_path):
     _tray, _, hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
-         shown_as=None, quit_app=lambda: None)
+        shown_as=None, quit_app=lambda: None)
 
     assert hand_back_timer is None
 
@@ -487,7 +487,7 @@ def an_update_waiting(monkeypatch):
 def test_the_production_tray_starts_again_for_an_update_waiting_on_its_checkout(qapp, cfg_path, an_update_waiting):
     _tray, tray_app, _ = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
-         shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+        shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
 
     tray_app.tick()
 
@@ -500,7 +500,7 @@ def test_the_production_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path
     publish_stamp(config.osr2_serial_rx_file)
     _tray, tray_app, _ = tray_module.start_the_tray(
         config, logging.getLogger("test.tray"), preview_claim=None,
-         shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+        shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
 
     tray_app.tick()
 
@@ -510,7 +510,7 @@ def test_the_production_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path
 def test_a_preview_never_starts_again_for_an_update(qapp, cfg_path, an_update_waiting):
     _tray, tray_app, _ = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=42,
-         shown_as=Preview(feature=None), quit_app=lambda: an_update_waiting.append("quit"))
+        shown_as=Preview(feature=None), quit_app=lambda: an_update_waiting.append("quit"))
 
     tray_app.tick()
 
@@ -520,7 +520,7 @@ def test_a_preview_never_starts_again_for_an_update(qapp, cfg_path, an_update_wa
 def test_hovering_the_production_tray_names_the_app_broker(qapp, cfg_path):
     tray, _, _hand_back_timer = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
-         shown_as=None, quit_app=lambda: None)
+        shown_as=None, quit_app=lambda: None)
 
     tray.set_status(running=True, osr2="controlling OSR2")
 
@@ -613,3 +613,24 @@ def test_the_production_tray_wears_no_preview_wherever_it_runs_from(monkeypatch)
     monkeypatch.setattr(tray_module, "preview_of", lambda checkout: Preview(feature="unused"))
 
     assert tray_module.shown_as(preview=False) is None
+
+
+class _ABrokerThatEnds:
+    pid = 1
+
+    def wait(self) -> int:
+        return 0
+
+
+def test_the_broker_is_started_detached_with_no_console_of_its_own(cfg_path):
+    asked = {}
+
+    def popen(_argv, **kwargs):
+        asked.update(kwargs)
+        kwargs["stdout"].close()
+        return _ABrokerThatEnds()
+
+    tray_module.launch_broker(["broker"], load_config(cfg_path), logging.getLogger("test.tray"), popen=popen)
+
+    assert asked["creationflags"] == (
+        tray_module.subprocess.CREATE_NO_WINDOW | tray_module.subprocess.DETACHED_PROCESS)

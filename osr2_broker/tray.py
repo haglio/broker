@@ -277,10 +277,10 @@ def _taken(request: Path) -> bool:
     return True
 
 
-def launch_broker(argv: list[str], config, logger) -> None:
+def launch_broker(argv: list[str], config, logger, *, popen=None) -> None:
     """Start the broker detached, with its console output kept for post-mortems."""
     launcher_log = config.log_file("broker_service_launcher").open("a", encoding="utf-8")
-    broker = subprocess.Popen(
+    broker = (popen or subprocess.Popen)(
         argv,
         cwd=str(PROJECT_DIR),
         stdout=launcher_log,

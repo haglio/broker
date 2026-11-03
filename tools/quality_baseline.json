@@ -42,7 +42,7 @@
     "tests/test_app.py": 27,
     "tests/test_branch_session.py": 3,
     "tests/test_idle_warning.py": 8,
-    "tests/test_loading.py": 8,
+    "tests/test_loading.py": 7,
     "tests/test_not_answering.py": 1,
     "tests/test_osr2_port.py": 14,
     "tests/test_peer_watch.py": 14,
@@ -99,6 +99,6 @@
     "osr2_broker/session.py": 5,
     "osr2_broker/state_files.py": 1,
     "osr2_broker/tray.py": 1,
-    "osr2_broker/win32.py": 20
+    "osr2_broker/win32.py": 18
   }
 }
