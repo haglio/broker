@@ -119,7 +119,8 @@ def main(argv: list[str] | None = None) -> int:
             not_answering=NotAnsweringWatch(stamp_file=config.osr2_not_answering_file,
                                             monotonic=time.monotonic, logger=logger),
         ),
-        runtime=SessionRuntime(logger=logger, start_thread=start_daemon_thread),
+        runtime=SessionRuntime(logger=logger, start_thread=start_daemon_thread,
+                               monotonic=time.monotonic, sleep=time.sleep),
         senders=Senders(auto_mode=auto_mode, slot=slot, tcode_udp_port=config.tcode_udp_port),
     )
 
