@@ -18,7 +18,7 @@ from app_support.testing import stood_down, stood_down_asking
 from osr2_broker import peer_watch
 from osr2_broker import tray as tray_module
 from osr2_broker.config import load_config
-from osr2_broker.tray import BrokerTray, BrokerTrayApp
+from osr2_broker.tray import BrokerTray, BrokerTrayApp, TrayHooks
 from tests.conftest import _write_config
 
 from .test_tray import FakeSupervisor
@@ -164,11 +164,11 @@ class TestWhereTheLauncherComesFrom:
 class TestTheTrayKeepsTheWatch:
     def _app(self, cfg_path, tray, *, peer=None, stand_down=None, running=True):
 
-        kwargs = {"peer": peer, "quit_app": lambda: None}
+        hooks = {"peer": peer, "quit_app": lambda: None}
         if stand_down is not None:
-            kwargs["stand_down"] = stand_down
+            hooks["stand_down"] = stand_down
         return BrokerTrayApp(
-            load_config(cfg_path), FakeSupervisor(running=running), tray, **kwargs)
+            load_config(cfg_path), FakeSupervisor(running=running), tray, TrayHooks(**hooks))
 
     def test_the_watchdog_beat_reaches_the_watch(self, tray, cfg_path):
         peer = MagicMock()
@@ -208,8 +208,7 @@ class TestTheTrayKeepsTheWatch:
         supervisor.stop = lambda: order.append("stopped")
 
 
-        app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
-                            stand_down=lambda: order.append("marked"), quit_app=lambda: None)
+        app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: order.append("marked"), quit_app=lambda: None))
         app.quit()
 
         assert order == ["marked", "stopped"]

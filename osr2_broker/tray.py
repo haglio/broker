@@ -5,6 +5,8 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from app_support import production_update
@@ -160,21 +162,30 @@ class BrokerTray(QSystemTrayIcon):
         self.pause_action.setEnabled(running)
 
 
+@dataclass(frozen=True)
+class TrayHooks:
+    open_file: Callable[[Path], None] = open_in_editor
+    peer: peer_watch.PeerWatch | None = None
+    updates: production_update.UpdateWatch | None = None
+    stand_down: Callable[[], None] = peer_watch.stand_broker_down
+    hand_back: Callable[[], None] | None = None
+    quit_app: Callable[[], None] = QApplication.quit
+
+
 class BrokerTrayApp:
     """Policy: keep a broker alive, and keep the tray telling the truth."""
 
-    def __init__(self, config, supervisor, tray: BrokerTray, *, open_file=None,
-                 peer=None, updates=None, stand_down=peer_watch.stand_broker_down, hand_back=None,
-                 quit_app=QApplication.quit):
+    def __init__(self, config, supervisor, tray: BrokerTray, hooks: TrayHooks | None = None):
+        hooks = hooks or TrayHooks()
         self._config = config
         self._supervisor = supervisor
         self._tray = tray
-        self._open_file = open_file or open_in_editor
-        self._peer = peer
-        self._updates = updates
-        self._stand_down = stand_down
-        self._hand_back = hand_back
-        self._quit_app = quit_app
+        self._open_file = hooks.open_file
+        self._peer = hooks.peer
+        self._updates = hooks.updates
+        self._stand_down = hooks.stand_down
+        self._hand_back = hooks.hand_back
+        self._quit_app = hooks.quit_app
         self._paused = False
         _taken(config.stop_request_file)
 
@@ -310,14 +321,15 @@ def _guarded_tick(tray_app: BrokerTrayApp, logger) -> None:
 
 
 def _name_this_process() -> None:
-    """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker – Tray"
+    """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker - Tray"
     next time.  Why it is one launch late, and why it can never cost the
     launch: :meth:`ProcessNamer.name_this_process`."""
     NAMER.name_this_process(TRAY_ROLE)
 
 
-def start_the_tray(config, logger, claim: int, *, hands_back: bool, shown_as: Preview | None,
+def start_the_tray(config, logger, *, preview_claim: int | None, shown_as: Preview | None,
                    quit_app):
+    hands_back = preview_claim is not None
     tray = BrokerTray(window_title(APP_NAME, shown_as))
     tray.setIcon(app_icon(ICON_PATH, shown_as))
 
@@ -334,9 +346,11 @@ def start_the_tray(config, logger, claim: int, *, hands_back: bool, shown_as: Pr
                 os.getpid(), PROJECT_DIR / "launch_broker_tray.vbs")),
         logger=logger)
     tray_app = BrokerTrayApp(
-        config, supervisor, tray, peer=peer_watch.watch_evolver(config, logger), updates=updates,
-        hand_back=(lambda: branch_session.hand_back(config, claim)) if hands_back else None,
-        quit_app=quit_app)
+        config, supervisor, tray,
+        TrayHooks(
+            peer=peer_watch.watch_evolver(config, logger), updates=updates,
+            hand_back=(lambda: branch_session.hand_back(config, preview_claim)) if hands_back else None,
+            quit_app=quit_app))
     tray.quit_action.triggered.connect(tray_app.quit)
     hand_back_timer = branch_session.hand_back_later(tray_app.quit) if hands_back else None
     return tray, tray_app, hand_back_timer
@@ -393,7 +407,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     tray, tray_app, _hand_back_timer = start_the_tray(
-        config, logger, _mutex_handle, hands_back=preview, shown_as=marked, quit_app=app.quit)
+        config, logger, preview_claim=_mutex_handle if preview else None, shown_as=marked,
+        quit_app=app.quit)
 
     timer = QTimer()
     timer.setInterval(WATCHDOG_INTERVAL_MS)

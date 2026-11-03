@@ -20,8 +20,7 @@ def qapp():
     """Held for the run: a QApplication nothing refers to is collected the moment
     it is built, and the next QSystemTrayIcon then faults the interpreter rather
     than raising."""
-    app = QApplication.instance() or QApplication([])
-    yield app
+    return QApplication.instance() or QApplication([])
 
 
 class _Recorder(logging.Handler):

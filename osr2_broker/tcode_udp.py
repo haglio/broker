@@ -12,15 +12,24 @@ from collections.abc import Callable
 from .motion_log import UDP, RunLog
 
 
+def lets_through_unless_held(held_by: Callable[[], str | None], dropped: RunLog) -> Callable[[], bool]:
+    def lets_through() -> bool:
+        holder = held_by()
+        if holder is None:
+            return True
+        dropped.happened(holder)
+        return False
+    return lets_through
+
+
 class UdpTCodeListener:
     def __init__(self, *, port: int, stop_event, logger, is_retryable_error,
-                 held_by: Callable[[], str | None], dropped: RunLog):
+                 lets_through: Callable[[], bool]):
         self.port = port
         self._stop_event = stop_event
         self._logger = logger
         self._is_retryable_error = is_retryable_error
-        self._held_by = held_by
-        self._dropped = dropped
+        self._lets_through = lets_through
 
     def run(self, write, session_stop, retry_state) -> None:
         udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -34,18 +43,11 @@ class UdpTCodeListener:
                     continue
                 for part in data.decode("ascii", errors="replace").split("\n"):
                     line = part.strip()
-                    if line:
-                        self._hand_on(write, line)
+                    if line and self._lets_through():
+                        write(UDP, line)
         except Exception as exc:
             self._logger.exception("T-Code UDP listener error")
             retry_state.value = self._is_retryable_error(exc)
             session_stop.set()
         finally:
             udp_sock.close()
-
-    def _hand_on(self, write, line: str) -> None:
-        holder = self._held_by()
-        if holder is None:
-            write(UDP, line)
-        else:
-            self._dropped.happened(holder)

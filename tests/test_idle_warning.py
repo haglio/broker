@@ -121,7 +121,7 @@ def test_the_process_claims_its_taskbar_identity_before_the_dialog_appears():
     with (
         patch.object(
             win32, "set_app_user_model_id",
-            side_effect=lambda aumid: order.append(aumid),
+            side_effect=order.append,
         ),
         alert_shown(side_effect=lambda *a, **k: order.append("dialog")),
     ):

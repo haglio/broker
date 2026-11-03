@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 
@@ -86,22 +88,27 @@ class MonitorState:
         return None
 
 
+@dataclass(frozen=True)
+class MonitorReading:
+    now: float
+    device_on: bool
+    last_tx: float | None
+    auto_active: bool
+
+
 def run_monitor_poll(
     state: MonitorState,
+    reading: MonitorReading,
     *,
-    now: float,
-    device_on: bool,
-    last_tx: float | None,
-    auto_active: bool,
     idle_state_file: Path,
     on_warning: Callable[[], None],
     on_heard: Callable[[bool], None],
 ) -> None:
     was_heard = state.device_on
-    outcome = state.update(now, device_on, last_tx, auto_active)
+    outcome = state.update(reading.now, reading.device_on, reading.last_tx, reading.auto_active)
     if state.device_on != was_heard:
         on_heard(state.device_on)
-    save_idle_state(idle_state_file, state.idle_since, state.warned, saved_at=now)
+    save_idle_state(idle_state_file, state.idle_since, state.warned, saved_at=reading.now)
     if outcome == MonitorOutcome.IDLE_WARNING:
         on_warning()
 
@@ -114,13 +121,11 @@ def read_timestamp(path: Path) -> float | None:
 
 
 def save_idle_state(path: Path, idle_since: float | None, warned: bool, *, saved_at: float) -> None:
-    try:
+    with contextlib.suppress(OSError):
         path.write_text(
             json.dumps({"idle_since": idle_since, "warned": warned, "saved_at": saved_at}),
             encoding="utf-8",
         )
-    except OSError:
-        pass
 
 
 def load_idle_state(path: Path, *, now: float) -> tuple[float | None, bool]:

@@ -28,15 +28,13 @@ class BrokerAutoController:
         self,
         *,
         state_file: Path,
-        udp_host: str,
-        udp_port: int,
+        udp_target: tuple[str, int],
         logger,
         write_mode,
         udp_send,
     ):
         self.state_file = state_file
-        self.udp_host = udp_host
-        self.udp_port = udp_port
+        self.udp_target = udp_target
         self.logger = logger
         self.write_mode = write_mode
         self.udp_send = udp_send
@@ -54,9 +52,9 @@ class BrokerAutoController:
     def _publish(self, sock: socket.socket, active: bool) -> None:
         self.write_mode(self.state_file,
                         BrokerMode.AUTO if active else BrokerMode.CONTROL, self.logger)
-        self.udp_send(sock, self.udp_host, self.udp_port, f"AUTO {1 if active else 0}")
+        self.udp_send(sock, *self.udp_target, f"AUTO {1 if active else 0}")
         if active:
-            self.udp_send(sock, self.udp_host, self.udp_port, f"BPM {self._SEED_BPM}")
+            self.udp_send(sock, *self.udp_target, f"BPM {self._SEED_BPM}")
 
     def set_auto(self, sock: socket.socket, value: bool) -> None:
         with self._lock:
@@ -92,12 +90,12 @@ class BrokerAutoController:
 
         if RE_MOTION.search(line):
             self.set_auto(sock, True)
-            self.udp_send(sock, self.udp_host, self.udp_port, "SYNC")
+            self.udp_send(sock, *self.udp_target, "SYNC")
 
         bpm_match = RE_BPM.search(line)
         if bpm_match:
             self.set_auto(sock, True)
-            self.udp_send(sock, self.udp_host, self.udp_port, f"BPM {bpm_match.group(1)}")
+            self.udp_send(sock, *self.udp_target, f"BPM {bpm_match.group(1)}")
 
         if "continue strokename:" in low or "start transition" in low:
-            self.udp_send(sock, self.udp_host, self.udp_port, "SYNC")
+            self.udp_send(sock, *self.udp_target, "SYNC")

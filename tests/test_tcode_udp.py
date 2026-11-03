@@ -4,6 +4,7 @@ tests/test_session.py.
 """
 from __future__ import annotations
 
+import contextlib
 import socket
 import threading
 import time
@@ -11,7 +12,7 @@ from unittest.mock import MagicMock
 
 from osr2_broker.motion_log import UDP
 from osr2_broker.session import SessionRetryState
-from osr2_broker.tcode_udp import UdpTCodeListener
+from osr2_broker.tcode_udp import UdpTCodeListener, lets_through_unless_held
 
 # `tcode_udp` reaches its socket through the stdlib module, so the tests that
 # want to watch how one is set up have to replace it there -- which is the same
@@ -50,8 +51,7 @@ def _build_listener(port: int, *, held_by=_nobody, dropped=None):
         stop_event=threading.Event(),
         logger=MagicMock(),
         is_retryable_error=lambda _exc: False,
-        held_by=held_by,
-        dropped=dropped or _Dropped(),
+        lets_through=lets_through_unless_held(held_by, dropped or _Dropped()),
     )
 
 
@@ -90,10 +90,8 @@ def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threadin
     """
     def _offer() -> None:
         while True:
-            try:
+            with contextlib.suppress(OSError):
                 sender.sendto(payload, ("127.0.0.1", port))
-            except OSError:
-                pass
             if session_stop.wait(0.02):
                 return
 

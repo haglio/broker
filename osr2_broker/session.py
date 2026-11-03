@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 from collections.abc import Callable
@@ -16,13 +17,55 @@ from .motion_log import HOLD, MFP, driven_from_outside, dropped_udp_log, motion_
 from .not_answering import NotAnsweringWatch
 from .power_on import PowerOnWatch
 from .question import DeviceQuestion
-from .tcode_udp import UdpTCodeListener
+from .tcode_udp import UdpTCodeListener, lets_through_unless_held
 from .tcode_window import TCodeWriteWindow
 
 
 @dataclass
 class SessionRetryState:
     value: bool = False
+
+
+@dataclass(frozen=True)
+class SerialLink:
+    serial_factory: Callable
+    virtual_port: str
+    baud: int
+    is_retryable_error: Callable[[BaseException], bool]
+
+
+@dataclass(frozen=True)
+class SessionControls:
+    broker_cmd_file: Path
+    consume_command: Callable
+    stop_event: threading.Event
+    broker_paused: threading.Event
+    connected_event: threading.Event
+
+
+@dataclass(frozen=True)
+class DeviceWatches:
+    device_on: Callable[[], bool]
+    rx_activity: ActivityStamp
+    tx_activity: ActivityStamp
+    power_on: PowerOnWatch
+    question: DeviceQuestion | None = None
+    not_answering: NotAnsweringWatch | None = None
+
+
+@dataclass(frozen=True)
+class SessionRuntime:
+    logger: object
+    start_thread: Callable
+    monotonic: Callable[[], float] = time.monotonic
+    sleep: Callable[[float], None] = time.sleep
+
+
+@dataclass(frozen=True)
+class Senders:
+    auto_mode: object
+    slot: Osr2Slot
+    tcode_udp_port: int = 0
 
 
 class BrokerSerialSession:
@@ -33,51 +76,34 @@ class BrokerSerialSession:
     def __init__(
         self,
         *,
-        serial_factory,
-        virtual_port: str,
-        baud: int,
-        broker_cmd_file: Path,
-        device_on: Callable[[], bool],
-        stop_event,
-        broker_paused,
-        auto_mode,
-        logger,
-        start_thread,
-        consume_command,
-        rx_activity: ActivityStamp,
-        tx_activity: ActivityStamp,
-        connected_event: threading.Event,
-        is_retryable_error,
-        power_on: PowerOnWatch,
-        slot: Osr2Slot,
-        monotonic=time.monotonic,
-        sleep=time.sleep,
-        tcode_udp_port: int = 0,
-        question: DeviceQuestion | None = None,
-        not_answering: NotAnsweringWatch | None = None,
+        link: SerialLink,
+        controls: SessionControls,
+        watches: DeviceWatches,
+        runtime: SessionRuntime,
+        senders: Senders,
     ):
-        self.serial_factory = serial_factory
-        self.virtual_port = virtual_port
-        self.baud = baud
-        self.broker_cmd_file = broker_cmd_file
-        self.device_on = device_on
-        self.stop_event = stop_event
-        self.broker_paused = broker_paused
-        self.auto_mode = auto_mode
-        self.logger = logger
-        self.start_thread = start_thread
-        self.consume_command = consume_command
-        self.monotonic = monotonic
-        self.sleep = sleep
-        self.is_retryable_error = is_retryable_error
-        self.connected_event = connected_event
+        self.serial_factory = link.serial_factory
+        self.virtual_port = link.virtual_port
+        self.baud = link.baud
+        self.is_retryable_error = link.is_retryable_error
+        self.broker_cmd_file = controls.broker_cmd_file
+        self.consume_command = controls.consume_command
+        self.stop_event = controls.stop_event
+        self.broker_paused = controls.broker_paused
+        self.connected_event = controls.connected_event
+        self.device_on = watches.device_on
+        self.logger = logger = runtime.logger
+        self.start_thread = runtime.start_thread
+        self.monotonic = monotonic = runtime.monotonic
+        self.sleep = runtime.sleep
+        self.auto_mode = senders.auto_mode
         self.poll_interval_seconds = 0.05
-        self._rx_activity = rx_activity
-        self._tx_activity = tx_activity
-        self._power_on = power_on
-        self._slot = slot
-        self._question = question
-        self._not_answering = not_answering
+        self._rx_activity = watches.rx_activity
+        self._tx_activity = watches.tx_activity
+        self._power_on = watches.power_on
+        self._slot = senders.slot
+        self._question = watches.question
+        self._not_answering = watches.not_answering
         # Whether the last bytes forwarded from the virtual port stopped short
         # of a line's end: a question written then would land inside a command.
         self._mid_command = False
@@ -90,13 +116,12 @@ class BrokerSerialSession:
         self._failure: tuple[str, str] | None = None
         self._failure_count = 0
         self._tcode_listener = UdpTCodeListener(
-            port=tcode_udp_port,
-            stop_event=stop_event,
+            port=senders.tcode_udp_port,
+            stop_event=controls.stop_event,
             logger=logger,
             is_retryable_error=self.is_retryable_error,
-            held_by=lambda: self._slot.holder,
-            dropped=self._udp_dropped,
-        ) if tcode_udp_port else None
+            lets_through=lets_through_unless_held(lambda: self._slot.holder, self._udp_dropped),
+        ) if senders.tcode_udp_port else None
 
     @staticmethod
     def _peer_connected(port) -> bool:
@@ -228,10 +253,8 @@ class BrokerSerialSession:
                     continue
 
                 self._note_the_device_spoke()
-                try:
+                with contextlib.suppress(OSError):
                     virt.write(data)
-                except OSError:
-                    pass
 
                 buf.extend(data)
                 while b"\n" in buf:

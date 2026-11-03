@@ -35,7 +35,7 @@ LAUNCHER = next(launcher for launcher in launchers(PROJECT_DIR)
 
 class TestWhatTheRowsSay:
     def test_each_part_reads_as_the_app_and_its_part(self):
-        assert NAMER.description(TRAY_ROLE) == f"{APP_NAME} – Tray"
+        assert NAMER.description(TRAY_ROLE) == f"{APP_NAME} \N{EN DASH} Tray"
         assert NAMER.description(BROKER_ROLE) == APP_NAME
 
     def test_the_two_cannot_collide_on_one_file_name(self):
@@ -59,7 +59,7 @@ class TestTheTray:
                 app_name=APP_NAME,
                 role=TRAY_ROLE,
                 interpreter=LAUNCHER.interpreter,
-                row=f"{APP_NAME} – Tray",
+                row=f"{APP_NAME} \N{EN DASH} Tray",
                 icon=NAMER.icon,
             ),
         )

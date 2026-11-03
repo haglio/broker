@@ -21,7 +21,7 @@ from osr2_broker import tray as tray_module
 from osr2_broker.config import PROJECT_DIR, load_config
 from osr2_broker.process_names import BROKER_ROLE, NAMER
 from osr2_broker.single_instance import MUTEX_BROKER
-from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, _guarded_tick
+from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, TrayHooks, _guarded_tick
 from tests.heard import what_is_said_on
 
 
@@ -351,8 +351,7 @@ def test_opening_the_log_creates_it_first_so_the_editor_has_something(tray, cfg_
     config = load_config(cfg_path)
     opened = []
     app = BrokerTrayApp(
-        config, FakeSupervisor(), tray, open_file=opened.append,
-    )
+        config, FakeSupervisor(), tray, TrayHooks(open_file=opened.append))
 
     app.open_log()
 
@@ -366,8 +365,7 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
 
     supervisor = FakeSupervisor(running=True)
     quit_calls = []
-    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
-                        quit_app=lambda: quit_calls.append(True))
+    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(quit_app=lambda: quit_calls.append(True)))
 
     app.quit()
 
@@ -383,10 +381,9 @@ def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
 
     supervisor = FakeSupervisor(running=True)
     stood_down, handed_back, quit_calls = [], [], []
-    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
-                        stand_down=lambda: stood_down.append(True),
+    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: stood_down.append(True),
                         hand_back=lambda: handed_back.append(True),
-                        quit_app=lambda: quit_calls.append(True))
+                        quit_app=lambda: quit_calls.append(True)))
 
     app.quit()
 
@@ -402,9 +399,8 @@ def test_making_way_for_an_update_stops_the_broker_before_the_next_tray_is_start
     it, and Evolver must go on bringing the tray back should that tray never start."""
     supervisor = FakeSupervisor(running=True)
     stood_down, started_with_the_broker_running, quit_calls = [], [], []
-    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray,
-                        stand_down=lambda: stood_down.append(True),
-                        quit_app=lambda: quit_calls.append(True))
+    app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: stood_down.append(True),
+                        quit_app=lambda: quit_calls.append(True)))
 
     app.make_way_for_an_update(
         start_the_next_tray=lambda: started_with_the_broker_running.append(supervisor.running))
@@ -419,8 +415,8 @@ def test_a_stop_another_app_asks_for_ends_the_broker_and_the_tray_on_the_next_be
     config = load_config(cfg_path)
     supervisor = FakeSupervisor(running=True)
     stood_down, quit_calls = [], []
-    app = BrokerTrayApp(config, supervisor, tray, stand_down=lambda: stood_down.append(True),
-                        quit_app=lambda: quit_calls.append(True))
+    app = BrokerTrayApp(config, supervisor, tray, TrayHooks(stand_down=lambda: stood_down.append(True),
+                        quit_app=lambda: quit_calls.append(True)))
     publish_stamp(config.stop_request_file)
 
     app.tick()
@@ -437,7 +433,7 @@ def test_a_stop_asked_for_before_the_tray_started_is_dropped_rather_than_answere
     publish_stamp(config.stop_request_file)
     supervisor = FakeSupervisor(running=False)
     quit_calls = []
-    app = BrokerTrayApp(config, supervisor, tray, quit_app=lambda: quit_calls.append(True))
+    app = BrokerTrayApp(config, supervisor, tray, TrayHooks(quit_app=lambda: quit_calls.append(True)))
 
     app.tick()
 
@@ -456,7 +452,7 @@ class FakeUpdateWatch:
 
 def test_the_watchdog_looks_for_an_update_on_every_beat(tray, cfg_path):
     updates = FakeUpdateWatch()
-    app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, updates=updates)
+    app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, TrayHooks(updates=updates))
 
     app.tick()
 
@@ -466,7 +462,7 @@ def test_the_watchdog_looks_for_an_update_on_every_beat(tray, cfg_path):
 def test_a_paused_broker_takes_no_update(tray, cfg_path):
     """The next tray would come up knowing nothing of the pause, and start the broker."""
     updates = FakeUpdateWatch()
-    app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, updates=updates)
+    app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, TrayHooks(updates=updates))
 
     app.pause()
     app.tick()
@@ -519,8 +515,8 @@ def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qap
                         lambda config, claim: handed_back.append(claim))
 
     tray, _, hand_back_timer = tray_module.start_the_tray(
-        load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        hands_back=True, shown_as=Preview(feature="the new idle warning"),
+        load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=42,
+         shown_as=Preview(feature="the new idle warning"),
         quit_app=lambda: quits.append(True))
     tray.set_status(running=False, osr2="OSR2 off")
     tray.quit_action.trigger()
@@ -533,8 +529,8 @@ def test_a_preview_s_tray_names_the_feature_it_demos_and_hands_the_tray_back(qap
 
 def test_a_preview_s_tray_wears_the_brokers_letter_in_the_preview_ink(qapp, cfg_path):
     tray, _, _hand_back_timer = tray_module.start_the_tray(
-        load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        hands_back=True, shown_as=Preview(feature=None), quit_app=lambda: None)
+        load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=42,
+         shown_as=Preview(feature=None), quit_app=lambda: None)
 
     middle_bar_of_the_b = tray.icon().pixmap(256, 256).toImage().pixelColor(128, 128)
     assert (middle_bar_of_the_b.red(), middle_bar_of_the_b.green(), middle_bar_of_the_b.blue()) == PREVIEW_INK
@@ -542,8 +538,8 @@ def test_a_preview_s_tray_wears_the_brokers_letter_in_the_preview_ink(qapp, cfg_
 
 def test_the_production_tray_never_hands_itself_back(qapp, cfg_path):
     _tray, _, hand_back_timer = tray_module.start_the_tray(
-        load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        hands_back=False, shown_as=None, quit_app=lambda: None)
+        load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
+         shown_as=None, quit_app=lambda: None)
 
     assert hand_back_timer is None
 
@@ -565,8 +561,8 @@ def an_update_waiting(monkeypatch):
 
 def test_the_production_tray_starts_again_for_an_update_waiting_on_its_checkout(qapp, cfg_path, an_update_waiting):
     _tray, tray_app, _ = tray_module.start_the_tray(
-        load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        hands_back=False, shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+        load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
+         shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
 
     tray_app.tick()
 
@@ -578,8 +574,8 @@ def test_the_production_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path
     config = load_config(cfg_path)
     publish_stamp(config.osr2_serial_rx_file)
     _tray, tray_app, _ = tray_module.start_the_tray(
-        config, logging.getLogger("test.tray"), 42,
-        hands_back=False, shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+        config, logging.getLogger("test.tray"), preview_claim=None,
+         shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
 
     tray_app.tick()
 
@@ -588,8 +584,8 @@ def test_the_production_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path
 
 def test_a_preview_never_starts_again_for_an_update(qapp, cfg_path, an_update_waiting):
     _tray, tray_app, _ = tray_module.start_the_tray(
-        load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        hands_back=True, shown_as=Preview(feature=None), quit_app=lambda: an_update_waiting.append("quit"))
+        load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=42,
+         shown_as=Preview(feature=None), quit_app=lambda: an_update_waiting.append("quit"))
 
     tray_app.tick()
 
@@ -598,8 +594,8 @@ def test_a_preview_never_starts_again_for_an_update(qapp, cfg_path, an_update_wa
 
 def test_hovering_the_production_tray_names_the_app_broker(qapp, cfg_path):
     tray, _, _hand_back_timer = tray_module.start_the_tray(
-        load_config(cfg_path), logging.getLogger("test.tray"), 42,
-        hands_back=False, shown_as=None, quit_app=lambda: None)
+        load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
+         shown_as=None, quit_app=lambda: None)
 
     tray.set_status(running=True, osr2="controlling OSR2")
 
