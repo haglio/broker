@@ -86,3 +86,18 @@ class TestRepeatedOpenFailuresAreCollapsed:
         assert [r.getMessage() for r in handler.records if r.levelno == logging.INFO] == [
             "Serial session opened after 2 failed attempt(s)"
         ]
+
+
+def test_a_summary_line_comes_every_sixty_failures(recorded_logger):
+    logger, handler = recorded_logger
+
+    def always_missing(*_args, **_kwargs):
+        raise serial.SerialException(MISSING_PORT)
+
+    session = _session(logger, always_missing)
+    for _ in range(121):
+        session.run(udp_sock=None, osr2_port="COM4")
+
+    summaries = [r for r in handler.records if r.levelno == logging.WARNING and r.exc_info is None]
+    assert len(summaries) == 2
+    assert "60 attempts" in summaries[0].getMessage()

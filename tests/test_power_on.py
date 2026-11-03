@@ -41,3 +41,23 @@ def test_the_device_going_quiet_and_speaking_again_is_a_power_on(tmp_path):
 
     clock[0] = 10.0 + PowerOnWatch.SILENCE_SECONDS
     assert watch.rx_broke_the_silence() is True
+
+
+def test_a_silence_of_just_under_a_minute_is_not_a_power_on(tmp_path):
+    clock = [10.0]
+    watch = _build(tmp_path, clock)
+    watch.rx_broke_the_silence()
+
+    clock[0] += 59.9
+
+    assert watch.rx_broke_the_silence() is False
+
+
+def test_a_silence_of_a_minute_is_a_power_on(tmp_path):
+    clock = [10.0]
+    watch = _build(tmp_path, clock)
+    watch.rx_broke_the_silence()
+
+    clock[0] += 60.0
+
+    assert watch.rx_broke_the_silence() is True

@@ -74,3 +74,13 @@ def test_ports_and_numbers_are_coerced_to_their_types(tmp_path: Path):
 def test_config_exposes_idle_state_file(cfg_path):
     config = load_config(str(cfg_path))
     assert config.osr2_idle_state_file == config.state_dir / "osr2_idle_state.txt"
+
+
+def test_a_config_short_of_a_required_key_says_which_and_in_which_file(tmp_path):
+    cfg = tmp_path / "short.json"
+    cfg.write_text(json.dumps({k: v for k, v in REQUIRED_KEYS.items() if k != "baud"}), encoding="utf-8")
+
+    with pytest.raises(Exception, match="baud") as refused:
+        load_config(cfg)
+
+    assert "short.json" in str(refused.value)

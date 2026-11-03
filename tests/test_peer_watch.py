@@ -204,7 +204,12 @@ class TestStartingTheTray:
     def test_a_relaunch_over_a_live_tray_leaves_the_stand_down_alone(
             self, cfg_path, stand_down_marker):
 
-        with patch.object(tray_module, "configure_logging", return_value=LOG),              patch.object(tray_module, "install_exception_logging"),              patch.object(tray_module, "_name_this_process"),              patch.object(tray_module, "try_acquire_mutex", return_value=None):
+        with (
+            patch.object(tray_module, "configure_logging", return_value=LOG),
+            patch.object(tray_module, "install_exception_logging"),
+            patch.object(tray_module, "_name_this_process"),
+            patch.object(tray_module, "try_acquire_mutex", return_value=None),
+        ):
             assert tray_module.main(["--config", str(cfg_path)]) == 0
 
         _, cleared = stand_down_marker

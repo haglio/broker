@@ -183,3 +183,41 @@ class TestUdpDroppedForTheSlot:
             "Dropped 1 T-Code UDP line while the OSR2 was portrait's",
             "Dropping T-Code UDP while the OSR2 is main's",
         ]
+
+
+def test_a_quiet_spell_ends_the_run_even_when_the_same_source_comes_back():
+    clock = _Clock()
+    logger = logging.getLogger("test.motion_log.quiet_spell")
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+    recorder = _Recorder()
+    logger.addHandler(recorder)
+    log = motion_log(logger=logger, monotonic=clock)
+
+    log.happened(MFP)
+    clock.now += 3.0
+    log.happened(MFP)
+    logger.removeHandler(recorder)
+
+    assert recorder.said == [
+        "OSR2 driven by MFP",
+        "OSR2 quiet after 0.0s of MFP",
+        "OSR2 driven by MFP",
+    ]
+
+
+def test_writes_closer_together_than_two_seconds_are_one_run():
+    clock = _Clock()
+    logger = logging.getLogger("test.motion_log.one_run")
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+    recorder = _Recorder()
+    logger.addHandler(recorder)
+    log = motion_log(logger=logger, monotonic=clock)
+
+    log.happened(MFP)
+    clock.now += 1.9
+    log.happened(MFP)
+    logger.removeHandler(recorder)
+
+    assert recorder.said == ["OSR2 driven by MFP"]

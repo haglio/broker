@@ -108,3 +108,9 @@ def test_standing_down_again_writes_nothing_until_the_questions_resume(tmp_path)
     question.asked()
     question.stand_down()
     assert answer.exists()
+
+
+def test_a_device_is_reported_only_after_ten_seconds_of_questions():
+    seconds_of_questions = DeviceQuestion.UNANSWERED_BEFORE_WARNING * DeviceQuestion.EVERY_SECONDS
+
+    assert seconds_of_questions == 10.0

@@ -268,3 +268,19 @@ def test_a_hold_fires_once_and_is_not_replayed_on_the_next_tick():
     holds.fire_due(real_port, lock, _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I1000\n")
+
+
+def test_the_direct_write_is_recorded_only_once_it_is_written():
+    clock = [10.0]
+    holds, _logger = _build(clock)
+    order: list[str] = []
+
+    class FakeReal:
+        def write(self, _data):
+            order.append("written")
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 11.0
+    holds.fire_due(FakeReal(), threading.Lock(), lambda: order.append("recorded"))
+
+    assert order == ["written", "recorded"]

@@ -20,14 +20,14 @@ ICON_PATH = PROJECT_DIR / "broker_icon.ico"
 APP_USER_MODEL_ID = "OSR2Broker"
 
 
-def claim_taskbar_identity(shown_as: Preview | None) -> None:
+def claim_taskbar_identity(shown_as: Preview | None, *, set_identity=None) -> None:
     """Claim a stable taskbar identity so windows show the broker icon.
 
     Cosmetic: a window under the interpreter's icon is still a window, so a
     refusal is logged and the launch goes on.
     """
     try:
-        set_app_user_model_id(taskbar_identity(APP_USER_MODEL_ID, shown_as))
+        (set_identity or set_app_user_model_id)(taskbar_identity(APP_USER_MODEL_ID, shown_as))
     except OSError:
         logging.getLogger(__name__).warning(
             "Could not claim the taskbar identity", exc_info=True)
