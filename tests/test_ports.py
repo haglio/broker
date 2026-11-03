@@ -90,9 +90,6 @@ class TestResolveMfpSerialPort:
         assert result == "COM0COM\\PORT\\CNCA1"
 
     def test_ensure_leaves_config_alone_when_selection_already_correct(self, tmp_path):
-        # MFP stores the port with JSON-escaped backslashes. A config that already
-        # names the right port must be recognised as such and left untouched --
-        # otherwise every broker start rewrites MultiFunPlayer.config.json.
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         mfp_config.write_text(
@@ -118,8 +115,6 @@ class TestResolveMfpSerialPort:
         assert mfp_config.read_text(encoding="utf-8") == before
 
     def test_ensure_does_not_clobber_a_config_it_cannot_parse(self, tmp_path):
-        # Catching MFP mid-write yields half a file. Rewriting from the empty
-        # payload that results would replace every MFP setting with a stub.
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         mfp_config.write_text('{"OutputTarget": {"Items": [{"Selec', encoding="utf-8")
@@ -137,9 +132,6 @@ class TestResolveMfpSerialPort:
         assert mfp_config.read_text(encoding="utf-8") == before
 
     def test_ensure_updates_the_serial_target_not_merely_the_first_item(self, tmp_path):
-        # MFP keeps one entry per output target. Writing the port onto whichever
-        # entry happens to be first both misses the serial target and leaves the
-        # read/write pair disagreeing, so every start would rewrite the file.
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         mfp_config.write_text(
@@ -172,8 +164,6 @@ class TestResolveMfpSerialPort:
         assert mfp_config.read_text(encoding="utf-8") == settled
 
     def test_ensure_does_not_invent_an_output_target_that_mfp_never_had(self, tmp_path):
-        # Nothing to update is not an invitation to fabricate one. A config with
-        # no output targets belongs to MFP to populate, not to us.
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         mfp_config.write_text(json.dumps({"SomeOtherSetting": 1}), encoding="utf-8")
@@ -279,7 +269,6 @@ class TestMfpConfigEdgeCases:
         assert _read_mfp_config_payload(mfp_config) == {}
 
     def test_a_player_config_that_will_not_parse_is_left_alone_rather_than_rewritten(self, tmp_path):
-        # None, not {} -- {} reads as "no settings" and invites a clobbering rewrite.
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         mfp_config.write_text("NOT JSON", encoding="utf-8")
         assert _read_mfp_config_payload(mfp_config) is None

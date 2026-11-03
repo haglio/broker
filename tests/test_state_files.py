@@ -1,10 +1,3 @@
-"""The files the broker publishes itself through.
-
-Three names under the shared state directory, read by fun_time, genau, genaumacher
-and the tray.  The reading and the writing are app_support.file_channel's and
-pinned there, file by file; what is pinned here is the broker's side of each:
-what it writes, when, and what it does when it cannot.
-"""
 from __future__ import annotations
 
 import logging
@@ -21,9 +14,6 @@ LOGGER = logging.getLogger("test.broker")
 
 class TestWriteMode:
     def test_the_value_lands_verbatim(self, tmp_path: Path):
-        """The tray reads "0"/"1" straight out of this file and genau's own
-        readers compare it as text, so nothing may be added around it -- no
-        newline, no BOM."""
         mode_file = tmp_path / "state" / "broker_mode.txt"
 
         write_mode(mode_file, "1", LOGGER)
@@ -31,7 +21,6 @@ class TestWriteMode:
         assert mode_file.read_bytes() == b"1"
 
     def test_the_state_directory_is_created_if_it_is_not_there(self, tmp_path: Path):
-        """First run on a fresh machine: nothing has made state/ yet."""
         mode_file = tmp_path / "state" / "broker_mode.txt"
 
         write_mode(mode_file, "0", LOGGER)
@@ -39,11 +28,9 @@ class TestWriteMode:
         assert mode_file.exists()
 
     def test_a_write_that_cannot_land_is_logged_and_swallowed(self, tmp_path: Path):
-        """Called from the protocol layer on every AUTO transition. A state
-        directory that has gone away must not take the broker with it."""
         logger = MagicMock()
 
-        write_mode(tmp_path, "1", logger)  # a directory, so the write cannot land
+        write_mode(tmp_path, "1", logger)
 
         logger.error.assert_called_once()
 
@@ -58,8 +45,6 @@ class TestHeartbeat:
         assert heartbeat_file.read_text(encoding="utf-8") == "123.45"
 
     def test_the_loop_skips_the_write_while_the_session_is_disconnected(self, tmp_path: Path):
-        """fun_time reads staleness off this file to decide the broker is dead,
-        so a broker with no serial session must stop looking alive."""
         heartbeat_file = tmp_path / "broker_heartbeat.txt"
         stop = threading.Event()
         connected = threading.Event()

@@ -1,4 +1,3 @@
-"""A branch's tray, run in place of the production one."""
 from __future__ import annotations
 
 import os
@@ -14,8 +13,6 @@ from osr2_broker.single_instance import MUTEX_TRAY
 
 
 def test_reading_the_flag_keeps_it_from_everything_the_preview_starts(monkeypatch):
-    """The broker it restarts and the Evolver it revives would otherwise carry
-    it, and an Evolver carrying it hands it to the next production tray it starts."""
     monkeypatch.setenv(branch_session.FLAG, "1")
 
     assert branch_session.take_the_flag() is True
@@ -61,7 +58,6 @@ def test_a_preview_that_cannot_take_the_tray_over_gives_up():
 
 
 def test_handing_back_lets_go_of_the_tray_before_starting_the_production_one(cfg_path):
-    """The production tray gives up at once on a tray that is still claimed."""
     config = load_config(cfg_path)
     happened = []
 
@@ -75,9 +71,6 @@ def test_handing_back_lets_go_of_the_tray_before_starting_the_production_one(cfg
 
 
 def test_ending_the_other_trays_spares_this_one_and_its_launcher():
-    """A venv's pythonw starts the real interpreter as its child, with this very
-    command line, and takes it down when it is ended: sparing only this
-    process ended the preview along with the tray it came to replace."""
     with patch.object(branch_session.subprocess, "run") as run:
         branch_session.end_the_other_trays()
 

@@ -1,10 +1,3 @@
-"""Tests for osr2_broker.config — the defaults and path resolution were unpinned.
-
-Every other test writes a config through conftest's _write_config, which
-supplies every optional key explicitly, so until here the defaults were never
-read (audit finding broker/all/tests/015: changing idle_minutes 15.0 -> 10.0
-and tcode_udp_port 50557 -> 1 left the full suite green).
-"""
 from __future__ import annotations
 
 import json
@@ -43,9 +36,6 @@ def test_tcode_udp_port_defaults_to_50557(tmp_path: Path):
 
 
 def test_mfp_config_path_is_none_when_the_config_names_none(tmp_path: Path):
-    """An omitted (or empty) key used to resolve to the config's own directory,
-    a path that names no file: every start then read a directory as MFP's
-    config and warned twice about a failure that was not one (bug 26)."""
     assert load_config(_write_minimal_config(tmp_path)).mfp_config_path is None
     assert load_config(_write_minimal_config(tmp_path, {"mfp_config_path": ""})).mfp_config_path is None
 

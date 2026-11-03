@@ -1,4 +1,3 @@
-"""Tests for osr2_broker.app."""
 from __future__ import annotations
 
 import importlib
@@ -33,8 +32,6 @@ class FakeSocket:
 
 
 def make_fake_serial(open_ports: list[str], fail_once_on: tuple[str, type[Exception]] | None = None):
-    """A serial.Serial stand-in that records every port it is asked to open."""
-
     class FakeSerial:
         def __init__(self, port, _baud, timeout=0.02):
             open_ports.append(port)
@@ -63,14 +60,6 @@ def make_fake_serial(open_ports: list[str], fail_once_on: tuple[str, type[Except
 
 @pytest.fixture
 def broker_app_module():
-    """app.py, imported against a stand-in for pyserial.
-
-    Only the one name is swapped, and only for the duration of the import. The
-    obvious `patch.dict(sys.modules, ...)` is wrong here: it restores the whole
-    mapping on exit, which evicts every module the import reached for the first
-    time -- see
-    `test_the_module_fixture_puts_back_only_the_name_it_borrowed`.
-    """
     fake_serial = types.SimpleNamespace(
         Serial=None,
         SerialException=type("FakeSerialException", (Exception,), {}),
@@ -87,23 +76,6 @@ def broker_app_module():
 
 
 def test_the_module_fixture_puts_back_only_the_name_it_borrowed(broker_app_module):
-    """Importing app.py without pyserial means lending `sys.modules` a fake, and
-    the loan has to be that narrow.
-
-    Undoing it by restoring the whole of `sys.modules` also evicts every module
-    the import pulled in for the *first* time. An evicted submodule leaves its
-    parent package still holding the old object, so `from app_support import
-    logging_utils` keeps returning it while `from app_support.logging_utils
-    import x` -- which goes through `sys.modules` -- imports a second copy. A
-    test that patches one of the two then watches the code under test call the
-    other, and the patch does nothing at all.
-
-    That is not hypothetical: it is how `test_a_second_tray_stands_down` came to
-    run the tray's `main()` with its logging patches inert, leaving an
-    excepthook and an open log file for the rest of the session. It went
-    unnoticed because a later test in this file happened to pull the evicted
-    module back in before the tray tests ran.
-    """
     for name in ("app_support.cli", "app_support.logging_utils", "app_support.threading_utils"):
         assert name in sys.modules, f"the fixture evicted {name} from sys.modules"
         package, _, attribute = name.rpartition(".")
@@ -113,11 +85,6 @@ def test_the_module_fixture_puts_back_only_the_name_it_borrowed(broker_app_modul
 
 
 def _start_monitor_with_fake_guard(broker_app_module, config, *, auto_active=False):
-    """Run _start_monitor against a guard that hands back its two closures.
-
-    The real ShutdownGuard would pump Win32 messages; what the tests need is
-    what the guard is given — should_block_fn and poll_fn — driven directly.
-    """
     captured: dict = {}
 
     class FakeShutdownGuard:
@@ -137,9 +104,6 @@ def _start_monitor_with_fake_guard(broker_app_module, config, *, auto_active=Fal
 
 
 def test_shutdown_is_blocked_while_the_device_is_on(broker_app_module, cfg_path):
-    """A fresh rx stamp means the OSR2 is still powered — Windows must wait."""
-
-
     config = load_config(str(cfg_path))
     config.osr2_serial_rx_file.write_text(str(_time.time()), encoding="utf-8")
 
@@ -160,7 +124,6 @@ def test_shutdown_is_allowed_once_the_device_has_been_silent_for_the_shared_wind
 
 
 def test_shutdown_is_allowed_when_the_device_has_never_reported(broker_app_module, cfg_path):
-
     config = load_config(str(cfg_path))
 
     captured = _start_monitor_with_fake_guard(broker_app_module, config)
@@ -174,15 +137,10 @@ def _an_idle_spell_already_due(config):
         config.osr2_idle_state_file,
         idle_since=now - config.idle_minutes * 60.0 - 1.0, warned=False, saved_at=now,
     )
-    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # device on
+    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")
 
 
 def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_module, cfg_path):
-    """The idle state seeded from osr2_idle_state.txt must feed the poll: a
-    countdown that had already elapsed before the restart warns on the first
-    beat instead of starting the 15 minutes over."""
-
-
     config = load_config(str(cfg_path))
     _an_idle_spell_already_due(config)
 
@@ -203,13 +161,11 @@ def test_a_restarted_broker_resumes_the_idle_countdown_from_disk(broker_app_modu
 
 def test_a_broker_started_long_after_the_last_counts_15_minutes_from_its_own_start(
         broker_app_module, cfg_path):
-    """No broker watched the OSR2 in between, and it may have been switched off
-    and on, so a warning the last broker raised does not silence this one."""
     config = load_config(str(cfg_path))
     now = _time.time()
     monitor_mod.save_idle_state(config.osr2_idle_state_file, idle_since=now - 7200.0,
                                 warned=True, saved_at=now - 3600.0)
-    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")  # already on
+    config.osr2_serial_rx_file.write_text(str(now), encoding="utf-8")
 
     with patch.object(idle_warning, "show_until_closed") as shown:
         captured = _start_monitor_with_fake_guard(broker_app_module, config)
@@ -283,23 +239,6 @@ def test_the_broker_process_never_loads_qt_widgets():
 @contextmanager
 def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=None,
                   osr2_adapters=("COM4",)):
-    """main(), with everything it installs process-wide held off.
-
-    `configure_logging` and `install_exception_logging` replace both excepthooks
-    and open a rotating file handler inside a state directory the test is about
-    to delete, so they are patched here rather than cleaned up afterwards; the
-    mutex is granted; the monitor's Win32 message pump is skipped; `socket` is a
-    stand-in so no datagram leaves the machine; and the OSR2's slot listens on a
-    port the machine picks, never the one the broker running on this machine
-    holds. `sleep` is how a test ends the run loop -- raising KeyboardInterrupt
-    out of it is main()'s ordinary shutdown path.
-
-    `osr2_adapters` answers for the machine's real COM ports, which the broker
-    asks before every session; it is answered here so a suite run on a desk with
-    no OSR2 plugged in does not sit in the wait.  A test about where the OSR2 is
-    says `osr2_adapters=` for itself: a list of the ports it is on, or a callable
-    returning them.
-    """
     patches = [
         patch.object(broker_app_module, "OSR2_SLOT", 0),
         patch.object(broker_app_module, "configure_logging",
@@ -376,8 +315,6 @@ class TestMainReconnect:
 
 class TestMainSurvivesMfpConfigTrouble:
     def test_starts_brokering_when_mfp_config_cannot_be_written(self, broker_app_module, cfg_path):
-        """MFP's config sits under Program Files and MFP may hold it open. Being
-        refused there must not stop the broker from bridging MFP to the OSR2."""
         open_ports: list[str] = []
         FakeSerial = make_fake_serial(open_ports)
 
@@ -394,9 +331,6 @@ class TestMainSurvivesMfpConfigTrouble:
 
 class TestMainConfiguredWithoutMfp:
     def test_a_broker_without_an_mfp_config_leaves_mfp_alone(self, broker_app_module, cfg_factory):
-        """No MFP config named means nothing to read or point anywhere; the
-        start says so once rather than warning about the file it has not got
-        (bug 26)."""
         cfg_path = cfg_factory({"mfp_config_path": ""})
         FakeSerial = make_fake_serial([])
 
@@ -462,14 +396,6 @@ class TestMainPublishesItsStateFiles:
     def test_a_started_broker_leaves_the_mode_file_where_the_family_looks(
         self, broker_app_module, cfg_path,
     ):
-        """The file main() writes before it starts bridging, under the name the
-        rest of the family opens by hand.
-
-        Nothing else in the suite reads a state file after main(): the writers
-        are all substituted in the tests below this one. So the wiring -- which
-        config property feeds that name -- could shift without a red anywhere.
-        """
-
         config = load_config(str(cfg_path))
         FakeSerial = make_fake_serial([])
 
@@ -498,7 +424,6 @@ class TestMainPublishesItsStateFiles:
     def test_a_started_broker_says_in_its_mode_file_that_it_is_under_control(
         self, broker_app_module, cfg_path,
     ):
-
         config = load_config(str(cfg_path))
         config.state_dir.mkdir(parents=True, exist_ok=True)
         FakeSerial = make_fake_serial([])
@@ -521,9 +446,6 @@ class TestMainHoldsTheOsr2Slot:
     def test_the_session_is_handed_a_slot_that_listens_while_the_broker_runs(
         self, broker_app_module, cfg_path,
     ):
-        """One slot for the broker's whole run, not one per serial session, so a
-        sender stays connected while the session opens again after a port
-        error."""
         built: dict = {}
         listening = []
 
@@ -549,9 +471,6 @@ class TestMainHoldsTheOsr2Slot:
     def test_a_broker_whose_slot_cannot_listen_still_bridges_the_osr2(
         self, broker_app_module, cfg_path,
     ):
-        """Every sender not yet moved to the slot still reaches the device over
-        UDP, and MFP through the virtual port, so a port somebody else holds is
-        no reason for the broker to stop."""
         open_ports: list[str] = []
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as somebody_else:
@@ -568,14 +487,6 @@ class TestMainHoldsTheOsr2Slot:
 
 
 class TestMainWatchesForThePowerOn:
-    """The session's power-on watch is judged against the OSR2's own RX stamp,
-    the file the idle monitor already reads to decide the device is on.
-
-    Nothing else here would notice the TX stamp being handed over instead: both
-    are stamp files under the same directory, and a watch seeded from that one
-    would park the device on any broker restart that followed a quiet MFP.
-    """
-
     @staticmethod
     def _watch_main_builds(broker_app_module, cfg_path):
         FakeSerial = make_fake_serial([])
@@ -600,7 +511,6 @@ class TestMainWatchesForThePowerOn:
     def test_a_broker_starting_after_a_silence_treats_the_next_line_as_a_power_on(
         self, broker_app_module, cfg_path,
     ):
-
         config = load_config(str(cfg_path))
         config.osr2_serial_rx_file.write_text("1.0", encoding="utf-8")
 

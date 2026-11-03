@@ -1,27 +1,3 @@
-"""The launch smoke test: everything the tray launch imports, imported.
-
-The suite can be entirely green while nothing appears in the notification area,
-and this is the gap. The scheduled task, the pinned shortcut and fun_time
-all start the broker the same way -- ``launch_broker_tray.vbs``, or for the pin
-``launch_broker_from_its_shortcut.vbs``, running
-``pythonw -m osr2_broker.tray`` -- and a launch reaches what a window needs
-through imports *inside* its functions, so a break in any of them never touches a
-test that imports ``osr2_broker.tray`` and stops at module level. The tray then
-spawns the broker itself as ``-m osr2_broker.app``, so that module is on the same
-launch path.
-
-``pythonw`` is what makes this invisible rather than merely broken: it has no
-console, so an import that fails writes its traceback nowhere at all and the
-tray icon simply never shows up.
-
-So this drives the launch's import phase the way the launcher does: a fresh
-interpreter, this repo as the working directory, no inherited ``PYTHONPATH``.
-
-The walk that reads those imports off the AST and the three assertions that
-replay them are ``app_support.launch_smoke``: seven repos carried a copy of the
-same 200 lines, drifting. What stays here is the half that is this app's --
-which files the launch executes, and how its launcher starts an interpreter.
-"""
 from __future__ import annotations
 
 import os
@@ -39,10 +15,6 @@ from app_support.launch_smoke import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = "osr2_broker"
 
-# ``-m osr2_broker.tray`` runs tray.py, which is both the entrypoint and the
-# module holding main(); it spawns the broker as ``-m osr2_broker.app``, whose
-# own entrypoint is __main__.py, and the broker spawns each idle warning as
-# ``-m osr2_broker.idle_warning``.
 LAUNCH_FILES = (
     REPO_ROOT / PACKAGE / "tray.py",
     REPO_ROOT / PACKAGE / "__main__.py",
@@ -50,9 +22,6 @@ LAUNCH_FILES = (
     REPO_ROOT / PACKAGE / "idle_warning.py",
 )
 
-# Reached only from inside a function, so a module-level import test never saw
-# them. Asserted present, so a walk that silently found nothing -- a renamed
-# file, a parse that returned an empty tree -- cannot pass as a clean launch.
 _REACHED_ONLY_INSIDE_A_FUNCTION = (
     "shared_ui.alert",
     "shared_ui.loading_process",
@@ -60,13 +29,6 @@ _REACHED_ONLY_INSIDE_A_FUNCTION = (
 
 
 def _run_the_launchs_way(statements: list[str]) -> subprocess.CompletedProcess:
-    """Run them the way ``launch_broker_tray.vbs`` runs the tray.
-
-    The launcher sets this repo as the working directory and runs the venv's
-    pythonw with nothing else, so the working directory is the whole path story
-    -- any ``PYTHONPATH`` a developer or pytest happens to be carrying is
-    dropped, because the scheduled task does not get it.
-    """
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["QT_QPA_PLATFORM"] = "offscreen"
 
@@ -81,22 +43,16 @@ def _run_the_launchs_way(statements: list[str]) -> subprocess.CompletedProcess:
 
 
 def test_the_launch_imports_everything_it_names():
-    """Failing here means no tray icon and no explanation: pythonw has no
-    console, so the traceback from a failed import goes nowhere."""
     assert_every_import_resolves(
         _run_the_launchs_way, launch_imports(PACKAGE, LAUNCH_FILES))
 
 
 def test_the_walk_reaches_the_imports_buried_in_functions():
-    """The guard above is only worth anything if the walk found the lazy ones --
-    which is where the idle warning's window and the tray's loading screen are."""
     assert_the_walk_reached(
         launch_imports(PACKAGE, LAUNCH_FILES), _REACHED_ONLY_INSIDE_A_FUNCTION)
 
 
 def test_a_launch_import_that_cannot_resolve_fails_here():
-    """A negative control: if the subprocess reported success regardless, every
-    assertion above would pass vacuously and the guard would be decorative."""
     assert_an_unresolvable_import_is_caught(
         _run_the_launchs_way, launch_imports(PACKAGE, LAUNCH_FILES),
         "osr2_broker.config")

@@ -1,10 +1,3 @@
-"""COM-level broker tests.
-
-These tests wire up the real BrokerAutoController and BrokerSerialSession
-together with mocked serial (COM) ports, verifying the full flow from
-serial data arriving on the device port through protocol parsing to
-state-file writes and UDP message emission.
-"""
 from __future__ import annotations
 
 import threading
@@ -26,10 +19,6 @@ class FakeSerialPort:
         self._tx_buf = bytearray()
         self._lock = threading.Lock()
         self._closed = False
-        # How many times the session has come back for more. A test that needs
-        # to know the session finished with what it last took waits for this to
-        # advance: the forwarding loop only reads again after it has buffered
-        # and parsed the previous read.
         self.reads = 0
 
     def inject(self, data: bytes) -> None:
@@ -92,16 +81,6 @@ def _start_real_thread(target, args, name):
 
 @contextmanager
 def _running(stack, *, timeout=2.0):
-    """Run the session on a thread, and stop it however the block ends.
-
-    `stop_event.set()` used to sit after the wait, so a test whose predicate
-    timed out never reached it -- and `session.run` plus its two forwarding
-    threads spin (the fake ports return b"" straight away), so one red test left
-    three threads burning a core each. They compound, and pytest itself stalls:
-    one mutation probe never printed a summary at all and the file had to be
-    killed at 120 s, which on CI is a job timeout with no traceback naming the
-    test that caused it.
-    """
     runner = threading.Thread(target=stack.session.run, args=(object(), "COM4"),
                               name="broker-session", daemon=True)
     runner.start()
@@ -113,13 +92,6 @@ def _running(stack, *, timeout=2.0):
 
 
 def _wait_until(predicate) -> None:
-    """The shared waiter, with the one timeout this file's stack ever needs.
-
-    Two seconds is far past anything the fake ports here take, and the helper
-    returns the moment the predicate holds, so the number costs nothing until
-    something is actually wrong -- at which point it names the predicate that
-    never came true.
-    """
     wait_until(predicate, timeout=2.0, interval=0.02)
 
 
@@ -253,8 +225,6 @@ class TestMotionAndBpmFromSerial:
         with _running(s):
             _wait_until(lambda: s.udp_messages.count("SYNC") == 2)
 
-        # The mode is published once, when the motion line turned it on; the BPM
-        # half of the same line no longer resends AUTO and the seed BPM.
         assert s.udp_messages == [
             "AUTO 1", "BPM 87",
             "SYNC",
@@ -322,12 +292,6 @@ class TestMultiLineSerialBuffer:
         s.real_port.inject(b"Auto mode")
 
         with _running(s):
-            # The claim below is that a half line leaves auto mode alone, so the
-            # test has to stand after the parse that could have activated it,
-            # not merely after the read. `in_waiting` reaching zero is only the
-            # read: it drops inside `real.read(...)`, before the buffering and
-            # the line loop. The session coming back for another read is the
-            # signal that it finished with what it took.
             _wait_until(lambda: s.real_port.in_waiting == 0)
             took_the_half_line = s.real_port.reads
             _wait_until(lambda: s.real_port.reads > took_the_half_line)
@@ -366,7 +330,6 @@ class TestAutoTransitionSequence:
 
             s.real_port.inject(b"freeMode is on!\r\n")
             _wait_until(lambda: s.controller.is_active)
-
 
         auto_msgs = [m for m in s.udp_messages if m.startswith("AUTO")]
         transitions = [auto_msgs[0]] + [

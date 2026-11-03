@@ -1,4 +1,3 @@
-"""What a logger says, heard as it says it -- from whichever thread says it."""
 from __future__ import annotations
 
 import logging

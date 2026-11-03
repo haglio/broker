@@ -1,10 +1,3 @@
-"""Saying who drove the OSR2 and when.
-
-The log carried nothing about the device actually moving, so a report of "it
-started too early" could only be answered by guessing which of the three writers
-it was. These pin the shape of the answer: a line at each end of a run, naming
-the source, and no line per write.
-"""
 from __future__ import annotations
 
 import logging
@@ -81,8 +74,6 @@ class TestARunOfWrites:
         ]
 
     def test_a_second_run_says_how_long_the_device_was_still(self, log):
-        """The number the whole question turns on: how long before the motion
-        he felt did nothing reach the device."""
         motion, said, clock = log
         motion.happened(UDP)
         clock.now += 30.0
@@ -93,9 +84,6 @@ class TestARunOfWrites:
         assert said.said[-1] == f"OSR2 driven by {UDP}, quiet for 30.0s before that"
 
     def test_the_tick_alone_closes_a_run_out(self, log):
-        """Nothing writes when the device stops, so the end of a run can only be
-        noticed by the beat that keeps running.  The length reported is the
-        writes' own span, not the wait that revealed it was over."""
         motion, said, clock = log
         motion.happened(MFP)
         clock.now += 1.0
@@ -122,8 +110,6 @@ class TestARunOfWrites:
 
 class TestHandingTheDeviceOver:
     def test_a_new_source_ends_the_old_run_and_opens_its_own(self, log):
-        """Two writers inside one stretch of motion is the case a single
-        'the device is moving' flag could not tell apart."""
         motion, said, clock = log
         motion.happened(MFP)
         clock.now += 1.0
@@ -163,9 +149,6 @@ class TestWhetherSomethingIsDrivingTheOsr2:
 
 
 class TestUdpDroppedForTheSlot:
-    """A sender not yet moved to the OSR2's slot goes on sending over UDP while
-    another holds the slot, so its lines are dropped a run at a time."""
-
     def test_a_run_of_dropped_lines_is_told_at_its_two_ends_with_how_many(self, dropped):
         held_off, said, clock = dropped
 

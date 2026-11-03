@@ -1,18 +1,3 @@
-"""The tray and the broker say which of the two they are, in the task list.
-
-Both run as ``pythonw.exe``, so both arrived as identical anonymous "Python"
-rows -- and a supervisor and the thing it supervises being indistinguishable is
-exactly the pair you need to tell apart when one of them is stuck.  Windows
-takes what it shows about a process from the file it was started from, so each
-starts through a copy of the interpreter named, described and marked for its
-part.
-
-The two halves work differently and both are asserted here, by running them.
-The broker is a child, so the tray names it outright as it launches it.  The
-tray cannot name itself on the way in -- writing the copy takes the very
-interpreter being named -- so it prepares its own for the next launch and the
-launcher picks it up; the launcher's side is read off its spec.
-"""
 from __future__ import annotations
 
 import logging
@@ -39,7 +24,6 @@ class TestWhatTheRowsSay:
         assert NAMER.description(BROKER_ROLE) == APP_NAME
 
     def test_the_two_cannot_collide_on_one_file_name(self):
-        # They share the venv the copies land in.
         assert (NAMER.exe_name("pythonw.exe", TRAY_ROLE)
                 != NAMER.exe_name("pythonw.exe", BROKER_ROLE))
 
@@ -50,9 +34,6 @@ class TestWhatTheRowsSay:
 
 class TestTheTray:
     def test_prepares_the_copy_its_launcher_will_use(self, tmp_path: Path):
-        """From the windowed interpreter, which is what the launcher runs;
-        described as the app and its part; carrying the broker's icon; and never
-        taking the tray down when there is nothing to copy from."""
         assert_the_process_is_named(
             _name_this_process, tmp_path,
             ProcessName(
@@ -68,15 +49,11 @@ class TestTheTray:
         assert LAUNCHER.named_interpreter == NAMER.exe_name(LAUNCHER.interpreter, TRAY_ROLE)
 
     def test_the_launcher_runs_the_windowed_interpreter(self):
-        """The tray is a GUI app and must not flash up a console."""
         assert LAUNCHER.interpreter == "pythonw.exe"
 
 
 class TestTheBroker:
     def test_is_named_outright_when_the_tray_launches_it(self):
-        """No one-launch delay for this one: the tray is holding the interpreter
-        that writes the copy, and is not the process being named -- so the copy
-        is made from the running interpreter, and the launch goes through it."""
         launched: list[list[str]] = []
         supervisor = BrokerSupervisor(
             SimpleNamespace(config_path=Path("C:/example/broker.json")),
@@ -89,10 +66,6 @@ class TestTheBroker:
         assert launched[0][:3] == ["C:/example/Broker-Broker.exe", "-m", "osr2_broker.app"]
 
     def test_the_sweep_that_kills_it_knows_the_name_it_runs_under(self):
-        """A broker running under a name the sweep does not match is a broker
-        nothing here can stop -- so the sweep reads its pattern from the same
-        namer that decides what a broker is launched as, rather than restating
-        it and drifting."""
         with patch("osr2_broker.tray.subprocess.run") as run:
             terminate_broker(logging.getLogger("test"))
 
@@ -107,8 +80,6 @@ class TestTheBroker:
                         NAMER.exe_name("pythonw.exe", BROKER_ROLE))
 
     def test_that_sweep_still_finds_an_unnamed_broker(self):
-        # The copy is best-effort, so a broker can still arrive under the plain
-        # interpreter and must stay reachable.
         assert all(re.match(NAMER.process_name_pattern, name)
                    for name in ("pythonw.exe", "python.exe", "py.exe"))
 

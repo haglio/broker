@@ -1,11 +1,3 @@
-"""The verb channel fun_time, genau and genaumacher steer the broker through.
-
-The consumer is the family's (``app_support.file_channel``, tested there): every
-queued verb, folded to upper case, the queue claimed by rename so a verb written
-into the drain is never erased unread.  What is the broker's is that a verb
-dropped in the file reaches the session once, and that a read which cannot make
-sense of the file never raises into the loop.
-"""
 from __future__ import annotations
 
 import threading
@@ -18,7 +10,6 @@ from tests.sessions import make_session
 
 
 def test_an_undecodable_file_reads_as_no_command(tmp_path: Path):
-    """A half-written or foreign-encoded file must never raise into the loop."""
     cmd = tmp_path / "broker_cmd.txt"
     cmd.write_bytes(b"\xff\xfe\x00park")
 
@@ -27,8 +18,6 @@ def test_an_undecodable_file_reads_as_no_command(tmp_path: Path):
 
 def test_an_unreadable_path_logs_and_reads_as_no_command(tmp_path: Path):
     logger = MagicMock()
-    # A directory at the queue's path cannot be read as text, on any platform.
-    # Never tmp_path itself: the claim renames it, out from under its teardown.
     cmd = tmp_path / "broker_cmd.txt"
     cmd.mkdir()
 
@@ -37,11 +26,6 @@ def test_an_unreadable_path_logs_and_reads_as_no_command(tmp_path: Path):
 
 
 def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Path):
-    """The whole channel, end to end: a lower-case 'park' dropped in the file is
-    consumed on the next tick and scheduled once — the claim takes the queue
-    away, so the ticks after it see nothing, and the hold's clock is never
-    pushed back."""
-
     clock = [10.0]
     cmd = tmp_path / "broker_cmd.txt"
     cmd.write_text("park", encoding="utf-8")
@@ -64,9 +48,6 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
     clock[0] = 10.5
     session.tick(object(), real_port=real_port, serial_write_lock=lock)
 
-    # 11.2 is past the first tick's schedule (11.0) but short of where a replay
-    # on the second tick would have pushed it (11.5): a replayed verb means no
-    # write lands here.
     clock[0] = 11.2
     session.tick(object(), real_port=real_port, serial_write_lock=lock)
 
@@ -76,10 +57,6 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
 
 
 def test_two_verbs_queued_between_ticks_are_both_acted_on_in_order(tmp_path: Path):
-    """The defect the broker's own consumer had: two verbs read together came
-    back as one word matching neither, and a verb written into the truncate
-    was erased unread.  A park then a resume now parks and then resumes."""
-
     cmd = tmp_path / "broker_cmd.txt"
     cmd.write_text("park\nresume\n", encoding="utf-8")
     auto_mode = MagicMock()

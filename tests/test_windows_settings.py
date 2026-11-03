@@ -1,8 +1,3 @@
-"""What the broker relies on Windows to keep, as its pyproject lists it.
-
-``python -m app_support.windows_settings`` makes the machine match the list;
-what is the broker's own about it is held here.
-"""
 from __future__ import annotations
 
 import tomllib

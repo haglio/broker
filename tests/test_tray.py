@@ -1,4 +1,3 @@
-"""Tests for the broker's system tray icon and its watchdog."""
 from __future__ import annotations
 
 import logging
@@ -26,27 +25,17 @@ from tests.heard import what_is_said_on
 
 
 def test_menu_is_painted_in_the_shared_dark_palette(qapp):
-    """The menu must render dark, not in Windows' default light chrome.
-
-    The tray's own menu, with its rows: under the family's rules an empty menu
-    has no width to sample.
-    """
-
     tray = BrokerTray()
     menu = tray.contextMenu()
     menu.resize(menu.sizeHint())
     image = menu.grab().toImage()
 
-    # Inside a row, at its far end: clear of the border, and of the row's text
-    # whatever font the machine draws it in -- the middle of the menu landed on
-    # a glyph on the gate's runner.
     row = menu.actionGeometry(tray.start_action)
     pixel = image.pixelColor(row.right() - 2, row.center().y())
     assert pixel.name() == BG_TERTIARY.name()
 
 
 def _brightest_text_pixel(image, rect):
-    """The lightest pixel in a menu row — its text, against the dark fill."""
     return max(
         max(image.pixelColor(x, y).getRgb()[:3])
         for y in range(rect.top(), rect.bottomLeft().y() + 1)
@@ -55,8 +44,6 @@ def _brightest_text_pixel(image, rect):
 
 
 def test_the_status_line_reads_as_a_label_not_a_command(qapp):
-    """It is disabled, so it must look dimmer than the items you can click."""
-
     tray = BrokerTray()
     menu = tray.contextMenu()
     menu.resize(menu.sizeHint())
@@ -68,10 +55,6 @@ def test_the_status_line_reads_as_a_label_not_a_command(qapp):
 
 
 def test_the_item_under_the_cursor_lights_up(qapp):
-    """Without an explicit rule the stylesheet flattens Qt's own highlight; the
-    family's rule lights the row in the blue every menu in the family uses."""
-
-
     tray = BrokerTray()
     menu = tray.contextMenu()
     menu.resize(menu.sizeHint())
@@ -84,9 +67,6 @@ def test_the_item_under_the_cursor_lights_up(qapp):
 
 
 def test_tray_menu_offers_the_broker_controls_laid_out_as_the_evolver_s_are(qapp):
-    """Its status ruled off above the commands, and the commands in the
-    Evolver's capitals."""
-
     tray = BrokerTray()
 
     rows = ["---" if a.isSeparator() else a.text() for a in tray.contextMenu().actions()]
@@ -110,9 +90,6 @@ def _family_icon(name: str) -> QImage:
 
 
 def test_each_command_wears_the_family_s_icon_as_the_evolver_s_menu_does(qapp):
-    """The two menus sit side by side in the tray, and the Evolver's icons every
-    command it offers; the status line, which cannot be clicked, carries none."""
-
     tray = BrokerTray()
 
     assert tray.status_action.icon().isNull()
@@ -137,9 +114,6 @@ def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
 
 
 def _supervisor(cfg_path, *, running=False, running_from=PROJECT_DIR):
-    """A supervisor over a real config, with its launch/kill seams recorded, and
-    a running broker that says it runs from *running_from* (None: says nothing)."""
-
     calls = {"launched": [], "terminated": 0}
 
     def terminate():
@@ -162,10 +136,6 @@ def test_start_runs_the_broker_module_against_our_config(cfg_path):
 
     supervisor.start()
 
-    # Through the copy named for the broker rather than the bare interpreter, so
-    # the task list can tell it from the tray supervising it -- see
-    # osr2_broker.process_names.  named_exe falls back to the interpreter it was
-    # handed when the copy cannot be made, so this holds either way.
     assert calls["launched"] == [
         [NAMER.named_exe(sys.executable, BROKER_ROLE), "-m", "osr2_broker.app",
          "--config", str(cfg_path)],
@@ -173,8 +143,6 @@ def test_start_runs_the_broker_module_against_our_config(cfg_path):
 
 
 def test_a_tray_starts_the_broker_from_its_own_checkout(cfg_path):
-    """So a branch's tray runs the branch's broker: `-m` finds the package in
-    the working directory first."""
     closed = MagicMock(pid=4321)
     closed.wait.return_value = 0
     with patch.object(tray_module.subprocess, "Popen", return_value=closed) as popen:
@@ -209,8 +177,6 @@ def test_start_leaves_a_live_broker_alone(cfg_path):
 
 
 def test_start_replaces_a_broker_another_checkout_started(cfg_path, tmp_path):
-    """How a branch's preview tray comes to run the branch's broker, and how the
-    production tray takes the production broker back after it."""
     supervisor, calls = _supervisor(cfg_path, running=True, running_from=tmp_path / "elsewhere")
 
     supervisor.start()
@@ -247,8 +213,6 @@ def test_stop_kills_the_broker_without_starting_another(cfg_path):
 
 
 class FakeSupervisor:
-    """Records what the watchdog asked of the broker."""
-
     def __init__(self, running=False):
         self.running = running
         self.starts = 0
@@ -259,7 +223,6 @@ class FakeSupervisor:
         return self.running
 
     def start(self):
-        # Idempotent, like the real supervisor: a live broker is left alone.
         if self.running:
             return
         self.starts += 1
@@ -276,12 +239,10 @@ class FakeSupervisor:
 
 @pytest.fixture
 def tray(qapp):
-
     return BrokerTray()
 
 
 def test_watchdog_revives_a_dead_broker(tray, cfg_path):
-
     supervisor = FakeSupervisor(running=False)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
 
@@ -291,8 +252,6 @@ def test_watchdog_revives_a_dead_broker(tray, cfg_path):
 
 
 def test_watchdog_leaves_a_paused_broker_dead(tray, cfg_path):
-    """Pause must survive the next tick, or the tray fights the user."""
-
     supervisor = FakeSupervisor(running=True)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
 
@@ -304,7 +263,6 @@ def test_watchdog_leaves_a_paused_broker_dead(tray, cfg_path):
 
 
 def test_starting_by_hand_clears_the_pause(tray, cfg_path):
-
     supervisor = FakeSupervisor(running=False)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
 
@@ -316,11 +274,6 @@ def test_starting_by_hand_clears_the_pause(tray, cfg_path):
 
 
 def test_restart_from_the_menu_replaces_a_live_broker(tray, cfg_path):
-    """On a running broker the menu says 'Restart Broker', and it must mean it:
-    because start() is idempotent, collapsing the restart branch into start()
-    turns the menu item into a silent no-op — and until this test, nothing
-    noticed (audit finding broker/all/tests/013)."""
-
     supervisor = FakeSupervisor(running=True)
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray)
 
@@ -331,9 +284,6 @@ def test_restart_from_the_menu_replaces_a_live_broker(tray, cfg_path):
 
 
 def test_a_failed_beat_does_not_stop_the_watchdog(tray, cfg_path):
-    """The tray is the broker's only supervisor; one bad tick must not end it."""
-
-
     class ExplodingSupervisor(FakeSupervisor):
         def is_running(self):
             raise OSError("WMI hiccup")
@@ -347,7 +297,6 @@ def test_a_failed_beat_does_not_stop_the_watchdog(tray, cfg_path):
 
 
 def test_opening_the_log_creates_it_first_so_the_editor_has_something(tray, cfg_path):
-
     config = load_config(cfg_path)
     opened = []
     app = BrokerTrayApp(
@@ -361,8 +310,6 @@ def test_opening_the_log_creates_it_first_so_the_editor_has_something(tray, cfg_
 
 
 def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
-    """A surviving broker would be unsupervised — nothing left to restart it."""
-
     supervisor = FakeSupervisor(running=True)
     quit_calls = []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(quit_app=lambda: quit_calls.append(True)))
@@ -375,10 +322,6 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
 
 
 def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
-    """The production tray takes the broker over again: stopping it would take the
-    device away, and standing it down would stop Evolver bringing that tray
-    back."""
-
     supervisor = FakeSupervisor(running=True)
     stood_down, handed_back, quit_calls = [], [], []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: stood_down.append(True),
@@ -395,8 +338,6 @@ def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
 
 
 def test_making_way_for_an_update_stops_the_broker_before_the_next_tray_is_started(tray, cfg_path):
-    """Nothing of this checkout may still run while the next tray's launcher updates
-    it, and Evolver must go on bringing the tray back should that tray never start."""
     supervisor = FakeSupervisor(running=True)
     stood_down, started_with_the_broker_running, quit_calls = [], [], []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: stood_down.append(True),
@@ -460,7 +401,6 @@ def test_the_watchdog_looks_for_an_update_on_every_beat(tray, cfg_path):
 
 
 def test_a_paused_broker_takes_no_update(tray, cfg_path):
-    """The next tray would come up knowing nothing of the pause, and start the broker."""
     updates = FakeUpdateWatch()
     app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, TrayHooks(updates=updates))
 
@@ -471,17 +411,6 @@ def test_a_paused_broker_takes_no_update(tray, cfg_path):
 
 
 def test_a_second_tray_stands_down(cfg_path):
-    """The scheduled task relaunches the tray every couple of minutes."""
-
-
-
-    # main() installs its process-wide scaffolding before it reaches the mutex
-    # check, and none of it belongs to the rest of the session: both excepthooks
-    # replaced by one that logs to the 'osr2_broker.tray' logger, a rotating file
-    # handler on that logger pointed inside a state directory this test is about
-    # to delete, and -- on Windows -- pythonw.exe copied into the live .venv and
-    # stamped. tests/test_app.py patches the same three for the broker's own
-    # main().
     with patch.object(tray_module, "configure_logging",
                       return_value=logging.getLogger("test.tray")), \
          patch.object(tray_module, "install_exception_logging"), \
@@ -494,8 +423,6 @@ def test_a_second_tray_stands_down(cfg_path):
 
 def test_a_preview_takes_the_tray_over_and_leaves_the_production_interpreter_unnamed(
         cfg_path, monkeypatch):
-    """Naming would write a copy of the interpreter into the production
-    checkout's venv, which the production tray names for itself."""
     monkeypatch.setenv(branch_session.FLAG, "1")
 
     with patch.object(tray_module, "configure_logging",
@@ -546,8 +473,6 @@ def test_the_production_tray_never_hands_itself_back(qapp, cfg_path):
 
 @pytest.fixture
 def an_update_waiting(monkeypatch):
-    """A beat of a tray start_the_tray builds reaches the machine's brokers and this
-    checkout's update; these stand in for both, and the tray may take it at once."""
     happened = []
     monkeypatch.setattr(tray_module.production_update, "UP_BEFORE_AN_UPDATE_S", 0.0)
     monkeypatch.setattr(tray_module, "launch_broker", lambda argv, config, logger: None)
@@ -613,14 +538,12 @@ def _ticked(tray, cfg_path, *, mode_written: str | None, osr2_spoke: bool):
 
 
 def test_hovering_says_the_broker_is_controlling_an_osr2_that_is_on(tray, cfg_path):
-
     ticked = _ticked(tray, cfg_path, mode_written="0", osr2_spoke=True)
 
     assert ticked.toolTip() == "Broker: running (controlling OSR2)"
 
 
 def test_a_broker_that_has_written_no_mode_yet_is_controlling_the_osr2(tray, cfg_path):
-
     ticked = _ticked(tray, cfg_path, mode_written=None, osr2_spoke=True)
 
     assert ticked.toolTip() == "Broker: running (controlling OSR2)"
@@ -628,7 +551,6 @@ def test_a_broker_that_has_written_no_mode_yet_is_controlling_the_osr2(tray, cfg
 
 @pytest.mark.parametrize("mode_written", ["0", "1"])
 def test_hovering_says_the_osr2_is_off_while_it_has_not_spoken(tray, cfg_path, mode_written):
-
     ticked = _ticked(tray, cfg_path, mode_written=mode_written, osr2_spoke=False)
 
     assert ticked.toolTip() == "Broker: running (OSR2 off)"
@@ -646,14 +568,12 @@ def test_hovering_names_why_the_osr2_cannot_be_heard(tray, cfg_path, stamp, said
 
 @pytest.mark.parametrize("mode_written", ["1", "﻿1\r\n"])
 def test_the_menu_says_when_the_osr2_runs_its_own_auto_mode(tray, cfg_path, mode_written):
-
     ticked = _ticked(tray, cfg_path, mode_written=mode_written, osr2_spoke=True)
 
     assert ticked.status_action.text() == "Broker status: running (but OSR2 in auto mode)"
 
 
 def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
-
     tray = BrokerTray()
     tray.set_status(running=True, osr2="but OSR2 in auto mode")
 
@@ -665,7 +585,6 @@ def test_running_broker_offers_a_restart_and_a_live_pause(qapp):
 
 
 def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
-
     tray = BrokerTray()
     tray.set_status(running=False, osr2="OSR2 off")
 
@@ -677,7 +596,6 @@ def test_stopped_broker_offers_a_start_and_a_dead_pause(qapp):
 
 
 def test_a_preview_s_tray_says_so_on_hover(qapp):
-
     tray = BrokerTray("Broker — preview of claude/example")
     tray.set_status(running=True, osr2="OSR2 off")
 
