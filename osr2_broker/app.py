@@ -164,7 +164,6 @@ MONITOR_POLL_INTERVAL_MS = 10_000
 
 
 def _start_monitor(config, auto_mode, logger: logging.Logger) -> None:
-
     idle_threshold = config.idle_minutes * 60.0
     tx_file = config.osr2_serial_tx_file
     idle_state_file = config.osr2_idle_state_file

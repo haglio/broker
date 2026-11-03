@@ -1,5 +1,3 @@
-"""Win32 API wrappers for the taskbar identity and shutdown blocking."""
-
 from __future__ import annotations
 
 import ctypes
@@ -14,18 +12,11 @@ from .process_names import APP_NAME
 
 ICON_PATH = PROJECT_DIR / "broker_icon.ico"
 
-# A distinct taskbar identity for this process. Without it, the warning
-# dialog's taskbar button inherits the icon of the Python host process
-# (pythonw.exe); with it, Windows uses the window's own broker icon.
+# Without it, Windows gives a dialog's taskbar button the icon of pythonw.exe.
 APP_USER_MODEL_ID = "OSR2Broker"
 
 
 def claim_taskbar_identity(shown_as: Preview | None, *, set_identity=None) -> None:
-    """Claim a stable taskbar identity so windows show the broker icon.
-
-    Cosmetic: a window under the interpreter's icon is still a window, so a
-    refusal is logged and the launch goes on.
-    """
     try:
         (set_identity or set_app_user_model_id)(taskbar_identity(APP_USER_MODEL_ID, shown_as))
     except OSError:
@@ -103,19 +94,8 @@ _SetTimer.restype = ctypes.POINTER(wt.UINT)
 WM_TIMER = 0x0113
 
 
+# A hidden window, because Windows asks only windows whether it may shut down.
 class ShutdownGuard:
-    """Creates a hidden window that can block Windows shutdown.
-
-    The message pump runs on the calling thread.  Call ``run()`` to start
-    the pump (blocks until ``WM_DESTROY``).
-
-    ``should_block_fn``: called on WM_QUERYENDSESSION. If it returns True,
-    shutdown is blocked with ``ShutdownBlockReasonCreate``.
-
-    ``poll_fn``: called every ``poll_interval_ms`` from within the message
-    pump (WM_TIMER). Use this for periodic state checks.
-    """
-
     CLASS_NAME = "OSR2BrokerShutdownGuard"
 
     def __init__(

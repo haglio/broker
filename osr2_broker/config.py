@@ -11,10 +11,6 @@ from . import contract
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_DIR / "osr2_broker_config.json"
 
-# Evolver, whose launcher this tray runs when it finds Evolver gone (see
-# osr2_broker/peer_watch.py). Relative to this repo, because the pair is a
-# pair of sibling checkouts; a machine with no Evolver beside the broker
-# leaves this pointing at nothing, which is how the watch turns itself off.
 DEFAULT_EVOLVER_LAUNCHER = "../evolver/launch_evolver_if_not_running.vbs"
 
 
@@ -28,8 +24,6 @@ class BrokerConfig:
     udp_host: str
     udp_port: int
     idle_minutes: float
-    # None when the config names no MFP config: there is then nothing to read
-    # the port from and nothing to point at ours.
     mfp_config_path: Path | None
     tcode_udp_port: int
     evolver_launcher: Path
@@ -83,9 +77,6 @@ class BrokerConfig:
 
 
 def load_config(config_path: str | Path | None = None) -> BrokerConfig:
-    # Every required key is asked for by name, so a config short of one says
-    # which, and in which file, rather than a bare KeyError from a launcher
-    # with no console to raise into.
     path, raw = read_json_config(Path(config_path) if config_path else DEFAULT_CONFIG_PATH,
                                  default_dir=PROJECT_DIR)
     project_dir = path.parent

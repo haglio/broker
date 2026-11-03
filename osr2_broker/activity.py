@@ -1,10 +1,3 @@
-"""When the OSR2 last spoke, and when it was last spoken to.
-
-Two files, one per direction, each holding a single wall-clock stamp. The
-monitor reads them to decide whether the device is powered on and whether it is
-being driven, so the value on disk is a wall clock -- not the monotonic clock the
-session times its own loops with.
-"""
 from __future__ import annotations
 
 import time

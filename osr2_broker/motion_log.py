@@ -1,22 +1,9 @@
-"""Who is driving the OSR2, and when they started.
-
-Four writers reach the device -- MFP through the virtual port, T-Code over
-loopback UDP, the sender holding the OSR2's slot, and the broker's own park or
-retract -- and the log said nothing about any of them, so "the OSR2 started
-moving too early" could only be answered by guessing which one it was. Every
-write passes through here, and a run of them is reported at its two ends rather
-than per waypoint; so is a run of the T-Code UDP dropped while a sender holds
-the slot.
-"""
 from __future__ import annotations
 
 import threading
 import time
 from collections.abc import Callable
 
-# How long without another counts as a run being over.  Longer than the gap
-# between a script's waypoints (~100ms) and than a hold's settle, so a stretch
-# of ordinary driving reads as one run rather than a line per write.
 QUIET_S = 2.0
 
 MFP = "MFP"
@@ -29,14 +16,6 @@ def tcode_from(sender: str) -> str:
 
 
 class RunLog:
-    """Something that comes in runs, said at each run's two ends rather than
-    each time it happens: a run is one key again and again, and ends at a quiet
-    spell or at another key.
-
-    Called from several threads at once, so every field is under one lock --
-    and the lines go out outside it, the logger having one of its own.
-    """
-
     def __init__(self, *, logger, began: Callable[[str, float | None], str],
                  ended: Callable[[str, float, int], str],
                  monotonic: Callable[[], float] = time.monotonic) -> None:
@@ -74,7 +53,6 @@ class RunLog:
             return self._key
 
     def tick(self) -> None:
-        """Called on the broker's own beat; closes a run out once it is over."""
         now = self._monotonic()
         with self._lock:
             if self._key is None or now - self._last < QUIET_S:

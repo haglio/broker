@@ -63,9 +63,6 @@ class BrokerAutoController:
             if changed and not value:
                 self._deactivated = True
 
-        # Only a change is news.  Every motion and BPM line the script feed
-        # produces says auto is on, and publishing each rewrote the mode file
-        # and resent the seed BPM ahead of the real tempo, at the line rate.
         if not changed:
             return
         self._publish(sock, value)

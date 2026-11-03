@@ -9,8 +9,7 @@ from app_support.file_channel import publish_stamp
 
 from .ports import iter_serial_ports
 
-# The OSR2's USB serial adapter, a CH340, which carries no serial number:
-# Windows names it after the socket it is plugged into.
+# The CH340 carries no serial number: Windows names it after the socket it is in.
 OSR2_ADAPTER = (0x1A86, 0x7523)
 PLUGGED_IN_POLL_SECONDS = 1.0
 

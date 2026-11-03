@@ -146,9 +146,8 @@
       "his_word": null,
       "code_word": null,
       "id": "other_words",
-      "thing": "words the code uses for things no screen shows or names: a console window, a Qt style sheet, Python's strip",
+      "thing": "words the code uses for things no screen shows or names: a Qt style sheet, Python's strip",
       "code_today": [
-        "console",
         "sheet",
         "strip"
       ],
