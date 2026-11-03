@@ -11,8 +11,6 @@ IN_USE_THRESHOLD = 30.0
 
 
 class MonitorOutcome(Enum):
-    """What a tick of the idle monitor asks its caller to do, when it asks anything."""
-
     IDLE_WARNING = auto()
 
 

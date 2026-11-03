@@ -69,8 +69,6 @@ class Senders:
 
 
 class BrokerSerialSession:
-    # How many identical failures pass between summary lines; see
-    # :meth:`_report_failure`.
     FAILURE_SUMMARY_EVERY = 60
 
     def __init__(
@@ -104,15 +102,11 @@ class BrokerSerialSession:
         self._slot = senders.slot
         self._question = watches.question
         self._not_answering = watches.not_answering
-        # Whether the last bytes forwarded from the virtual port stopped short
-        # of a line's end: a question written then would land inside a command.
         self._mid_command = False
         self._motion = motion_log(logger=logger, monotonic=monotonic)
         self._udp_dropped = dropped_udp_log(logger=logger, monotonic=monotonic)
         self._holds = HoldScheduler(monotonic=monotonic, logger=logger)
         self._tcode_window = TCodeWriteWindow(monotonic=monotonic)
-        # The open failure being reported, and how many times running it has
-        # happened: see :meth:`_report_failure`.
         self._failure: tuple[str, str] | None = None
         self._failure_count = 0
         self._tcode_listener = UdpTCodeListener(
@@ -198,17 +192,6 @@ class BrokerSerialSession:
         return peer_disconnected or retry_state.value
 
     def _report_failure(self, exc: BaseException) -> None:
-        """Say a failed session once, then only count it.
-
-        Every attempt against a port that is gone, or held by something else,
-        raises the same error, and a traceback apiece wrote four megabytes in
-        forty minutes -- rolling the log three times and taking every earlier
-        session's record with it, so the one thing a reader came for was the
-        one thing gone.  The first of a run is the full traceback, because that
-        is what a reader needs; the rest are a line every
-        ``FAILURE_SUMMARY_EVERY`` attempts saying how many there have been.
-        A different failure starts a new run and gets its own traceback.
-        """
         kind = (type(exc).__name__, str(exc))
         if kind != self._failure:
             self._failure = kind
@@ -223,7 +206,6 @@ class BrokerSerialSession:
             )
 
     def _report_recovery(self) -> None:
-        """Close out a run of failures, now that a session has the ports."""
         if self._failure is None:
             return
         self.logger.info(
@@ -233,11 +215,6 @@ class BrokerSerialSession:
         self._failure_count = 0
 
     def _note_the_device_spoke(self) -> None:
-        """Record the OSR2 having just spoken, and park it if that broke a silence.
-
-        A switched-on OSR2 comes up half way along its travel, so the first
-        thing it says is the cue to send it home.
-        """
         self._rx_activity.mark()
         if self._not_answering is not None:
             self._not_answering.heard()
@@ -342,11 +319,6 @@ class BrokerSerialSession:
         self._question.asked()
 
     def handle_broker_command(self, cmd: str | None, udp_sock) -> None:
-        """Act on one verb off the command file, or on nothing at all.
-
-        Most ticks bring no command, and a sibling may write a verb this broker
-        has no handler for; both fall through to a no-op.
-        """
         verb = self._VERBS.get(cmd)
         if verb is not None:
             verb(self, udp_sock)
@@ -368,9 +340,6 @@ class BrokerSerialSession:
         self._slot.kick("The retract")
         self._holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
-    # The whole vocabulary. Every app asks with app_support.osr2_hold's verbs;
-    # the family's consumer upper-cases whatever it reads, so the keys are the
-    # verbs as they arrive.
     _VERBS = MappingProxyType({
         "PAUSE": _pause,
         osr2_hold.RESUME: _resume,

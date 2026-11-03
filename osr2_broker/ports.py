@@ -14,12 +14,6 @@ def iter_serial_ports():
 
 
 def _read_mfp_config_payload(mfp_config_path: Path) -> dict | None:
-    """Parsed MFP config; ``{}`` when there is no file, ``None`` when unreadable.
-
-    ``None`` means "hands off". The file is there but we could not understand
-    it -- most likely we caught MFP mid-write -- so anything we rewrite from
-    what we parsed would drop every setting we failed to read.
-    """
     if not mfp_config_path.exists():
         return {}
     try:
@@ -46,13 +40,6 @@ def _write_mfp_config_payload(mfp_config_path: Path, payload: dict) -> None:
 
 
 def read_mfp_selected_serial_port(mfp_config_path: Path) -> str | None:
-    """The port MFP is configured to use, as a real string.
-
-    Read through the JSON parser, never off the raw text: on disk MFP escapes
-    the backslashes in ``COM0COM\\PORT\\CNCA1``, and a raw-text read hands back
-    the doubled form, which matches no live port and makes every start declare
-    a perfectly good config stale.
-    """
     for item in _iter_output_target_items(_read_mfp_config_payload(mfp_config_path) or {}):
         selected = item.get("SelectedSerialPort")
         if isinstance(selected, str) and selected:
@@ -61,12 +48,6 @@ def read_mfp_selected_serial_port(mfp_config_path: Path) -> str | None:
 
 
 def _serial_output_target(payload: dict) -> dict | None:
-    """The config entry holding the serial port, or None if there is none.
-
-    MFP keeps one entry per output target, so this has to pick the same entry
-    ``read_mfp_selected_serial_port`` reads back -- otherwise the two disagree
-    forever and every broker start rewrites the file.
-    """
     items = list(_iter_output_target_items(payload))
     for item in items:
         if "SelectedSerialPort" in item:
@@ -75,7 +56,6 @@ def _serial_output_target(payload: dict) -> dict | None:
 
 
 def write_mfp_selected_serial_port(mfp_config_path: Path, selected_port: str) -> bool:
-    """Point MFP at ``selected_port``; False if the config was left untouched."""
     payload = _read_mfp_config_payload(mfp_config_path)
     target = _serial_output_target(payload) if payload is not None else None
     if target is None:

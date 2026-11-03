@@ -1,5 +1,3 @@
-"""The idle warning, shown by a process of its own: Qt wants its application on
-its process's main thread, and the broker's monitor runs on another."""
 from __future__ import annotations
 
 import subprocess
@@ -15,6 +13,7 @@ from .single_instance import MUTEX_IDLE_WARNING
 from .win32 import ICON_PATH, claim_taskbar_identity
 
 
+# A process of its own: Qt wants its application on its process's main thread.
 def show_until_closed(config: BrokerConfig, *, run=subprocess.run) -> subprocess.CompletedProcess:
     return run(
         [sys.executable, "-m", __spec__.name, "--config", str(config.config_path)],
@@ -26,16 +25,11 @@ def show_until_closed(config: BrokerConfig, *, run=subprocess.run) -> subprocess
 
 def show_warning(title: str, message: str, *, button_text: str,
                  shown_as: Preview | None) -> None:
-    """Show the family's warning dialog under the broker's own identity.
-
-    Blocks until dismissed.  The taskbar identity goes first: Windows reads it
-    when a window of this process first appears, and without one the dialog's
-    taskbar button wears the python host's icon rather than the broker's.
-    """
     from PyQt6.QtWidgets import QApplication  # noqa: PLC0415
     from shared_ui.alert import Level, show_alert  # noqa: PLC0415
     from shared_ui.preview_icon import app_icon  # noqa: PLC0415
 
+    # Windows reads the identity when a window of this process first appears.
     claim_taskbar_identity(shown_as)
     _the_app_its_icon_is_drawn_in = QApplication.instance() or QApplication([])
     show_alert(

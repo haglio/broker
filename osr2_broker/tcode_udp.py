@@ -1,9 +1,3 @@
-"""T-Code arriving over loopback UDP, the inlet the OSR2's slot replaces.
-
-Genau sends the OSR2 its moves as datagrams, bypassing MFP entirely, and so do
-the Funestras and Origenerator, until each connects to the slot instead. Until
-then the inlet stays, but only while nobody holds the slot.
-"""
 from __future__ import annotations
 
 import socket

@@ -1,18 +1,3 @@
-"""The files the broker publishes itself through.
-
-Three small files under the shared state directory, and the loop that keeps one
-of them fresh. They are the only thing fun_time, genaumacher and the tray see
-of a running broker, so their contents are a wire format: the mode file holds
-"0" or "1" and nothing else, and the heartbeat holds one wall-clock float.  The
-names are the family's (``app_support.state_files``), and the reading and the
-writing are ``app_support.file_channel``'s, which is what the other side of
-every one of these files reads and writes with.
-
-Writing is best-effort. A write happens on every AUTO transition and twice a
-second for the heartbeat, from threads whose real job is carrying serial
-traffic; a state directory that has gone away, or a file another process is
-mid-replace on, must cost the update and never the bridge.
-"""
 from __future__ import annotations
 
 import logging
@@ -25,16 +10,11 @@ from app_support.file_channel import publish_stamp, publish_whole
 
 
 class BrokerMode(StrEnum):
-    """What the broker is doing with the OSR2, as its mode file spells it: holding
-    the device under Fun Time's control, or running it itself in auto."""
-
     CONTROL = "0"
     AUTO = "1"
 
 
 def write_mode(path: Path, mode: BrokerMode, logger: logging.Logger) -> None:
-    """Published whole: the orchestrator polls this, and a poller that caught a
-    truncating write would read a blank it cannot tell from "controlled"."""
     if not publish_whole(path, str(mode)):
         logger.error("Failed to write mode file %s", path)
 

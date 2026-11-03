@@ -1,4 +1,3 @@
-"""System tray icon for the broker, dark-themed via shared_ui."""
 from __future__ import annotations
 
 import logging
@@ -31,7 +30,6 @@ from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE, end_the_proc
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
 from .win32 import APP_USER_MODEL_ID, ICON_PATH, claim_taskbar_identity
 
-# How often the watchdog checks the broker is still there.
 WATCHDOG_INTERVAL_MS = 5_000
 STEPS = (("Loading Broker...", 1.0),)
 
@@ -55,13 +53,11 @@ def what_the_osr2_is_doing(config) -> str:
 
 
 def open_in_editor(path: Path) -> None:
-    """Open a file in Notepad — the one editor a stock Windows always has."""
+    # The one editor a stock Windows always has.
     subprocess.Popen(["notepad.exe", str(path)])
 
 
 def build_menu() -> QMenu:
-    """Build the tray's right-click menu, in the family's menu rules -- a tray
-    menu has no window to take them from."""
     menu = QMenu()
     menu.setStyleSheet(menu_rules())
     return menu
@@ -72,13 +68,6 @@ def _family_icon(name: str) -> QIcon:
 
 
 class BrokerSupervisor:
-    """Starts, stops and reports on the broker process for one config.
-
-    Liveness comes from the broker's own single-instance mutex rather than a
-    process scan: it is instant, and it cannot mistake a diagnostic command
-    line mentioning the broker for the broker itself.
-    """
-
     def __init__(self, config, *, launch, terminate, is_held=is_mutex_held):
         self._config = config
         self._mutex_name = mutex_name(MUTEX_BROKER, config.config_path)
@@ -90,16 +79,12 @@ class BrokerSupervisor:
         return self._is_held(self._mutex_name)
 
     def _broker_argv(self) -> list[str]:
-        # Named outright rather than one launch late: the broker is a child,
-        # so the tray is holding the interpreter that writes the copy and is not
-        # the process being named.  See osr2_broker.process_names.
         return [
             NAMER.named_exe(sys.executable, BROKER_ROLE), "-m", "osr2_broker.app",
             "--config", str(self._config.config_path),
         ]
 
     def start(self) -> None:
-        """Launch a broker, unless one from this checkout is already up."""
         if not self.is_running():
             self._launch(self._broker_argv())
         elif self._running_from() != str(PROJECT_DIR):
@@ -120,8 +105,6 @@ class BrokerSupervisor:
 
 
 class BrokerTray(QSystemTrayIcon):
-    """Tray icon exposing the broker's status and controls."""
-
     def __init__(self, name: str = APP_NAME):
         super().__init__()
         self._name = name
@@ -173,8 +156,6 @@ class TrayHooks:
 
 
 class BrokerTrayApp:
-    """Policy: keep a broker alive, and keep the tray telling the truth."""
-
     def __init__(self, config, supervisor, tray: BrokerTray, hooks: TrayHooks | None = None):
         hooks = hooks or TrayHooks()
         self._config = config
@@ -194,13 +175,6 @@ class BrokerTrayApp:
         tray.log_action.triggered.connect(self.open_log)
 
     def tick(self) -> None:
-        """One watchdog beat: revive the broker unless the user paused it.
-
-        Evolver gets looked at on the same beat, and is NOT covered by the pause
-        -- pausing here is about the OSR2, and says nothing about the app next
-        door. The watch throttles itself to its own interval, so passing every
-        five-second beat through it costs one comparison.
-        """
         if _taken(self._config.stop_request_file):
             self._stop_as_asked()
             return
@@ -219,7 +193,6 @@ class BrokerTrayApp:
         )
 
     def start_or_restart(self) -> None:
-        """Honour the menu's Start/Restart, and take the broker off pause."""
         self._paused = False
         if self._supervisor.is_running():
             self._supervisor.restart()
@@ -233,22 +206,12 @@ class BrokerTrayApp:
         self.refresh()
 
     def open_log(self) -> None:
-        """Show the broker's log, even on a run that has yet to write one."""
         log_path = self._config.log_file("broker")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.touch(exist_ok=True)
         self._open_file(log_path)
 
     def quit(self) -> None:
-        """Take the broker down too — nothing else would supervise it.
-
-        And leave the mark that tells Evolver this was asked for, so it does not
-        start the tray again a quarter of an hour later. Every other way the tray
-        dies leaves no mark and is undone, which is the point of the pairing.
-
-        A preview's quit is the exception: the production tray takes the broker back,
-        still running.
-        """
         if self._hand_back is not None:
             self._hand_back()
         else:
@@ -278,7 +241,6 @@ def _taken(request: Path) -> bool:
 
 
 def launch_broker(argv: list[str], config, logger, *, popen=None) -> None:
-    """Start the broker detached, with its console output kept for post-mortems."""
     launcher_log = config.log_file("broker_service_launcher").open("a", encoding="utf-8")
     broker = (popen or subprocess.Popen)(
         argv,
@@ -298,22 +260,11 @@ def _say_how_it_ended(broker: subprocess.Popen, logger) -> None:
 
 
 def terminate_broker(logger) -> None:
-    """Kill whichever process is running the broker.
-
-    The tray does not necessarily own it: a tray that was itself restarted
-    inherits the broker of the tray before it, so this matches on the command
-    line rather than on a child handle we may not hold.
-
-    The image-name half comes from the same namer that decides what a broker is
-    launched under, because the two cannot be allowed to drift: a broker running
-    under a name this sweep does not know is a broker nothing here can stop.
-    """
     end_the_processes_running("osr2_broker.app")
     logger.info("Terminated broker")
 
 
 def _guarded_tick(tray_app: BrokerTrayApp, logger) -> None:
-    """The tray is the broker's only supervisor; a bad beat must not end it."""
     try:
         tray_app.tick()
     except Exception:
@@ -321,9 +272,6 @@ def _guarded_tick(tray_app: BrokerTrayApp, logger) -> None:
 
 
 def _name_this_process() -> None:
-    """Leave ``launch_broker_tray.vbs`` an interpreter that says "Broker - Tray"
-    next time.  Why it is one launch late, and why it can never cost the
-    launch: :meth:`ProcessNamer.name_this_process`."""
     NAMER.name_this_process(TRAY_ROLE)
 
 
@@ -378,8 +326,6 @@ def main(argv: list[str] | None = None) -> int:
     logger = configure_logging("osr2_broker.tray", config.log_file("broker_tray"))
     install_exception_logging(logger)
 
-    # The scheduled task relaunches us every couple of minutes so a killed tray
-    # is revived; while one is alive each relaunch must be a no-op.
     if preview:
         _mutex_handle = branch_session.take_the_tray_over(
             end_the_other_trays=branch_session.end_the_other_trays)
@@ -389,10 +335,6 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Another tray is already running; exiting")
         return 0
 
-    # Whatever the user wanted the last time they quit this tray, starting it is
-    # them wanting it up now -- and the scheduled task relaunches us every couple
-    # of minutes, so the mutex check above is what makes this run once per
-    # deliberate start rather than every two minutes.
     peer_watch.clear_broker_stand_down()
 
     marked = shown_as(preview=preview)
