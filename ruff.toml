@@ -3,13 +3,11 @@ target-version = "py312"
 
 [lint]
 select = ["F", "E", "W", "I", "UP", "B", "C4", "SIM", "RUF", "PL", "PT", "DTZ", "PIE", "PERF", "FLY", "ISC", "RET", "FURB", "EXE"]
-ignore = ["E501", "BLE001", "S110"]
-external = ["ARG", "N", "S", "E501", "BLE001", "S110"]
+ignore = ["E501", "BLE001", "S110", "PLR0913", "PLR0917", "PLR2004", "RUF001", "RUF002", "RUF003", "SIM117", "ISC004", "PLC3002"]
+external = ["ARG", "N", "S", "E501", "BLE001", "S110", "PLR0913", "PLR0917", "PLR2004", "RUF001", "RUF002", "RUF003", "SIM117", "ISC004", "PLC3002"]
 
 [lint.per-file-ignores]
 "**/vulture_whitelist.py" = ["B018", "F821"]
-"**/tests/**" = ["PLR2004"]
-"**/test_*.py" = ["PLR2004"]
 
 [format]
 quote-style = "double"

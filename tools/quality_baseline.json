@@ -1,85 +1,8 @@
 {
-  "chain_length": {},
-  "class_attributes": {
-    "osr2_broker/session.py::BrokerSerialSession": 32
-  },
-  "externality_comments": {
-    "osr2_broker/idle_warning.py": 2,
-    "osr2_broker/osr2_port.py": 1,
-    "osr2_broker/peer_watch.py": 1,
-    "osr2_broker/process_names.py": 1,
-    "osr2_broker/tray.py": 1,
-    "osr2_broker/win32.py": 2,
-    "tests/conftest.py": 1,
-    "tests/scratch.py": 1,
-    "tests/test_tcode_udp.py": 1
-  },
-  "fan_out": {},
   "library_patches": {},
-  "methods": {},
-  "mocks": {
-    "tests/test_app.py": 3,
-    "tests/test_com.py": 1,
-    "tests/test_command_file.py": 7,
-    "tests/test_hold.py": 13,
-    "tests/test_loading.py": 2,
-    "tests/test_peer_watch.py": 7,
-    "tests/test_protocol.py": 6,
-    "tests/test_question.py": 4,
-    "tests/test_session.py": 24,
-    "tests/test_state_files.py": 1,
-    "tests/test_tcode_udp.py": 4,
-    "tests/test_tray.py": 2
-  },
-  "monkeypatches": {
-    "tests/test_ports.py": 3,
-    "tests/test_session.py": 2,
-    "tests/test_tcode_udp.py": 2,
-    "tests/test_tray.py": 8
-  },
   "mutables_imported": {},
-  "patches": {
-    "tests/test_app.py": 27,
-    "tests/test_branch_session.py": 3,
-    "tests/test_idle_warning.py": 8,
-    "tests/test_loading.py": 7,
-    "tests/test_not_answering.py": 1,
-    "tests/test_osr2_port.py": 14,
-    "tests/test_peer_watch.py": 14,
-    "tests/test_ports.py": 25,
-    "tests/test_process_names.py": 2,
-    "tests/test_tray.py": 10,
-    "tests/test_win32.py": 4
-  },
   "private_imports": {},
   "private_reaches": {},
   "prose_lines": {},
-  "reach_chains": {
-    "osr2_broker/hold.py": 6,
-    "osr2_broker/motion_log.py": 3,
-    "osr2_broker/not_answering.py": 2,
-    "osr2_broker/protocol.py": 1,
-    "osr2_broker/question.py": 2,
-    "osr2_broker/session.py": 58,
-    "osr2_broker/tcode_udp.py": 2,
-    "osr2_broker/tray.py": 31
-  },
-  "simple_namespaces": {
-    "tests/test_app.py": 2,
-    "tests/test_osr2_port.py": 2,
-    "tests/test_process_names.py": 1
-  },
-  "statements": {},
-  "trailing_comments": {},
-  "uncovered_lines": {
-    "osr2_broker/__main__.py": 3,
-    "osr2_broker/app.py": 2,
-    "osr2_broker/hold.py": 1,
-    "osr2_broker/ports.py": 5,
-    "osr2_broker/protocol.py": 1,
-    "osr2_broker/session.py": 5,
-    "osr2_broker/state_files.py": 1,
-    "osr2_broker/tray.py": 1,
-    "osr2_broker/win32.py": 18
-  }
+  "trailing_comments": {}
 }
