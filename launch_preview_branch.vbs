@@ -4,7 +4,7 @@
 
 Option Explicit
 
-Dim fso, shell, root, app, interpreter, directory, arguments, base, updater, gates, held(), primary, logPath, screenFolder, screenUp, picturesFolder
+Dim fso, shell, root, app, interpreter, directory, arguments, base, updater, gates, held(), rebases, primary, logPath, screenFolder, screenUp, picturesFolder
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
@@ -28,6 +28,7 @@ Sub Decide()
   base = primary
   updater = fso.BuildPath(fso.GetParentFolderName(base), "app_support\.venv\Scripts\pythonw.exe")
   gates = Array(fso.BuildPath(base, ".git\production-update.turn"))
+  rebases = RebaseFoldersOf(root)
 End Sub
 
 Sub Report()
@@ -43,6 +44,10 @@ Sub Report()
   Dim gate
   For Each gate In gates
     WScript.Echo "gate: " & gate
+  Next
+  Dim rebase
+  For Each rebase In rebases
+    WScript.Echo "rebase: " & rebase
   Next
   WScript.Echo "loading screen: " & LoadingScreen()
   WScript.Echo "screen: " & screenFolder
@@ -102,6 +107,13 @@ End Sub
 
 Sub HoldGates()
   Dim index, waited
+  waited = 0
+  Do While Rebasing()
+    If waited >= 900000 Then WScript.Quit 1
+    StopIfCanceled
+    WScript.Sleep 500
+    waited = waited + 500
+  Loop
   ReDim held(UBound(gates))
   For index = 0 To UBound(gates)
     If fso.FolderExists(fso.GetParentFolderName(gates(index))) Then
@@ -130,6 +142,28 @@ Sub ReleaseGates()
     If IsObject(held(index)) Then held(index).Close
   Next
 End Sub
+
+Function RebaseFoldersOf(folder)
+  Dim gitFolder, stream, pointer
+  gitFolder = fso.BuildPath(folder, ".git")
+  If fso.FileExists(gitFolder) Then
+    Set stream = fso.OpenTextFile(gitFolder, 1)
+    If Not stream.AtEndOfStream Then pointer = stream.ReadLine
+    stream.Close
+    pointer = Trim(Replace(pointer, "gitdir:", ""))
+    If InStr(pointer, ":") = 0 Then pointer = fso.BuildPath(folder, pointer)
+    gitFolder = fso.GetAbsolutePathName(Replace(pointer, "/", "\"))
+  End If
+  RebaseFoldersOf = Array(fso.BuildPath(gitFolder, "rebase-merge"), fso.BuildPath(gitFolder, "rebase-apply"))
+End Function
+
+Function Rebasing()
+  Dim folder
+  Rebasing = False
+  For Each folder In rebases
+    If fso.FolderExists(folder) Then Rebasing = True
+  Next
+End Function
 
 Function LoadingScreen()
   Dim gate
