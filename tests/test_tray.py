@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -146,7 +148,7 @@ def test_a_tray_starts_the_broker_from_its_own_checkout(cfg_path):
     closed = MagicMock(pid=4321)
     closed.wait.return_value = 0
     with patch.object(tray_module.subprocess, "Popen", return_value=closed) as popen:
-        tray_module.launch_broker(["broker"], load_config(cfg_path), logging.getLogger("test.tray"))
+        tray_module.LaunchedBrokers(load_config(cfg_path), logging.getLogger("test.tray")).launch(["broker"])
     popen.call_args.kwargs["stdout"].close()
 
     assert popen.call_args.kwargs["cwd"] == str(PROJECT_DIR)
@@ -160,7 +162,7 @@ def test_the_tray_logs_how_a_broker_it_launched_ended(cfg_path):
         what_is_said_on("test.tray") as heard,
         patch.object(tray_module.subprocess, "Popen", return_value=crashed) as popen,
     ):
-        tray_module.launch_broker(["broker"], load_config(cfg_path), logging.getLogger("test.tray"))
+        tray_module.LaunchedBrokers(load_config(cfg_path), logging.getLogger("test.tray")).launch(["broker"])
         popen.call_args.kwargs["stdout"].close()
         ended = heard.first_saying("ended", timeout=5.0)
 
@@ -475,8 +477,18 @@ def test_the_production_tray_never_hands_itself_back(qapp, cfg_path):
 def an_update_waiting(monkeypatch):
     happened = []
     monkeypatch.setattr(tray_module.production_update, "UP_BEFORE_AN_UPDATE_S", 0.0)
-    monkeypatch.setattr(tray_module, "launch_broker", lambda argv, config, logger: None)
-    monkeypatch.setattr(tray_module, "terminate_broker", lambda logger: happened.append("stopped the broker"))
+
+    class _Brokers:
+        def __init__(self, _config, _logger):
+            pass
+
+        def launch(self, _argv):
+            pass
+
+        def terminate(self):
+            happened.append("stopped the broker")
+
+    monkeypatch.setattr(tray_module, "LaunchedBrokers", _Brokers)
     monkeypatch.setattr(tray_module.production_update, "waits_for_programs_to_close",
                         lambda checkout: checkout == PROJECT_DIR)
     monkeypatch.setattr(tray_module.production_update, "start_again_after",
@@ -630,7 +642,51 @@ def test_the_broker_is_started_detached_with_no_console_of_its_own(cfg_path):
         kwargs["stdout"].close()
         return _ABrokerThatEnds()
 
-    tray_module.launch_broker(["broker"], load_config(cfg_path), logging.getLogger("test.tray"), popen=popen)
+    tray_module.LaunchedBrokers(
+        load_config(cfg_path), logging.getLogger("test.tray"), popen=popen).launch(["broker"])
 
     assert asked["creationflags"] == (
         tray_module.subprocess.CREATE_NO_WINDOW | tray_module.subprocess.DETACHED_PROCESS)
+
+
+class _ABrokerTheTrayEnds:
+    pid = 4321
+
+    def __init__(self):
+        self.ended = threading.Event()
+
+    def wait(self) -> int:
+        self.ended.wait(timeout=5.0)
+        return 0xFFFFFFFF
+
+
+def _said_ending(caplog, *, timeout: float) -> logging.LogRecord:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for record in caplog.records:
+            if "ended" in record.getMessage():
+                return record
+        time.sleep(0.01)
+    raise AssertionError("the tray never said how the broker ended")
+
+
+def _launched(broker):
+    def popen(_argv, **kwargs):
+        kwargs["stdout"].close()
+        return broker
+    return popen
+
+
+def test_a_broker_the_tray_ended_itself_is_no_warning(cfg_path, caplog):
+    broker = _ABrokerTheTrayEnds()
+    brokers = tray_module.LaunchedBrokers(
+        load_config(cfg_path), logging.getLogger("test.tray"),
+        popen=_launched(broker), end_them=broker.ended.set)
+
+    with caplog.at_level(logging.INFO, logger="test.tray"):
+        brokers.launch(["broker"])
+        brokers.terminate()
+        ended = _said_ending(caplog, timeout=5.0)
+
+    assert ended.levelno == logging.INFO
+    assert "4321" in ended.getMessage()

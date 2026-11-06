@@ -11,7 +11,7 @@ from app_support.launcher import launchers
 from app_support.process_identity_check import ProcessName, assert_the_process_is_named
 
 from osr2_broker.process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE
-from osr2_broker.tray import BrokerSupervisor, _name_this_process, terminate_broker
+from osr2_broker.tray import BrokerSupervisor, LaunchedBrokers, _name_this_process
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 LAUNCHER = next(launcher for launcher in launchers(PROJECT_DIR)
@@ -67,7 +67,7 @@ class TestTheBroker:
 
     def test_the_sweep_that_kills_it_knows_the_name_it_runs_under(self):
         with patch("osr2_broker.tray.subprocess.run") as run:
-            terminate_broker(logging.getLogger("test"))
+            LaunchedBrokers(SimpleNamespace(), logging.getLogger("test")).terminate()
 
         assert NAMER.process_name_pattern in run.call_args.args[0][-1]
         assert run.call_args.args[0][-1] == (
