@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -240,28 +241,47 @@ def _taken(request: Path) -> bool:
     return True
 
 
-def launch_broker(argv: list[str], config, logger, *, popen=None) -> None:
-    launcher_log = config.log_file("broker_service_launcher").open("a", encoding="utf-8")
-    broker = (popen or subprocess.Popen)(
-        argv,
-        cwd=str(PROJECT_DIR),
-        stdout=launcher_log,
-        stderr=subprocess.STDOUT,
-        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
-    )
-    logger.info("Launched broker (pid %d)", broker.pid)
-    start_daemon_thread(target=_say_how_it_ended, args=(broker, logger), name="broker-ended")
+class LaunchedBrokers:
+    def __init__(self, config, logger, *, popen=None, end_them=None):
+        self._config = config
+        self._logger = logger
+        self._popen = popen or subprocess.Popen
+        self._end_them = end_them or (lambda: end_the_processes_running("osr2_broker.app"))
+        self._lock = threading.Lock()
+        self._running: set[int] = set()
+        self._asked_to_end: set[int] = set()
 
+    def launch(self, argv: list[str]) -> None:
+        launcher_log = self._config.log_file("broker_service_launcher").open("a", encoding="utf-8")
+        broker = self._popen(
+            argv,
+            cwd=str(PROJECT_DIR),
+            stdout=launcher_log,
+            stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+        )
+        with self._lock:
+            self._running.add(broker.pid)
+        self._logger.info("Launched broker (pid %d)", broker.pid)
+        start_daemon_thread(target=self._say_how_it_ended, args=(broker,), name="broker-ended")
 
-def _say_how_it_ended(broker: subprocess.Popen, logger) -> None:
-    code = broker.wait()
-    logger.log(logging.INFO if code == 0 else logging.WARNING,
-               "Broker (pid %d) ended: exit code %#x", broker.pid, code)
+    def terminate(self) -> None:
+        with self._lock:
+            self._asked_to_end |= self._running
+        self._end_them()
+        self._logger.info("Terminated broker")
 
-
-def terminate_broker(logger) -> None:
-    end_the_processes_running("osr2_broker.app")
-    logger.info("Terminated broker")
+    def _say_how_it_ended(self, broker: subprocess.Popen) -> None:
+        code = broker.wait()
+        with self._lock:
+            self._running.discard(broker.pid)
+            asked = broker.pid in self._asked_to_end
+            self._asked_to_end.discard(broker.pid)
+        if asked:
+            self._logger.info("Broker (pid %d) ended as the tray asked", broker.pid)
+        else:
+            self._logger.log(logging.INFO if code == 0 else logging.WARNING,
+                             "Broker (pid %d) ended: exit code %#x", broker.pid, code)
 
 
 def _guarded_tick(tray_app: BrokerTrayApp, logger) -> None:
@@ -281,10 +301,11 @@ def start_the_tray(config, logger, *, preview_claim: int | None, shown_as: Previ
     tray = BrokerTray(window_title(APP_NAME, shown_as))
     tray.setIcon(app_icon(ICON_PATH, shown_as))
 
+    brokers = LaunchedBrokers(config, logger)
     supervisor = BrokerSupervisor(
         config,
-        launch=lambda argv_: launch_broker(argv_, config, logger),
-        terminate=lambda: terminate_broker(logger),
+        launch=brokers.launch,
+        terminate=brokers.terminate,
     )
 
     updates = None if hands_back else production_update.UpdateWatch(
