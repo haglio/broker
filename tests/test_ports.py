@@ -114,7 +114,7 @@ class TestResolveMfpSerialPort:
         assert result == "COM0COM\\PORT\\CNCA1"
         assert mfp_config.read_text(encoding="utf-8") == before
 
-    def test_ensure_does_not_clobber_a_config_it_cannot_parse(self, tmp_path):
+    def test_a_config_that_will_not_parse_is_most_likely_mfp_caught_mid_write_and_is_left_alone_not_rewritten_from_half_a_file(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         logger = logging.getLogger("test.broker")
         mfp_config.write_text('{"OutputTarget": {"Items": [{"Selec', encoding="utf-8")
@@ -268,7 +268,7 @@ class TestMfpConfigEdgeCases:
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         assert _read_mfp_config_payload(mfp_config) == {}
 
-    def test_a_player_config_that_will_not_parse_is_left_alone_rather_than_rewritten(self, tmp_path):
+    def test_a_player_config_that_will_not_parse_reads_as_none_not_as_empty_which_would_invite_a_clobbering_rewrite(self, tmp_path):
         mfp_config = tmp_path / "MultiFunPlayer.config.json"
         mfp_config.write_text("NOT JSON", encoding="utf-8")
         assert _read_mfp_config_payload(mfp_config) is None

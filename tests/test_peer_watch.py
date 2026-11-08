@@ -66,12 +66,15 @@ class TestStartingEvolver:
 
         assert popen.call_args.kwargs["creationflags"] & subprocess.CREATE_NO_WINDOW
 
-    def test_a_machine_with_no_evolver_on_it_starts_nothing(self, tmp_path):
+    def test_a_machine_with_no_evolver_on_it_starts_nothing_and_says_nothing_or_the_log_would_hear_it_every_fifteen_minutes_forever(
+            self, tmp_path, caplog):
         popen = MagicMock()
 
-        peer_watch.launch_evolver(tmp_path / "absent.vbs", LOG, popen=popen)
+        with caplog.at_level(logging.DEBUG, logger=LOG.name):
+            peer_watch.launch_evolver(tmp_path / "absent.vbs", LOG, popen=popen)
 
         popen.assert_not_called()
+        assert caplog.records == []
 
     def test_a_launch_says_so_in_the_log(self, launcher, caplog):
         with caplog.at_level(logging.INFO, logger=LOG.name):
@@ -80,11 +83,11 @@ class TestStartingEvolver:
         assert "Evolver was not running" in caplog.text
 
 
-class TestTheWatch:
+class TestTheTrayWatchesEvolverWhichHasNoSupervisorOfItsOwnAndWatchesBack:
     def _watch(self, cfg_path):
         return peer_watch.watch_evolver(load_config(cfg_path), LOG)
 
-    def test_an_evolver_that_is_up_is_left_alone(self, cfg_path):
+    def test_an_evolver_that_is_up_is_left_alone_nothing_here_ever_ends_one_a_kill_on_a_misread_could_not_be_undone(self, cfg_path):
         with patch.object(peer_watch, "evolver_is_up", return_value=True), \
              patch.object(peer_watch, "launch_evolver") as launch:
             self._watch(cfg_path).tick()
@@ -153,14 +156,14 @@ class TestTheTrayKeepsTheWatch:
         return BrokerTrayApp(
             load_config(cfg_path), FakeSupervisor(running=running), tray, TrayHooks(**hooks))
 
-    def test_the_watchdog_beat_reaches_the_watch(self, tray, cfg_path):
+    def test_every_watchdog_beat_reaches_the_watch_which_throttles_itself_to_its_own_interval(self, tray, cfg_path):
         peer = MagicMock()
 
         self._app(cfg_path, tray, peer=peer).tick()
 
         peer.tick.assert_called_once()
 
-    def test_pausing_the_broker_does_not_stop_watching_evolver(self, tray, cfg_path):
+    def test_pausing_the_broker_does_not_stop_watching_evolver_the_pause_is_about_the_osr2_not_the_app_next_door(self, tray, cfg_path):
         peer = MagicMock()
         app = self._app(cfg_path, tray, peer=peer)
 
@@ -173,7 +176,7 @@ class TestTheTrayKeepsTheWatch:
     def test_a_tray_with_no_peer_still_beats(self, tray, cfg_path):
         self._app(cfg_path, tray).tick()
 
-    def test_quitting_stands_the_broker_down(self, tray, cfg_path):
+    def test_quitting_stands_the_broker_down_every_other_death_of_the_tray_leaves_no_mark_and_evolver_undoes_it(self, tray, cfg_path):
         stood_down: list[str] = []
 
         app = self._app(cfg_path, tray, stand_down=lambda: stood_down.append("marked"))
@@ -181,7 +184,7 @@ class TestTheTrayKeepsTheWatch:
 
         assert stood_down == ["marked"]
 
-    def test_quitting_stands_down_before_the_broker_goes(self, tray, cfg_path):
+    def test_quitting_marks_the_stand_down_before_the_broker_goes_so_a_tray_killed_mid_quit_still_leaves_it_for_evolver(self, tray, cfg_path):
         order: list[str] = []
         supervisor = FakeSupervisor(running=True)
         supervisor.stop = lambda: order.append("stopped")
@@ -191,9 +194,9 @@ class TestTheTrayKeepsTheWatch:
 
         assert order == ["marked", "stopped"]
 
-    def test_the_default_stand_down_is_the_brokers_own(self, tray, cfg_path,
-                                                       stand_down_marker):
-        wrote, _ = stand_down_marker
+    def test_the_default_stand_down_is_the_brokers_own_key_spelled_here_as_evolver_reads_it_since_the_two_share_no_code(
+            self, tray, cfg_path, stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker):
+        wrote, _ = stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker
 
         self._app(cfg_path, tray).quit()
 
@@ -201,22 +204,17 @@ class TestTheTrayKeepsTheWatch:
 
 
 class TestStartingTheTray:
-    def test_a_relaunch_over_a_live_tray_leaves_the_stand_down_alone(
-            self, cfg_path, stand_down_marker):
-
-        with (
-            patch.object(tray_module, "configure_logging", return_value=LOG),
-            patch.object(tray_module, "install_exception_logging"),
-            patch.object(tray_module, "_name_this_process"),
-            patch.object(tray_module, "try_acquire_mutex", return_value=None),
-        ):
+    def test_a_relaunch_over_a_live_tray_leaves_the_stand_down_alone_the_scheduled_task_relaunches_every_two_minutes(
+            self, cfg_path, stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker,
+            the_trays_main_kept_from_the_excepthooks_the_log_file_and_a_copy_of_pythonw_into_the_live_venv):
+        with patch.object(tray_module, "try_acquire_mutex", return_value=None):
             assert tray_module.main(["--config", str(cfg_path)]) == 0
 
-        _, cleared = stand_down_marker
+        _, cleared = stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker
         cleared.assert_not_called()
 
-    def test_the_clear_names_the_broker(self, stand_down_marker):
+    def test_the_clear_names_the_broker(self, stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker):
         peer_watch.clear_broker_stand_down()
 
-        _, cleared = stand_down_marker
+        _, cleared = stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker
         assert cleared.call_args[0][0] == "broker"

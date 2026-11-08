@@ -26,14 +26,22 @@ from osr2_broker.tray import BrokerSupervisor, BrokerTray, BrokerTrayApp, TrayHo
 from tests.heard import what_is_said_on
 
 
-def test_menu_is_painted_in_the_shared_dark_palette(qapp):
-    tray = BrokerTray()
+def _the_trays_own_menu_drawn_an_empty_one_has_no_width(tray):
     menu = tray.contextMenu()
     menu.resize(menu.sizeHint())
-    image = menu.grab().toImage()
+    return menu, menu.grab().toImage()
+
+
+def _inside_the_row_clear_of_its_border_and_of_its_text_in_any_font(row):
+    return row.right() - 2, row.center().y()
+
+
+def test_a_tray_menu_has_no_window_to_take_the_familys_rules_from_so_it_sets_them_itself_and_paints_dark(qapp):
+    tray = BrokerTray()
+    menu, image = _the_trays_own_menu_drawn_an_empty_one_has_no_width(tray)
 
     row = menu.actionGeometry(tray.start_action)
-    pixel = image.pixelColor(row.right() - 2, row.center().y())
+    pixel = image.pixelColor(*_inside_the_row_clear_of_its_border_and_of_its_text_in_any_font(row))
     assert pixel.name() == BG_TERTIARY.name()
 
 
@@ -47,24 +55,20 @@ def _brightest_text_pixel(image, rect):
 
 def test_the_status_line_reads_as_a_label_not_a_command(qapp):
     tray = BrokerTray()
-    menu = tray.contextMenu()
-    menu.resize(menu.sizeHint())
-    image = menu.grab().toImage()
+    menu, image = _the_trays_own_menu_drawn_an_empty_one_has_no_width(tray)
 
     status = _brightest_text_pixel(image, menu.actionGeometry(tray.status_action))
     command = _brightest_text_pixel(image, menu.actionGeometry(tray.start_action))
     assert status < command
 
 
-def test_the_item_under_the_cursor_lights_up(qapp):
+def test_the_item_under_the_cursor_lights_up_in_the_familys_blue_a_stylesheet_takes_qts_own_highlight_away(qapp):
     tray = BrokerTray()
-    menu = tray.contextMenu()
-    menu.resize(menu.sizeHint())
-    menu.setActiveAction(tray.start_action)
-    image = menu.grab().toImage()
+    tray.contextMenu().setActiveAction(tray.start_action)
+    menu, image = _the_trays_own_menu_drawn_an_empty_one_has_no_width(tray)
 
     row = menu.actionGeometry(tray.start_action)
-    fill = image.pixelColor(row.right() - 2, row.center().y())
+    fill = image.pixelColor(*_inside_the_row_clear_of_its_border_and_of_its_text_in_any_font(row))
     assert fill.name() == BLUE.name()
 
 
@@ -101,7 +105,7 @@ def test_each_command_wears_the_family_s_icon_as_the_evolver_s_menu_does(qapp):
     assert _drawn(tray.quit_action.icon()) == _family_icon("power")
 
 
-def test_supervisor_reads_liveness_from_the_broker_s_own_mutex(cfg_path):
+def test_supervisor_reads_liveness_from_the_brokers_own_per_config_mutex_never_a_process_scan_that_could_take_a_command_line_naming_it_for_it(cfg_path):
     config = load_config(cfg_path)
     probed = []
     supervisor = BrokerSupervisor(
@@ -138,13 +142,15 @@ def test_start_runs_the_broker_module_against_our_config(cfg_path):
 
     supervisor.start()
 
+    the_copy_or_the_bare_interpreter_when_the_copy_cannot_be_made = NAMER.named_exe(
+        sys.executable, BROKER_ROLE)
     assert calls["launched"] == [
-        [NAMER.named_exe(sys.executable, BROKER_ROLE), "-m", "osr2_broker.app",
+        [the_copy_or_the_bare_interpreter_when_the_copy_cannot_be_made, "-m", "osr2_broker.app",
          "--config", str(cfg_path)],
     ]
 
 
-def test_a_tray_starts_the_broker_from_its_own_checkout(cfg_path):
+def test_a_tray_starts_the_broker_from_its_own_checkout_where_python_m_finds_the_package_first_so_a_branchs_tray_runs_the_branchs_broker(cfg_path):
     closed = MagicMock(pid=4321)
     closed.wait.return_value = 0
     with patch.object(tray_module.subprocess, "Popen", return_value=closed) as popen:
@@ -178,7 +184,7 @@ def test_start_leaves_a_live_broker_alone(cfg_path):
     assert calls["launched"] == []
 
 
-def test_start_replaces_a_broker_another_checkout_started(cfg_path, tmp_path):
+def test_start_replaces_a_broker_another_checkout_started_so_a_previews_tray_runs_its_branchs_broker_and_the_production_tray_takes_it_back(cfg_path, tmp_path):
     supervisor, calls = _supervisor(cfg_path, running=True, running_from=tmp_path / "elsewhere")
 
     supervisor.start()
@@ -285,7 +291,7 @@ def test_restart_from_the_menu_replaces_a_live_broker(tray, cfg_path):
     assert supervisor.starts == 0
 
 
-def test_a_failed_beat_does_not_stop_the_watchdog(tray, cfg_path):
+def test_a_failed_beat_does_not_stop_the_watchdog_the_tray_is_the_brokers_only_supervisor(tray, cfg_path):
     class ExplodingSupervisor(FakeSupervisor):
         def is_running(self):
             raise OSError("WMI hiccup")
@@ -311,7 +317,7 @@ def test_opening_the_log_creates_it_first_so_the_editor_has_something(tray, cfg_
     assert opened == [log_path]
 
 
-def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
+def test_quitting_takes_the_broker_down_with_the_tray_nothing_else_would_supervise_it(tray, cfg_path):
     supervisor = FakeSupervisor(running=True)
     quit_calls = []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(quit_app=lambda: quit_calls.append(True)))
@@ -323,7 +329,7 @@ def test_quitting_takes_the_broker_down_with_the_tray(tray, cfg_path):
     assert quit_calls == [True]
 
 
-def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
+def test_quitting_a_preview_hands_the_broker_back_running_stopping_it_would_take_the_device_away_and_a_stand_down_would_keep_evolver_from_bringing_the_production_tray_back(tray, cfg_path):
     supervisor = FakeSupervisor(running=True)
     stood_down, handed_back, quit_calls = [], [], []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: stood_down.append(True),
@@ -339,7 +345,7 @@ def test_quitting_a_preview_hands_the_broker_back_still_running(tray, cfg_path):
     assert quit_calls == [True]
 
 
-def test_making_way_for_an_update_stops_the_broker_before_the_next_tray_is_started(tray, cfg_path):
+def test_making_way_for_an_update_stops_the_broker_first_nothing_of_this_checkout_may_run_while_it_updates_and_stands_nothing_down_so_evolver_still_brings_a_tray_back(tray, cfg_path):
     supervisor = FakeSupervisor(running=True)
     stood_down, started_with_the_broker_running, quit_calls = [], [], []
     app = BrokerTrayApp(load_config(cfg_path), supervisor, tray, TrayHooks(stand_down=lambda: stood_down.append(True),
@@ -402,7 +408,7 @@ def test_the_watchdog_looks_for_an_update_on_every_beat(tray, cfg_path):
     assert updates.ticks == 1
 
 
-def test_a_paused_broker_takes_no_update(tray, cfg_path):
+def test_a_paused_broker_takes_no_update_the_next_tray_would_know_nothing_of_the_pause_and_start_the_broker(tray, cfg_path):
     updates = FakeUpdateWatch()
     app = BrokerTrayApp(load_config(cfg_path), FakeSupervisor(running=True), tray, TrayHooks(updates=updates))
 
@@ -412,29 +418,26 @@ def test_a_paused_broker_takes_no_update(tray, cfg_path):
     assert updates.ticks == 0
 
 
-def test_a_second_tray_stands_down(cfg_path):
-    with patch.object(tray_module, "configure_logging",
-                      return_value=logging.getLogger("test.tray")), \
-         patch.object(tray_module, "install_exception_logging"), \
-         patch.object(tray_module, "_name_this_process"), \
-         patch.object(tray_module, "try_acquire_mutex", return_value=None) as acquire:
+def test_a_second_tray_stands_down(
+        cfg_path,
+        the_trays_main_kept_from_the_excepthooks_the_log_file_and_a_copy_of_pythonw_into_the_live_venv):
+    with patch.object(tray_module, "try_acquire_mutex", return_value=None) as acquire:
         assert tray_module.main(["--config", str(cfg_path)]) == 0
 
     acquire.assert_called_once_with(tray_module.MUTEX_TRAY)
 
 
-def test_a_preview_takes_the_tray_over_and_leaves_the_production_interpreter_unnamed(
-        cfg_path, monkeypatch):
+def test_a_preview_takes_the_tray_over_and_leaves_the_production_interpreter_unnamed_naming_would_write_a_copy_into_the_production_venv_which_the_production_tray_names_for_itself(
+        cfg_path, monkeypatch,
+        the_trays_main_kept_from_the_excepthooks_the_log_file_and_a_copy_of_pythonw_into_the_live_venv):
     monkeypatch.setenv(branch_session.FLAG, "1")
+    named = []
+    monkeypatch.setattr(tray_module, "_name_this_process", lambda: named.append(True))
 
-    with patch.object(tray_module, "configure_logging",
-                      return_value=logging.getLogger("test.tray")), \
-         patch.object(tray_module, "install_exception_logging"), \
-         patch.object(tray_module, "_name_this_process") as named, \
-         patch.object(branch_session, "take_the_tray_over", return_value=None) as took_over:
+    with patch.object(branch_session, "take_the_tray_over", return_value=None) as took_over:
         assert tray_module.main(["--config", str(cfg_path)]) == 0
 
-    named.assert_not_called()
+    assert named == []
     took_over.assert_called_once_with(end_the_other_trays=branch_session.end_the_other_trays)
 
 
@@ -690,3 +693,13 @@ def test_a_broker_the_tray_ended_itself_is_no_warning(cfg_path, caplog):
 
     assert ended.levelno == logging.INFO
     assert "4321" in ended.getMessage()
+
+
+def test_a_tray_started_over_a_broker_it_did_not_launch_can_still_stop_it_a_restarted_tray_holds_no_handle_for_the_one_it_inherited(cfg_path):
+    ended = []
+    brokers = tray_module.LaunchedBrokers(
+        load_config(cfg_path), logging.getLogger("test.tray"), end_them=lambda: ended.append(True))
+
+    brokers.terminate()
+
+    assert ended == [True]

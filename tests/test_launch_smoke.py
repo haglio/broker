@@ -42,7 +42,7 @@ def _run_the_launchs_way(statements: list[str]) -> subprocess.CompletedProcess:
     )
 
 
-def test_the_launch_imports_everything_it_names():
+def test_the_launch_imports_everything_it_names_under_pythonw_a_failed_import_shows_nothing_the_tray_icon_never_appears():
     assert_every_import_resolves(
         _run_the_launchs_way, launch_imports(PACKAGE, LAUNCH_FILES))
 

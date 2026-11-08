@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from unittest.mock import MagicMock, patch
 
 from shared_ui.loading_window import LoadingCanceled
@@ -25,7 +24,7 @@ class _Loading:
         self._happened.append("done")
 
 
-def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, list[str]]:
+def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, list[str]]:  # noqa: PLR0917
     happened: list[str] = []
     tray = MagicMock()
     tray.show.side_effect = lambda: happened.append("tray shown")
@@ -34,10 +33,7 @@ def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, lis
         happened.append("tray built")
         return tray, MagicMock(), None
 
-    with patch.object(tray_module, "configure_logging", return_value=logging.getLogger("test.tray")), \
-         patch.object(tray_module, "install_exception_logging"), \
-         patch.object(tray_module, "_name_this_process"), \
-         patch.object(tray_module, "try_acquire_mutex", return_value=7), \
+    with patch.object(tray_module, "try_acquire_mutex", return_value=7), \
          patch.object(tray_module, "claim_taskbar_identity"), \
          loading_at_the_click(_Loading(happened, canceled=canceled)), \
          patch.object(tray_module, "start_the_tray", side_effect=built), \
@@ -46,14 +42,18 @@ def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, lis
     return exit_code, happened
 
 
-def test_the_loading_screen_walks_the_trays_start_and_goes_once_the_tray_shows(qapp, cfg_path):
+def test_the_loading_screen_walks_the_trays_start_and_goes_once_the_tray_shows(
+        qapp, cfg_path,
+        the_trays_main_kept_from_the_excepthooks_the_log_file_and_a_copy_of_pythonw_into_the_live_venv):
     exit_code, happened = _start_the_tray(qapp, cfg_path)
 
     assert exit_code == 0
     assert happened == [*(f"said {step}" for step, _weight in tray_module.STEPS), "tray built", "tray shown", "done"]
 
 
-def test_esc_on_the_loading_screen_starts_no_tray(qapp, cfg_path):
+def test_esc_on_the_loading_screen_starts_no_tray(
+        qapp, cfg_path,
+        the_trays_main_kept_from_the_excepthooks_the_log_file_and_a_copy_of_pythonw_into_the_live_venv):
     exit_code, happened = _start_the_tray(qapp, cfg_path, canceled=True)
 
     assert exit_code == 0
@@ -69,8 +69,10 @@ def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_the_brokers_tas
         cancel_hint="Press Esc to cancel opening Broker", app_id=taskbar_identity(APP_USER_MODEL_ID, None))
 
 
-def test_starting_the_tray_forgets_an_earlier_stand_down(qapp, cfg_path, stand_down_marker):
+def test_starting_the_tray_forgets_an_earlier_stand_down_being_started_is_the_user_asking_for_the_broker(
+        qapp, cfg_path, stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker,
+        the_trays_main_kept_from_the_excepthooks_the_log_file_and_a_copy_of_pythonw_into_the_live_venv):
     _start_the_tray(qapp, cfg_path)
 
-    _, cleared = stand_down_marker
+    _, cleared = stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker
     cleared.assert_called_once()

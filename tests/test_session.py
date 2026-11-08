@@ -17,7 +17,7 @@ from osr2_broker.question import DeviceQuestion
 from osr2_broker.session import SessionRetryState
 from osr2_broker.tcode_udp import NO_LISTENER_PORT
 from osr2_broker.tcode_window import TCodeWriteWindow
-from tests.conftest import FakePowerOn
+from tests.conftest import FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice
 from tests.sessions import NotActuallyRunningSoNoThreadIsLeftSpinning, StampSpy, make_session
 
 
@@ -924,7 +924,7 @@ def test_a_retract_takes_the_osr2_from_whoever_holds_the_slot_before_it_is_sched
 
 def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot_nobody_drove_a_device_that_was_off():
     events: list = []
-    session = _a_session_telling(events, power_on=FakePowerOn(breaks_silence=True))
+    session = _a_session_telling(events, power_on=FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice(breaks_silence=True))
     session_stop = threading.Event()
 
     class FakeReal:
@@ -994,7 +994,7 @@ def test_port_zero_means_no_listener_binding_it_would_take_a_port_no_sender_can_
 def test_the_osr2_speaking_after_a_silence_is_parked_switched_on_it_comes_up_halfway_along_its_travel():
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
-        monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),
+        monotonic=lambda: clock[0], power_on=FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice(breaks_silence=True),
     )
     session_stop = threading.Event()
     retry_state = SessionRetryState()
@@ -1023,7 +1023,7 @@ def test_the_osr2_speaking_after_a_silence_is_parked_switched_on_it_comes_up_hal
 def test_the_osr2_talking_on_without_a_silence_is_left_alone():
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
-        monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=False),
+        monotonic=lambda: clock[0], power_on=FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice(breaks_silence=False),
     )
     session_stop = threading.Event()
     retry_state = SessionRetryState()
@@ -1052,7 +1052,7 @@ def test_the_osr2_talking_on_without_a_silence_is_left_alone():
 def test_a_park_on_power_on_leaves_the_script_feed_running_a_device_that_was_off_had_no_tail_to_swallow():
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
-        monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),
+        monotonic=lambda: clock[0], power_on=FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice(breaks_silence=True),
     )
     session_stop = threading.Event()
     retry_state = SessionRetryState()
