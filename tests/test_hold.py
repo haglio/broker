@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 from osr2_broker.hold import PARK, RETRACT, HoldScheduler
 
+_WAITED_OUT_IN_FULL_WHEN_THE_LOCK_HOLDS = 0.25
+
 
 def _nothing() -> None:
     pass
@@ -44,7 +46,7 @@ def test_a_park_sets_the_device_down_at_home_over_a_whole_second():
     real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
-def test_scheduling_mutes_mfp_at_once_rather_than_when_the_write_lands():
+def test_mfp_is_muted_the_moment_a_hold_is_asked_for_so_its_script_tail_cannot_undo_the_move():
     clock = [10.0]
     holds, _logger = _build(clock)
 
@@ -65,17 +67,17 @@ def test_the_mute_survives_to_the_last_moment_of_the_grace_window():
     holds, _logger = _build(clock)
 
     holds.schedule(PARK, "OmniPause: park scheduled")
-    clock[0] = 10.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS - 0.001
+    clock[0] = 10.0 + HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS - 0.001
 
     assert holds.suppresses_mfp() is True
 
 
-def test_the_mute_heals_itself_once_the_grace_window_has_elapsed():
+def test_the_healed_mute_says_so_once_though_mfp_asks_on_every_packet():
     clock = [10.0]
     holds, logger = _build(clock)
 
     holds.schedule(PARK, "OmniPause: park scheduled")
-    clock[0] = 10.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS
+    clock[0] = 10.0 + HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS
 
     assert holds.suppresses_mfp() is False
     assert holds.suppresses_mfp() is False
@@ -99,7 +101,7 @@ def test_cancelling_drops_both_the_pending_write_and_the_mute():
     assert holds.suppresses_mfp() is False
 
 
-def test_a_handover_park_is_scheduled_without_muting_mfp():
+def test_a_handover_park_leaves_mfp_unmuted_mfp_is_what_takes_the_device_back():
     clock = [10.0]
     holds, _logger = _build(clock)
     real_port = MagicMock()
@@ -128,7 +130,7 @@ def test_a_fired_hold_is_handed_back_to_the_caller():
     assert holds.fire_due(MagicMock(), lock, _nothing) is RETRACT
 
 
-def test_a_second_hold_replaces_the_one_still_waiting_out_its_delay():
+def test_a_retract_during_a_park_s_delay_is_the_emergency_and_replaces_it_rather_than_being_dropped():
     clock = [10.0]
     holds, _logger = _build(clock)
     real_port = MagicMock()
@@ -138,16 +140,17 @@ def test_a_second_hold_replaces_the_one_still_waiting_out_its_delay():
     clock[0] = 10.5
     holds.schedule(RETRACT, "OmniPause: retract scheduled")
 
-    clock[0] = 11.0
+    when_the_park_would_have_fired = 10.0 + HoldScheduler.DELAY_SECONDS
+    clock[0] = when_the_park_would_have_fired
     holds.fire_due(real_port, lock, _nothing)
     real_port.write.assert_not_called()
 
-    clock[0] = 11.5
+    clock[0] = 10.5 + HoldScheduler.DELAY_SECONDS
     holds.fire_due(real_port, lock, _nothing)
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
-def test_the_same_hold_asked_for_again_keeps_the_deadline_it_has():
+def test_a_hold_asked_for_every_tick_keeps_its_first_deadline_so_the_write_is_never_pushed_out():
     clock = [10.0]
     holds, logger = _build(clock)
     real_port = MagicMock()
@@ -182,7 +185,7 @@ def test_the_hold_is_written_under_the_caller_s_serial_lock():
     assert held_during_write == [True]
 
 
-def test_the_direct_write_is_recorded_before_the_hold_is_logged():
+def test_the_direct_write_is_recorded_before_the_slow_log_line_mfp_s_thread_runs_the_moment_the_lock_drops():
     clock = [10.0]
     holds, logger = _build(clock)
     order: list[str] = []
@@ -196,7 +199,7 @@ def test_the_direct_write_is_recorded_before_the_hold_is_logged():
     assert order == ["recorded", "logged"]
 
 
-def test_the_settle_delay_is_one_second():
+def test_the_settle_delay_is_a_literal_second_shorter_would_write_the_hold_into_the_script_tail():
     clock = [10.0]
     holds, _logger = _build(clock)
     real_port = MagicMock()
@@ -211,7 +214,7 @@ def test_the_settle_delay_is_one_second():
     assert holds.fire_due(real_port, lock, _nothing) is PARK
 
 
-def test_the_mute_grace_is_five_seconds():
+def test_the_mute_heals_without_a_resume_after_five_literal_seconds_a_lost_resume_costs_no_more():
     clock = [10.0]
     holds, _logger = _build(clock)
 
@@ -224,6 +227,41 @@ def test_the_mute_grace_is_five_seconds():
     assert holds.suppresses_mfp() is False
 
 
+def test_the_mute_outlasts_the_settle_delay_or_mfp_would_undo_the_hold_it_just_wrote():
+    assert HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS > HoldScheduler.DELAY_SECONDS
+
+
+def test_a_hold_asked_for_again_renews_the_mute_though_its_deadline_and_log_line_are_absorbed():
+    clock = [10.0]
+    holds, _logger = _build(clock)
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 10.5
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 10.5 + HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS - 0.1
+
+    assert holds.suppresses_mfp() is True
+
+
+def test_nothing_that_can_block_runs_under_the_scheduler_s_lock_not_the_log_lines_nor_the_write():
+    clock = [10.0]
+    holds, logger = _build(clock)
+    lock_held: list[bool] = []
+    logger.info.side_effect = lambda *_a: lock_held.append(holds._lock.locked())
+
+    class FakeReal:
+        def write(self, _data):
+            lock_held.append(holds._lock.locked())
+
+    holds.schedule(PARK, "OmniPause: park scheduled")
+    clock[0] = 11.0
+    holds.fire_due(FakeReal(), threading.Lock(), _nothing)
+    clock[0] = 11.0 + HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS
+    holds.suppresses_mfp()
+
+    assert lock_held == [False] * 4
+
+
 def test_a_park_arriving_mid_check_keeps_the_mute_it_just_asked_for():
     clock = [100.0]
     at_the_comparison = threading.Event()
@@ -232,12 +270,12 @@ def test_a_park_arriving_mid_check_keeps_the_mute_it_just_asked_for():
     def monotonic() -> float:
         if threading.current_thread().name == "broker-virtual":
             at_the_comparison.set()
-            _slipped_in.wait(timeout=0.25)
+            _slipped_in.wait(timeout=_WAITED_OUT_IN_FULL_WHEN_THE_LOCK_HOLDS)
         return clock[0]
 
     holds = HoldScheduler(monotonic=monotonic, logger=MagicMock())
     holds.schedule(PARK, "OmniPause: park scheduled")
-    clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS
+    clock[0] = 100.0 + HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS
 
     def tick():
         at_the_comparison.wait(timeout=5.0)

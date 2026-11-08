@@ -32,20 +32,24 @@ def test_set_auto_writes_mode_and_sends_udp_messages():
     logger.info.assert_called_once_with("AUTO %s", "ON")
 
 
-def test_set_auto_skips_transition_log_when_value_is_unchanged():
+def test_auto_mode_is_published_only_when_it_changes():
+    writes: list[tuple[Path, str]] = []
+    sends: list[str] = []
     logger = MagicMock()
     controller = BrokerAutoController(
         state_file=Path("mode.txt"),
         udp_target=("127.0.0.1", 9001),
         logger=logger,
-        write_mode=lambda _path, _value, _logger: None,
-        udp_send=lambda _sock, _host, _port, _msg: None,
+        write_mode=lambda path, value, _logger: writes.append((path, value)),
+        udp_send=lambda _sock, _host, _port, msg: sends.append(msg),
     )
 
     controller.set_auto(object(), False)
     controller.set_auto(object(), False)
 
     assert logger.info.call_count == 0
+    assert writes == []
+    assert sends == []
 
 
 def test_handle_line_infers_auto_mode_from_bpm_message():
@@ -80,7 +84,7 @@ def test_handle_line_infers_auto_mode_from_motion_message():
     assert "AUTO 1" in sends
 
 
-def test_handle_line_sends_bpm_and_sync_messages():
+def test_every_motion_line_says_auto_is_on_but_only_the_first_publishes_it_each_once_resent_the_seed_bpm_ahead_of_the_real_tempo():
     writes: list[tuple[Path, str]] = []
     sends: list[str] = []
     controller = BrokerAutoController(

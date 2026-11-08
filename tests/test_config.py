@@ -16,7 +16,7 @@ REQUIRED_KEYS: dict = {
 }
 
 
-def _write_minimal_config(tmp_path: Path, extra: dict | None = None) -> Path:
+def _write_a_config_that_leaves_every_default_to_be_read(tmp_path: Path, extra: dict | None = None) -> Path:
     cfg = dict(REQUIRED_KEYS)
     if extra:
         cfg.update(extra)
@@ -26,35 +26,35 @@ def _write_minimal_config(tmp_path: Path, extra: dict | None = None) -> Path:
 
 
 def test_idle_minutes_defaults_to_fifteen(tmp_path: Path):
-    config = load_config(_write_minimal_config(tmp_path))
+    config = load_config(_write_a_config_that_leaves_every_default_to_be_read(tmp_path))
     assert config.idle_minutes == 15.0
 
 
 def test_tcode_udp_port_defaults_to_50557(tmp_path: Path):
-    config = load_config(_write_minimal_config(tmp_path))
+    config = load_config(_write_a_config_that_leaves_every_default_to_be_read(tmp_path))
     assert config.tcode_udp_port == 50557
 
 
-def test_mfp_config_path_is_none_when_the_config_names_none(tmp_path: Path):
-    assert load_config(_write_minimal_config(tmp_path)).mfp_config_path is None
-    assert load_config(_write_minimal_config(tmp_path, {"mfp_config_path": ""})).mfp_config_path is None
+def test_an_omitted_mfp_config_path_is_none_not_the_config_s_directory_read_as_mfp_s_config(tmp_path: Path):
+    assert load_config(_write_a_config_that_leaves_every_default_to_be_read(tmp_path)).mfp_config_path is None
+    assert load_config(_write_a_config_that_leaves_every_default_to_be_read(tmp_path, {"mfp_config_path": ""})).mfp_config_path is None
 
 
 def test_a_relative_state_dir_resolves_against_the_config_s_directory(tmp_path: Path):
-    config = load_config(_write_minimal_config(tmp_path, {"state_dir": "state"}))
+    config = load_config(_write_a_config_that_leaves_every_default_to_be_read(tmp_path, {"state_dir": "state"}))
     assert config.state_dir == (tmp_path / "state").resolve()
 
 
 def test_a_relative_mfp_config_path_resolves_against_the_config_s_directory(tmp_path: Path):
     config = load_config(
-        _write_minimal_config(tmp_path, {"mfp_config_path": "mfp/MultiFunPlayer.config.json"})
+        _write_a_config_that_leaves_every_default_to_be_read(tmp_path, {"mfp_config_path": "mfp/MultiFunPlayer.config.json"})
     )
     assert config.mfp_config_path == (tmp_path / "mfp" / "MultiFunPlayer.config.json").resolve()
 
 
 def test_an_absolute_state_dir_passes_through_untouched(tmp_path: Path):
     absolute = (tmp_path / "elsewhere").resolve()
-    config = load_config(_write_minimal_config(tmp_path, {"state_dir": str(absolute)}))
+    config = load_config(_write_a_config_that_leaves_every_default_to_be_read(tmp_path, {"state_dir": str(absolute)}))
     assert config.state_dir == absolute
 
 
@@ -65,7 +65,7 @@ def test_a_missing_config_file_raises_file_not_found(tmp_path: Path):
 
 def test_ports_and_numbers_are_coerced_to_their_types(tmp_path: Path):
     config = load_config(
-        _write_minimal_config(tmp_path, {"baud": "115200", "udp_port": "50555"})
+        _write_a_config_that_leaves_every_default_to_be_read(tmp_path, {"baud": "115200", "udp_port": "50555"})
     )
     assert config.baud == 115200
     assert config.udp_port == 50555
@@ -76,7 +76,7 @@ def test_config_exposes_idle_state_file(cfg_path):
     assert config.osr2_idle_state_file == config.state_dir / "osr2_idle_state.txt"
 
 
-def test_a_config_short_of_a_required_key_says_which_and_in_which_file(tmp_path):
+def test_a_config_short_of_a_required_key_says_which_and_in_which_file_the_tray_has_no_console_for_a_bare_error(tmp_path):
     cfg = tmp_path / "short.json"
     cfg.write_text(json.dumps({k: v for k, v in REQUIRED_KEYS.items() if k != "baud"}), encoding="utf-8")
 

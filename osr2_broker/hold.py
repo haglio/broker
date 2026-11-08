@@ -22,7 +22,7 @@ RETRACT = Hold(_moved_by(osr2_hold.RETRACT), "Retracting OSR2 to position 9999")
 
 class HoldScheduler:
     DELAY_SECONDS = osr2_hold.HOLD_DELAY_S
-    SUPPRESS_GRACE_SECONDS = 5.0
+    HEAL_WITHOUT_RESUME_SECONDS = 5.0
 
     def __init__(self, *, monotonic, logger):
         self._monotonic = monotonic
@@ -34,18 +34,18 @@ class HoldScheduler:
 
     def schedule(self, hold: Hold, message: str) -> None:
         with self._lock:
-            armed = self._arm(hold)
+            armed = self._arm_holding_the_lock(hold)
             self._suppressed_since = self._monotonic()
         if armed:
             self._logger.info(message)
 
     def schedule_without_muting(self, hold: Hold, message: str) -> None:
         with self._lock:
-            if not self._arm(hold):
+            if not self._arm_holding_the_lock(hold):
                 return
         self._logger.info(message)
 
-    def _arm(self, hold: Hold) -> bool:
+    def _arm_holding_the_lock(self, hold: Hold) -> bool:
         if self._pending_time is not None and hold == self._pending:
             return False
         self._pending = hold
@@ -62,7 +62,7 @@ class HoldScheduler:
             since = self._suppressed_since
             if since is None:
                 return False
-            if self._monotonic() - since < self.SUPPRESS_GRACE_SECONDS:
+            if self._monotonic() - since < self.HEAL_WITHOUT_RESUME_SECONDS:
                 return True
             self._suppressed_since = None
         self._logger.info("MFP active after hold grace; resuming forwarding")
