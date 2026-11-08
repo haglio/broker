@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-# Only a name a framework or the runtime provably reads.
-
 # ctypes reads these from the WNDCLASSW struct layout.
 lpfnWndProc
 hInstance

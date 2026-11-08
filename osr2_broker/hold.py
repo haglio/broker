@@ -34,18 +34,18 @@ class HoldScheduler:
 
     def schedule(self, hold: Hold, message: str) -> None:
         with self._lock:
-            armed = self._arm_holding_the_lock(hold)
+            armed = self._arm_with_the_lock_already_held(hold)
             self._suppressed_since = self._monotonic()
         if armed:
             self._logger.info(message)
 
     def schedule_without_muting(self, hold: Hold, message: str) -> None:
         with self._lock:
-            if not self._arm_holding_the_lock(hold):
+            if not self._arm_with_the_lock_already_held(hold):
                 return
         self._logger.info(message)
 
-    def _arm_holding_the_lock(self, hold: Hold) -> bool:
+    def _arm_with_the_lock_already_held(self, hold: Hold) -> bool:
         if self._pending_time is not None and hold == self._pending:
             return False
         self._pending = hold

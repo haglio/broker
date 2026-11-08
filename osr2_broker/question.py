@@ -13,8 +13,8 @@ _ANSWER = re.compile(r"\btcode\s+v\d", re.IGNORECASE)
 class DeviceQuestion:
     QUESTION = b"D1\n"
     EVERY_SECONDS = 0.25
-    A_DEVICE_STILL_STARTING_UP_ANSWERS_WITHIN_SECONDS = 10.0
-    UNANSWERED_BEFORE_WARNING = int(A_DEVICE_STILL_STARTING_UP_ANSWERS_WITHIN_SECONDS / EVERY_SECONDS)
+    STARTUP_GRACE_SECONDS = 10.0
+    UNANSWERED_BEFORE_WARNING = int(STARTUP_GRACE_SECONDS / EVERY_SECONDS)
 
     def __init__(self, *, answer_file: Path, monotonic: Callable[[], float], logger,
                  wall_clock: Callable[[], float] = time.time):

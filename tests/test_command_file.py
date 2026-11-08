@@ -30,7 +30,8 @@ def test_an_unreadable_path_logs_and_reads_as_no_command(tmp_path: Path):
     logger.exception.assert_called_once()
 
 
-def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Path):
+def test_a_park_written_to_the_file_schedules_the_hold_exactly_once_a_tick_after_it_fired_schedules_no_second(
+        tmp_path: Path):
     clock = [10.0]
     cmd = tmp_path / "broker_cmd.txt"
     cmd.write_text("park", encoding="utf-8")
@@ -49,12 +50,8 @@ def test_a_park_written_to_the_file_schedules_the_hold_exactly_once(tmp_path: Pa
     real_port = MagicMock()
     lock = threading.Lock()
 
-    session.tick(object(), real_port=real_port, serial_write_lock=lock)
-    clock[0] = 10.5
-    session.tick(object(), real_port=real_port, serial_write_lock=lock)
-
-    clock[0] = 11.2
-    session.tick(object(), real_port=real_port, serial_write_lock=lock)
+    for clock[0] in (10.0, 11.5, 12.0, 13.5):
+        session.tick(object(), real_port=real_port, serial_write_lock=lock)
 
     real_port.write.assert_called_once_with(b"L00000I1000\n")
     scheduled = [c.args[0] for c in logger.info.call_args_list]
@@ -81,26 +78,3 @@ def test_two_verbs_queued_between_ticks_are_both_acted_on_in_order_a_reader_of_t
 
     said = [c.args[0] for c in logger.info.call_args_list]
     assert said.index("OmniPause: park scheduled") < said.index("OmniPause: broker resumed")
-
-
-def test_a_verb_is_consumed_once_a_tick_after_the_hold_fired_schedules_no_second_park(tmp_path: Path):
-    clock = [10.0]
-    cmd = tmp_path / "broker_cmd.txt"
-    cmd.write_text("park", encoding="utf-8")
-    auto_mode = MagicMock()
-    auto_mode.is_active = False
-    auto_mode.consume_deactivation.return_value = False
-    session = make_session(
-        broker_cmd_file=cmd,
-        auto_mode=auto_mode,
-        logger=MagicMock(),
-        consume_command=consume_command_file,
-        monotonic=lambda: clock[0],
-    )
-    real_port = MagicMock()
-    lock = threading.Lock()
-
-    for clock[0] in (10.0, 11.5, 12.0, 13.5):
-        session.tick(object(), real_port=real_port, serial_write_lock=lock)
-
-    real_port.write.assert_called_once_with(b"L00000I1000\n")

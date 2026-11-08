@@ -22,20 +22,20 @@ def test_the_published_document_is_what_this_package_says():
         "run python -m osr2_broker.contract to rewrite the tracked copy; never edit it by hand")
 
 
-def test_the_package_directory_it_names_is_this_package():
+def test_the_package_directory_it_names_is_this_package_fun_time_dates_a_running_broker_by_its_sources():
     named = REPO_ROOT / contract.declaration()["package_dir"]
 
     assert (named / "__init__.py").is_file()
 
 
-def test_both_module_paths_it_names_are_importable_files_here():
+def test_both_module_paths_it_names_are_importable_files_here_fun_time_finds_its_two_processes_by_them():
     for key in ("broker_module", "tray_module"):
         module = contract.declaration()[key]
         package, _, leaf = module.rpartition(".")
         assert (REPO_ROOT / package / f"{leaf}.py").is_file(), module
 
 
-def test_the_launcher_it_names_is_the_one_in_this_checkout():
+def test_the_launcher_it_names_is_the_one_in_this_checkout_fun_time_starts_the_tray_through_it():
     assert (REPO_ROOT / contract.declaration()["tray_launcher"]).is_file()
 
 
@@ -67,7 +67,7 @@ def test_the_document_sits_beside_the_tray_launcher_the_one_path_a_supervisor_th
 
 
 class TestTheStateFilesLiveInTheOrchestratorsStateDirWhereThreeAppsMeetAndOneIsAlwaysRunning:
-    def test_the_place_is_published_for_origenerator_which_has_no_setting_and_matches_the_example_a_new_install_is_set_up_from(self):
+    def test_the_place_is_published_for_origenerator_which_has_no_setting_a_layout_written_into_it_breaks_silently_as_a_device_reading_off_and_matches_the_example_a_new_install_is_set_up_from(self):
         configured = PurePosixPath(
             json.loads((REPO_ROOT / "osr2_broker_config.example.json")
                        .read_text(encoding="utf-8"))["state_dir"])
@@ -75,12 +75,3 @@ class TestTheStateFilesLiveInTheOrchestratorsStateDirWhereThreeAppsMeetAndOneIsA
 
         assert configured.name == named["name"]
         assert configured.parent.name == named["checkout"]
-
-
-def test_the_document_carries_what_fun_time_needs_to_date_find_and_start_the_broker_without_importing_it():
-    document = _document()
-
-    assert document["package_dir"] == "osr2_broker"
-    assert document["broker_module"] == "osr2_broker.app"
-    assert document["tray_module"] == "osr2_broker.tray"
-    assert document["tray_launcher"] == "launch_broker_tray.vbs"

@@ -24,7 +24,7 @@ class _Loading:
         self._happened.append("done")
 
 
-def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, list[str]]:  # noqa: PLR0917
+def _start_the_tray(qapp, cfg_path, *, canceled: bool = False) -> tuple[int, list[str]]:
     happened: list[str] = []
     tray = MagicMock()
     tray.show.side_effect = lambda: happened.append("tray shown")

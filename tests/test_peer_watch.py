@@ -83,16 +83,27 @@ class TestStartingEvolver:
         assert "Evolver was not running" in caplog.text
 
 
-class TestTheTrayWatchesEvolverWhichHasNoSupervisorOfItsOwnAndWatchesBack:
+class TestTheTrayWatchesEvolverWhichHasNoSupervisorOfItsOwnAndEvolverWatchesBackInCaseTheTraysScheduledTaskIsSwitchedOff:
     def _watch(self, cfg_path):
         return peer_watch.watch_evolver(load_config(cfg_path), LOG)
 
-    def test_an_evolver_that_is_up_is_left_alone_nothing_here_ever_ends_one_a_kill_on_a_misread_could_not_be_undone(self, cfg_path):
+    def test_an_evolver_that_is_up_is_left_alone(self, cfg_path):
         with patch.object(peer_watch, "evolver_is_up", return_value=True), \
              patch.object(peer_watch, "launch_evolver") as launch:
             self._watch(cfg_path).tick()
 
         launch.assert_not_called()
+
+    def test_the_watch_never_ends_an_evolver_a_launch_over_a_live_one_exits_at_its_own_mutex_while_a_kill_on_a_misread_could_not_be_undone(
+            self, cfg_path):
+        for up in (True, False):
+            with patch.object(peer_watch, "evolver_is_up", return_value=up), \
+                 stood_down(False), \
+                 patch.object(peer_watch, "subprocess") as processes, \
+                 patch.object(peer_watch, "launch_evolver"):
+                self._watch(cfg_path).tick()
+
+            assert processes.mock_calls == []
 
     def test_an_evolver_that_is_gone_is_started(self, cfg_path):
         with patch.object(peer_watch, "evolver_is_up", return_value=False), \

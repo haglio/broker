@@ -18,7 +18,11 @@ from osr2_broker.session import SessionRetryState
 from osr2_broker.tcode_udp import NO_LISTENER_PORT
 from osr2_broker.tcode_window import TCodeWriteWindow
 from tests.conftest import FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice
-from tests.sessions import NotActuallyRunningSoNoThreadIsLeftSpinning, StampSpy, make_session
+from tests.sessions import (
+    NotActuallyRunningSoThreadsOtherTestsLeftCannotTripThese,
+    StampSpy,
+    make_session,
+)
 
 
 class FakeAutoMode:
@@ -454,7 +458,7 @@ def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
 
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = _sleep
-    session.start_thread = lambda **_kw: NotActuallyRunningSoNoThreadIsLeftSpinning()
+    session.start_thread = lambda **_kw: NotActuallyRunningSoThreadsOtherTestsLeftCannotTripThese()
 
     session.run(object(), "COM4")
 
@@ -709,7 +713,7 @@ def _thread_names_started_by_one_run(session) -> list[str]:
 
     def _start(*, target, args, name):
         started.append(name)
-        return NotActuallyRunningSoNoThreadIsLeftSpinning()
+        return NotActuallyRunningSoThreadsOtherTestsLeftCannotTripThese()
 
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = lambda _s: session.stop_event.set()
@@ -749,7 +753,7 @@ def test_t_code_reaches_the_osr2_one_line_at_a_time():
     assert port.writes == [b"L05000I33\n"]
 
 
-def test_a_line_that_is_not_ascii_is_dropped_its_stand_in_characters_could_read_as_a_move_nobody_sent():
+def test_a_line_that_is_not_ascii_is_dropped_without_ending_the_session_its_stand_in_characters_could_read_as_a_move_nobody_sent():
     session, _auto_mode, _logger = _build_session()
     session_stop = threading.Event()
     port = _Port()
@@ -922,7 +926,7 @@ def test_a_retract_takes_the_osr2_from_whoever_holds_the_slot_before_it_is_sched
     assert events == ["The retract took the OSR2", "OmniPause: retract scheduled"]
 
 
-def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot_nobody_drove_a_device_that_was_off():
+def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot_nobody_drove_a_device_that_was_off_and_whoever_connects_now_is_not_thrown_off():
     events: list = []
     session = _a_session_telling(events, power_on=FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice(breaks_silence=True))
     session_stop = threading.Event()
@@ -971,7 +975,7 @@ def test_the_osr2_s_slot_writes_through_a_session_only_while_its_ports_are_open(
     session, _auto_mode, _logger = _build_session(slot=slot, logger=logger)
     ports = {"COM15": _OpenPort(), "COM4": _OpenPort()}
     session.serial_factory = lambda name, *_a, **_kw: ports[name]
-    session.start_thread = lambda **_kw: NotActuallyRunningSoNoThreadIsLeftSpinning()
+    session.start_thread = lambda **_kw: NotActuallyRunningSoThreadsOtherTestsLeftCannotTripThese()
 
     def _sleep(_seconds):
         slot.writers[-1]("portrait", "L05000I33")

@@ -37,7 +37,7 @@ def test_the_window_stays_open_to_the_last_moment():
     assert window.is_open() is True
 
 
-def test_the_window_is_a_literal_half_second_shorter_lets_mfp_argue_with_the_line_longer_silences_a_sender_who_stopped():
+def test_the_window_is_a_literal_half_second_shorter_lets_mfp_argue_with_the_line_longer_keeps_mfp_silent_after_the_sender_stopped():
     clock = [10.0]
     window = TCodeWriteWindow(monotonic=lambda: clock[0])
 

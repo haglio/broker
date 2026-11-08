@@ -105,7 +105,7 @@ def test_each_command_wears_the_family_s_icon_as_the_evolver_s_menu_does(qapp):
     assert _drawn(tray.quit_action.icon()) == _family_icon("power")
 
 
-def test_supervisor_reads_liveness_from_the_brokers_own_per_config_mutex_never_a_process_scan_that_could_take_a_command_line_naming_it_for_it(cfg_path):
+def test_supervisor_reads_liveness_from_the_brokers_own_per_config_mutex_so_a_broker_on_another_config_runs_beside_it_which_answers_at_once_never_a_process_scan_that_could_take_a_command_line_naming_it_for_it(cfg_path):
     config = load_config(cfg_path)
     probed = []
     supervisor = BrokerSupervisor(

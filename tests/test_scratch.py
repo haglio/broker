@@ -28,7 +28,7 @@ def test_a_file_the_case_left_open_is_named_instead_of_left_behind(tmp_path: Pat
         still_open.enter_context((scratch / "held.log").open("w"))
 
 
-def test_a_file_linked_in_from_outside_keeps_its_read_only_bit(tmp_path: Path):
+def test_a_file_linked_in_from_outside_keeps_its_read_only_bit_every_link_shares_it(tmp_path: Path):
     outside = tmp_path / "elsewhere.txt"
     outside.write_bytes(b"a file its owner keeps read-only")
     outside.chmod(stat.S_IREAD)
