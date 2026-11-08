@@ -16,7 +16,7 @@ from .motion_log import HOLD, MFP, driven_from_outside, dropped_udp_log, motion_
 from .not_answering import NotAnsweringWatch
 from .power_on import PowerOnWatch
 from .question import DeviceQuestion
-from .tcode_udp import UdpTCodeListener, lets_through_unless_held
+from .tcode_udp import NO_LISTENER_PORT, UdpTCodeListener, lets_through_unless_held
 from .tcode_window import TCodeWriteWindow
 
 
@@ -64,11 +64,12 @@ class SessionRuntime:
 class Senders:
     auto_mode: object
     slot: Osr2Slot
-    tcode_udp_port: int = 0
+    tcode_udp_port: int = NO_LISTENER_PORT
 
 
 class BrokerSerialSession:
     FAILURE_SUMMARY_EVERY = 60
+    THREAD_JOIN_SECONDS = 1.0
 
     def __init__(
         self,
@@ -114,7 +115,7 @@ class BrokerSerialSession:
             logger=logger,
             is_retryable_error=self.is_retryable_error,
             lets_through=lets_through_unless_held(lambda: self._slot.holder, self._udp_dropped),
-        ) if senders.tcode_udp_port else None
+        ) if senders.tcode_udp_port != NO_LISTENER_PORT else None
 
     @staticmethod
     def _peer_connected(port) -> bool:
@@ -177,11 +178,11 @@ class BrokerSerialSession:
                     self._slot.write_through(None)
                     session_stop.set()
                     if thread_real is not None:
-                        thread_real.join(timeout=1.0)
+                        thread_real.join(timeout=self.THREAD_JOIN_SECONDS)
                     if thread_virtual is not None:
-                        thread_virtual.join(timeout=1.0)
+                        thread_virtual.join(timeout=self.THREAD_JOIN_SECONDS)
                     if thread_tcode is not None:
-                        thread_tcode.join(timeout=1.0)
+                        thread_tcode.join(timeout=self.THREAD_JOIN_SECONDS)
         except Exception as exc:
             self._report_failure(exc)
             retry_state.value = self.is_retryable_error(exc)

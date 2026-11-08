@@ -9,7 +9,7 @@ def test_a_fresh_window_is_shut():
     assert window.is_open() is False
 
 
-def test_marking_opens_the_window():
+def test_a_direct_write_opens_the_window_in_which_mfp_is_dropped_two_writers_make_the_device_stutter():
     window = TCodeWriteWindow(monotonic=lambda: 10.0)
 
     window.mark()
@@ -37,7 +37,7 @@ def test_the_window_stays_open_to_the_last_moment():
     assert window.is_open() is True
 
 
-def test_the_direct_write_window_is_half_a_second():
+def test_the_window_is_a_literal_half_second_shorter_lets_mfp_argue_with_the_line_longer_silences_a_sender_who_stopped():
     clock = [10.0]
     window = TCodeWriteWindow(monotonic=lambda: clock[0])
 

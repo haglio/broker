@@ -13,7 +13,7 @@ LOGGER = logging.getLogger("test.broker")
 
 
 class TestWriteMode:
-    def test_the_value_lands_verbatim(self, tmp_path: Path):
+    def test_the_value_lands_verbatim_genau_s_readers_compare_it_as_text(self, tmp_path: Path):
         mode_file = tmp_path / "state" / "broker_mode.txt"
 
         write_mode(mode_file, "1", LOGGER)
@@ -27,16 +27,27 @@ class TestWriteMode:
 
         assert mode_file.exists()
 
-    def test_a_write_that_cannot_land_is_logged_and_swallowed(self, tmp_path: Path):
+    def test_a_write_that_cannot_land_is_logged_and_swallowed_the_writers_are_the_threads_carrying_the_serial_traffic(self, tmp_path: Path):
         logger = MagicMock()
 
         write_mode(tmp_path, "1", logger)
 
         logger.error.assert_called_once()
 
+    def test_the_mode_is_published_whole_a_poller_catching_a_truncating_write_would_read_blank_as_controlled(self, tmp_path: Path):
+        published: list[tuple[Path, str]] = []
+
+        def publish(path: Path, text: str) -> bool:
+            published.append((path, text))
+            return True
+
+        write_mode(tmp_path / "broker_mode.txt", "1", LOGGER, publish=publish)
+
+        assert published == [(tmp_path / "broker_mode.txt", "1")]
+
 
 class TestHeartbeat:
-    def test_the_heartbeat_is_the_wall_clock_as_text(self, tmp_path: Path):
+    def test_the_heartbeat_is_the_wall_clock_as_text_other_apps_read_these_files_as_a_wire_format(self, tmp_path: Path):
         heartbeat_file = tmp_path / "state" / "broker_heartbeat.txt"
 
         with file_channel_clock_at(123.45):

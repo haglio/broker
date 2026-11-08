@@ -7,14 +7,14 @@ import time
 from unittest.mock import MagicMock
 
 from osr2_broker.motion_log import UDP
-from osr2_broker.session import SessionRetryState
+from osr2_broker.session import BrokerSerialSession, SessionRetryState
 from osr2_broker.tcode_udp import UdpTCodeListener, lets_through_unless_held
 
-_REAL_SOCKET = socket.socket
+_SOCKET_HELD_BEFORE_A_PATCH_TAKES_THE_SAME_OBJECT = socket.socket
 
 
 def _free_port() -> int:
-    probe = _REAL_SOCKET(socket.AF_INET, socket.SOCK_DGRAM)
+    probe = _SOCKET_HELD_BEFORE_A_PATCH_TAKES_THE_SAME_OBJECT(socket.AF_INET, socket.SOCK_DGRAM)
     probe.bind(("127.0.0.1", 0))
     port = probe.getsockname()[1]
     probe.close()
@@ -43,7 +43,7 @@ def _build_listener(port: int, *, held_by=_nobody, dropped=None):
     )
 
 
-class _Written:
+class _WrittenAndThenStopsTheSessionSoNoReofferIsReadTwice:
     def __init__(self, session_stop: threading.Event, *, enough: int = 1):
         self.lines: list[tuple[str, str]] = []
         self._session_stop = session_stop
@@ -55,7 +55,8 @@ class _Written:
             self._session_stop.set()
 
 
-def _offer_until_taken(sender, port: int, payload: bytes, session_stop: threading.Event) -> None:
+def _reoffer_until_the_listener_takes_it_a_timed_send_could_beat_the_bind(
+        sender, port: int, payload: bytes, session_stop: threading.Event) -> None:
     def _offer() -> None:
         while True:
             # Windows reports a port nobody has bound as an error on the sending socket.
@@ -71,9 +72,9 @@ def _listen_for(payload: bytes, *, enough: int = 1, **listener) -> list[tuple[st
     port = _free_port()
     listener = _build_listener(port, **listener)
     session_stop = threading.Event()
-    written = _Written(session_stop, enough=enough)
+    written = _WrittenAndThenStopsTheSessionSoNoReofferIsReadTwice(session_stop, enough=enough)
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    _offer_until_taken(sender, port, payload, session_stop)
+    _reoffer_until_the_listener_takes_it_a_timed_send_could_beat_the_bind(sender, port, payload, session_stop)
 
     listener.run(written, session_stop, SessionRetryState())
 
@@ -81,7 +82,7 @@ def _listen_for(payload: bytes, *, enough: int = 1, **listener) -> list[tuple[st
     return written.lines
 
 
-def test_a_datagram_is_handed_on_as_t_code_udp():
+def test_a_datagram_from_a_sender_not_yet_on_the_slot_is_handed_on_the_inlet_stays_until_each_has_moved():
     assert _listen_for(b"L05000I33") == [(UDP, "L05000I33")]
 
 
@@ -106,7 +107,7 @@ def test_one_datagram_carrying_several_lines_becomes_several_writes():
     ]
 
 
-def test_blank_lines_around_a_command_are_dropped_and_it_is_not():
+def test_blank_lines_around_a_command_in_one_datagram_are_dropped_and_it_is_not_a_second_could_beat_the_bind():
     assert _listen_for(b"\n\nL05000I33\n\n") == [(UDP, "L05000I33")]
 
 
@@ -114,7 +115,7 @@ class _RecordingSocket:
     def __init__(self, record: dict, *, bind_error: Exception | None = None):
         self._record = record
         self._bind_error = bind_error
-        self._real = _REAL_SOCKET(socket.AF_INET, socket.SOCK_DGRAM)
+        self._real = _SOCKET_HELD_BEFORE_A_PATCH_TAKES_THE_SAME_OBJECT(socket.AF_INET, socket.SOCK_DGRAM)
         record["closed"] = False
 
     def settimeout(self, seconds):
@@ -135,7 +136,7 @@ class _RecordingSocket:
         self._real.close()
 
 
-def test_the_listener_binds_loopback_only_and_gives_itself_a_way_out(monkeypatch):
+def test_the_listener_binds_loopback_only_anyone_on_the_network_could_drive_the_device_and_gives_itself_a_way_out(monkeypatch):
     record: dict = {}
     monkeypatch.setattr(
         "osr2_broker.tcode_udp.socket.socket",
@@ -153,7 +154,7 @@ def test_the_listener_binds_loopback_only_and_gives_itself_a_way_out(monkeypatch
     assert record["closed"] is True
 
 
-def test_a_quiet_listener_still_notices_the_session_ending():
+def test_a_quiet_listener_notices_the_session_ending_inside_the_join_or_the_next_session_cannot_bind_the_port():
     port = _free_port()
     listener = _build_listener(port)
     session_stop = threading.Event()
@@ -163,10 +164,11 @@ def test_a_quiet_listener_still_notices_the_session_ending():
     listener.run(MagicMock(), session_stop, SessionRetryState())
     took = time.monotonic() - started
 
-    assert took < 1.0, f"the listener took {took:.1f}s to notice the session had ended"
+    assert took < BrokerSerialSession.THREAD_JOIN_SECONDS, (
+        f"the listener took {took:.1f}s to notice the session had ended")
 
 
-def test_a_listener_that_cannot_bind_ends_the_session_and_says_whether_to_retry(monkeypatch):
+def test_a_listener_that_cannot_bind_ends_the_session_and_asks_for_another_the_last_session_usually_still_holds_the_port(monkeypatch):
     record: dict = {}
     monkeypatch.setattr(
         "osr2_broker.tcode_udp.socket.socket",

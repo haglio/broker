@@ -25,7 +25,7 @@ class StampSpy:
         self.marks += 1
 
 
-class NotActuallyRunning:
+class NotActuallyRunningSoNoThreadIsLeftSpinning:
     def join(self, timeout=None) -> None:
         pass
 
@@ -48,7 +48,7 @@ def make_session(**given) -> BrokerSerialSession:
         watches=part(DeviceWatches, device_on=lambda: True, rx_activity=StampSpy(),
                      tx_activity=StampSpy(), power_on=FakePowerOn()),
         runtime=part(SessionRuntime, logger=logging.getLogger("tests.sessions"),
-                     start_thread=lambda **_kw: NotActuallyRunning(),
+                     start_thread=lambda **_kw: NotActuallyRunningSoNoThreadIsLeftSpinning(),
                      monotonic=time.monotonic, sleep=time.sleep),
         senders=part(Senders, auto_mode=None, slot=idle_slot()),
     )

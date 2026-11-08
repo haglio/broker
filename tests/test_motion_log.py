@@ -4,9 +4,11 @@ import logging
 
 import pytest
 
+from osr2_broker.hold import HoldScheduler
 from osr2_broker.motion_log import (
     HOLD,
     MFP,
+    QUIET_S,
     UDP,
     driven_from_outside,
     dropped_udp_log,
@@ -59,7 +61,7 @@ def dropped(heard):
 
 
 class TestARunOfWrites:
-    def test_it_is_one_line_at_each_end_not_one_per_write(self, log):
+    def test_a_script_s_waypoints_a_tenth_of_a_second_apart_are_one_run_told_at_its_two_ends(self, log):
         motion, said, clock = log
 
         for _ in range(50):
@@ -73,7 +75,7 @@ class TestARunOfWrites:
             f"OSR2 quiet after 4.9s of {UDP}",
         ]
 
-    def test_a_second_run_says_how_long_the_device_was_still(self, log):
+    def test_a_second_run_says_how_long_nothing_reached_the_device_which_is_what_a_too_early_move_asks(self, log):
         motion, said, clock = log
         motion.happened(UDP)
         clock.now += 30.0
@@ -148,7 +150,7 @@ class TestWhetherSomethingIsDrivingTheOsr2:
         assert not driven_from_outside(motion)
 
 
-class TestUdpDroppedForTheSlot:
+class TestUdpFromASenderNotYetOnTheSlotIsDroppedForAsLongAsAnotherHoldsIt:
     def test_a_run_of_dropped_lines_is_told_at_its_two_ends_with_how_many(self, dropped):
         held_off, said, clock = dropped
 
@@ -221,3 +223,25 @@ def test_writes_closer_together_than_two_seconds_are_one_run():
     logger.removeHandler(recorder)
 
     assert recorder.said == ["OSR2 driven by MFP"]
+
+
+def test_a_run_outlasts_a_hold_s_settle_so_a_hold_and_its_write_read_as_one_run():
+    assert QUIET_S > HoldScheduler.DELAY_SECONDS
+
+
+def test_the_lines_go_out_after_the_lock_is_let_go_the_logger_takes_one_of_its_own():
+    clock = _Clock()
+    lock_held: list[bool] = []
+
+    class _Watching:
+        def info(self, _line: str) -> None:
+            lock_held.append(log._lock.locked())
+
+    log = motion_log(logger=_Watching(), monotonic=clock)
+    log.happened(MFP)
+    clock.now += 1.0
+    log.happened(UDP)
+    clock.now += 5.0
+    log.tick()
+
+    assert lock_held == [False] * 4

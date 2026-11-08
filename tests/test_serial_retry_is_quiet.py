@@ -19,7 +19,7 @@ def _session(logger, serial_factory) -> BrokerSerialSession:
     )
 
 
-class TestRepeatedOpenFailuresAreCollapsed:
+class TestATracebackPerRetryOnceRolledEveryEarlierSessionOutOfTheLogSoARunOfOneFailureGetsOne:
     def test_one_traceback_then_a_count(self, recorded_logger):
         logger, handler = recorded_logger
 

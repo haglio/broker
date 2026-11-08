@@ -15,8 +15,10 @@ from osr2_broker.hold import HoldScheduler
 from osr2_broker.motion_log import UDP
 from osr2_broker.question import DeviceQuestion
 from osr2_broker.session import SessionRetryState
+from osr2_broker.tcode_udp import NO_LISTENER_PORT
+from osr2_broker.tcode_window import TCodeWriteWindow
 from tests.conftest import FakePowerOn
-from tests.sessions import NotActuallyRunning, StampSpy, make_session
+from tests.sessions import NotActuallyRunningSoNoThreadIsLeftSpinning, StampSpy, make_session
 
 
 class FakeAutoMode:
@@ -110,7 +112,7 @@ def test_resume_cancels_pending_park():
     real_port.write.assert_not_called()
 
 
-def test_retract_schedules_the_far_end_instead_of_home():
+def test_retract_the_emergency_sends_the_device_to_the_far_end_instead_of_home():
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     real_port = MagicMock()
@@ -177,7 +179,7 @@ def test_auto_mode_deactivation_between_ticks_schedules_park():
     real_port.write.assert_called_once_with(b"L00000I1000\n")
 
 
-def test_a_verb_the_broker_does_not_know_is_ignored():
+def test_a_verb_another_app_grew_that_this_broker_does_not_know_is_a_quiet_no_op_the_file_is_shared():
     session, _auto_mode, logger = _build_session()
 
     session.handle_broker_command("TELEPORT", object())
@@ -206,7 +208,7 @@ def test_the_devices_own_auto_mode_ends_once_it_is_switched_off():
     logger.warning.assert_called_once_with("AUTO ended: the OSR2 has been switched off")
 
 
-def test_end_auto_mode_once_switched_off_leaves_a_paused_broker_alone():
+def test_end_auto_mode_once_switched_off_leaves_a_paused_broker_alone_paused_means_the_user_took_over():
     session, auto_mode, logger = _build_session(auto_active=True, device_on=lambda: False)
     session.broker_paused.set()
 
@@ -292,7 +294,7 @@ def test_forward_virtual_to_real_skips_writes_while_auto_is_active():
 
 
 def test_forward_virtual_to_real_skips_writes_just_after_direct_t_code():
-    clock = [9.9]
+    clock = [10.0 - TCodeWriteWindow.SUPPRESS_SECONDS / 5]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     session._tcode_window.mark()
     clock[0] = 10.0
@@ -319,7 +321,7 @@ def test_forward_virtual_to_real_skips_writes_just_after_direct_t_code():
 
 
 def test_forward_virtual_to_real_allows_writes_once_direct_t_code_has_gone_quiet():
-    clock = [9.0]
+    clock = [10.0 - TCodeWriteWindow.SUPPRESS_SECONDS * 2]
     session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0])
     session._tcode_window.mark()
     clock[0] = 10.0
@@ -367,7 +369,7 @@ def test_park_suppression_heals_when_mfp_active_after_grace():
         def write(self, data: bytes):
             self.writes.append(data)
 
-    clock[0] = 100.0 + HoldScheduler.SUPPRESS_GRACE_SECONDS + 0.1
+    clock[0] = 100.0 + HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS + 0.1
     real = FakeReal()
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
@@ -452,7 +454,7 @@ def test_the_connected_event_is_set_while_the_ports_are_open_and_clear_after():
 
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = _sleep
-    session.start_thread = lambda **_kw: NotActuallyRunning()
+    session.start_thread = lambda **_kw: NotActuallyRunningSoNoThreadIsLeftSpinning()
 
     session.run(object(), "COM4")
 
@@ -707,7 +709,7 @@ def _thread_names_started_by_one_run(session) -> list[str]:
 
     def _start(*, target, args, name):
         started.append(name)
-        return NotActuallyRunning()
+        return NotActuallyRunningSoNoThreadIsLeftSpinning()
 
     session.serial_factory = lambda *a, **kw: FakePort()
     session.sleep = lambda _s: session.stop_event.set()
@@ -747,7 +749,7 @@ def test_t_code_reaches_the_osr2_one_line_at_a_time():
     assert port.writes == [b"L05000I33\n"]
 
 
-def test_a_line_that_is_not_ascii_is_dropped_without_ending_the_session():
+def test_a_line_that_is_not_ascii_is_dropped_its_stand_in_characters_could_read_as_a_move_nobody_sent():
     session, _auto_mode, _logger = _build_session()
     session_stop = threading.Event()
     port = _Port()
@@ -829,7 +831,7 @@ def test_t_code_the_port_cannot_take_ends_the_session_and_says_whether_to_retry(
     assert retry_state.value is True
 
 
-def test_a_session_that_has_begun_to_end_writes_no_more_t_code():
+def test_a_session_that_has_begun_to_end_writes_no_more_t_code_sparing_the_failed_port_a_try_per_line():
     session, _auto_mode, _logger = _build_session()
     session_stop = threading.Event()
     session_stop.set()
@@ -920,7 +922,7 @@ def test_a_retract_takes_the_osr2_from_whoever_holds_the_slot_before_it_is_sched
     assert events == ["The retract took the OSR2", "OmniPause: retract scheduled"]
 
 
-def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot():
+def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot_nobody_drove_a_device_that_was_off():
     events: list = []
     session = _a_session_telling(events, power_on=FakePowerOn(breaks_silence=True))
     session_stop = threading.Event()
@@ -969,7 +971,7 @@ def test_the_osr2_s_slot_writes_through_a_session_only_while_its_ports_are_open(
     session, _auto_mode, _logger = _build_session(slot=slot, logger=logger)
     ports = {"COM15": _OpenPort(), "COM4": _OpenPort()}
     session.serial_factory = lambda name, *_a, **_kw: ports[name]
-    session.start_thread = lambda **_kw: NotActuallyRunning()
+    session.start_thread = lambda **_kw: NotActuallyRunningSoNoThreadIsLeftSpinning()
 
     def _sleep(_seconds):
         slot.writers[-1]("portrait", "L05000I33")
@@ -983,13 +985,13 @@ def test_the_osr2_s_slot_writes_through_a_session_only_while_its_ports_are_open(
     assert "OSR2 driven by T-Code from portrait" in [r.getMessage() for r in heard.records]
 
 
-def test_no_tcode_port_means_no_listener_thread():
-    session, _auto_mode, _logger = _build_session(tcode_udp_port=0)
+def test_port_zero_means_no_listener_binding_it_would_take_a_port_no_sender_can_address():
+    session, _auto_mode, _logger = _build_session(tcode_udp_port=NO_LISTENER_PORT)
 
     assert _thread_names_started_by_one_run(session) == ["broker-real", "broker-virtual"]
 
 
-def test_the_osr2_speaking_after_a_silence_schedules_a_park():
+def test_the_osr2_speaking_after_a_silence_is_parked_switched_on_it_comes_up_halfway_along_its_travel():
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
         monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),
@@ -1047,7 +1049,7 @@ def test_the_osr2_talking_on_without_a_silence_is_left_alone():
     real_port.write.assert_not_called()
 
 
-def test_a_park_on_power_on_leaves_the_script_feed_running():
+def test_a_park_on_power_on_leaves_the_script_feed_running_a_device_that_was_off_had_no_tail_to_swallow():
     clock = [10.0]
     session, _auto_mode, _logger = _build_session(
         monotonic=lambda: clock[0], power_on=FakePowerOn(breaks_silence=True),
@@ -1246,3 +1248,16 @@ def test_each_tick_tells_the_not_answering_watch_whether_mfp_is_driving_the_osr2
     session.tick(object(), real_port=MagicMock(), serial_write_lock=lock)
 
     assert watch.ticks == [True, False]
+
+
+def test_a_fired_hold_tells_the_motion_log_so_a_move_felt_too_early_can_be_laid_at_its_door(recorded_logger):
+    logger, heard = recorded_logger
+    clock = [10.0]
+    session, _auto_mode, _logger = _build_session(monotonic=lambda: clock[0], logger=logger)
+    lock = threading.Lock()
+
+    session.handle_broker_command("PARK", object())
+    clock[0] = 12.0
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=lock)
+
+    assert "OSR2 driven by a hold" in [record.getMessage() for record in heard.records]

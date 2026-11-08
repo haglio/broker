@@ -5,6 +5,8 @@ from collections.abc import Callable
 
 from .motion_log import UDP, RunLog
 
+NO_LISTENER_PORT = 0
+
 
 def lets_through_unless_held(held_by: Callable[[], str | None], dropped: RunLog) -> Callable[[], bool]:
     def lets_through() -> bool:

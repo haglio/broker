@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from osr2_broker.power_on import PowerOnWatch
+from osr2_broker.power_on import A_POWERED_OSR2_REPORTS_UNASKED_EVERY_SECONDS, PowerOnWatch
 
 
 def _build(tmp_path: Path, clock: list[float], *, stamped: float | None = None,
@@ -25,7 +25,7 @@ def test_a_broker_restarting_while_the_device_talks_does_not_call_that_a_power_o
     assert watch.rx_broke_the_silence() is False
 
 
-def test_the_line_after_a_power_on_is_not_another_one(tmp_path):
+def test_the_line_after_a_power_on_is_not_another_one_parking_on_each_would_fight_whatever_drives_the_device(tmp_path):
     clock = [10.0]
     watch = _build(tmp_path, clock)
     assert watch.rx_broke_the_silence() is True
@@ -34,7 +34,7 @@ def test_the_line_after_a_power_on_is_not_another_one(tmp_path):
     assert watch.rx_broke_the_silence() is False
 
 
-def test_the_device_going_quiet_and_speaking_again_is_a_power_on(tmp_path):
+def test_the_device_going_quiet_and_speaking_again_is_a_power_on_its_adapter_stays_listed_with_the_power_off(tmp_path):
     clock = [10.0]
     watch = _build(tmp_path, clock, stamped=999_999.0, wall=1_000_000.0)
     assert watch.rx_broke_the_silence() is False
@@ -43,7 +43,7 @@ def test_the_device_going_quiet_and_speaking_again_is_a_power_on(tmp_path):
     assert watch.rx_broke_the_silence() is True
 
 
-def test_a_silence_of_just_under_a_minute_is_not_a_power_on(tmp_path):
+def test_a_silence_short_of_four_reports_is_not_a_power_on_erring_long_costs_a_press_erring_short_moves_a_device_in_use(tmp_path):
     clock = [10.0]
     watch = _build(tmp_path, clock)
     watch.rx_broke_the_silence()
@@ -53,7 +53,7 @@ def test_a_silence_of_just_under_a_minute_is_not_a_power_on(tmp_path):
     assert watch.rx_broke_the_silence() is False
 
 
-def test_a_silence_of_a_minute_is_a_power_on(tmp_path):
+def test_a_silence_of_four_missed_reports_a_minute_is_a_power_on(tmp_path):
     clock = [10.0]
     watch = _build(tmp_path, clock)
     watch.rx_broke_the_silence()
@@ -61,3 +61,8 @@ def test_a_silence_of_a_minute_is_a_power_on(tmp_path):
     clock[0] += 60.0
 
     assert watch.rx_broke_the_silence() is True
+
+
+def test_the_silence_is_four_of_the_fifteen_second_gaps_a_powered_osr2_leaves_between_its_reports():
+    assert A_POWERED_OSR2_REPORTS_UNASKED_EVERY_SECONDS == 15.0
+    assert PowerOnWatch.SILENCE_SECONDS == 60.0

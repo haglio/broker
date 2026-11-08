@@ -14,8 +14,9 @@ class BrokerMode(StrEnum):
     AUTO = "1"
 
 
-def write_mode(path: Path, mode: BrokerMode, logger: logging.Logger) -> None:
-    if not publish_whole(path, str(mode)):
+def write_mode(path: Path, mode: BrokerMode, logger: logging.Logger, *,
+               publish=publish_whole) -> None:
+    if not publish(path, str(mode)):
         logger.error("Failed to write mode file %s", path)
 
 

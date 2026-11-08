@@ -6,9 +6,11 @@ from pathlib import Path
 
 from app_support.file_channel import stamp_age
 
+A_POWERED_OSR2_REPORTS_UNASKED_EVERY_SECONDS = 15.0
+
 
 class PowerOnWatch:
-    SILENCE_SECONDS = 60.0
+    SILENCE_SECONDS = 4 * A_POWERED_OSR2_REPORTS_UNASKED_EVERY_SECONDS
 
     def __init__(
         self,
