@@ -97,7 +97,7 @@ class TestIdleWarning:
         action = state.update(now=3000.0, device_on=True, last_tx=1999.0, auto_mode=False)
         assert action is None
 
-    def test_no_second_warning_after_brief_tx(self):
+    def test_no_second_warning_after_a_brief_burst_mfps_keepalives_look_like_one_so_re_arming_takes_a_sustained_minute(self):
         state = MonitorState(idle_threshold=900.0)
         state.update(now=1000.0, device_on=True, last_tx=998.0, auto_mode=False)
         action = state.update(now=1998.0, device_on=True, last_tx=998.0, auto_mode=False)

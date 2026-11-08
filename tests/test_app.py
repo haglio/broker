@@ -75,7 +75,7 @@ def broker_app_module():
             sys.modules["serial"] = borrowed_from
 
 
-def test_the_module_fixture_puts_back_only_the_name_it_borrowed(broker_app_module):
+def test_the_module_fixture_puts_back_only_the_name_it_borrowed_a_patch_dict_of_sys_modules_would_evict_what_the_import_reached_first_and_leave_two_copies_patches_miss(broker_app_module):
     for name in ("app_support.cli", "app_support.logging_utils", "app_support.threading_utils"):
         assert name in sys.modules, f"the fixture evicted {name} from sys.modules"
         package, _, attribute = name.rpartition(".")
@@ -239,8 +239,14 @@ def test_the_broker_process_never_loads_qt_widgets():
 @contextmanager
 def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=None,
                   osr2_adapters=("COM4",)):
+    never_the_port_the_production_broker_on_this_machine_holds = patch.object(
+        broker_app_module, "OSR2_SLOT", 0)
+    a_desk_with_no_osr2_plugged_in_does_not_sit_in_the_wait = (
+        patch("osr2_broker.osr2_port.osr2_adapters", side_effect=osr2_adapters)
+        if callable(osr2_adapters)
+        else patch("osr2_broker.osr2_port.osr2_adapters", return_value=list(osr2_adapters)))
     patches = [
-        patch.object(broker_app_module, "OSR2_SLOT", 0),
+        never_the_port_the_production_broker_on_this_machine_holds,
         patch.object(broker_app_module, "configure_logging",
                      return_value=logging.getLogger("test.broker")),
         patch.object(broker_app_module, "install_exception_logging"),
@@ -251,16 +257,15 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
                      side_effect=mfp_config_error),
         patch.object(broker_app_module.serial, "Serial", side_effect=fake_serial),
         patch.object(broker_app_module, "_start_monitor"),
-        patch("osr2_broker.osr2_port.osr2_adapters", side_effect=osr2_adapters)
-        if callable(osr2_adapters)
-        else patch("osr2_broker.osr2_port.osr2_adapters", return_value=list(osr2_adapters)),
+        a_desk_with_no_osr2_plugged_in_does_not_sit_in_the_wait,
         patch.object(broker_app_module.time, "sleep", side_effect=sleep),
         patch.object(broker_app_module, "SERIAL_RETRY_DELAY_SECONDS", 0.0),
     ]
     with ExitStack() as stack:
         for each in patches:
             stack.enter_context(each)
-        mock_socket_mod = stack.enter_context(patch.object(broker_app_module, "socket"))
+        no_datagram_leaves_the_machine = patch.object(broker_app_module, "socket")
+        mock_socket_mod = stack.enter_context(no_datagram_leaves_the_machine)
         mock_socket_mod.socket.return_value = FakeSocket()
         mock_socket_mod.AF_INET = 2
         mock_socket_mod.SOCK_DGRAM = 2
@@ -314,7 +319,7 @@ class TestMainReconnect:
 
 
 class TestMainSurvivesMfpConfigTrouble:
-    def test_starts_brokering_when_mfp_config_cannot_be_written(self, broker_app_module, cfg_path):
+    def test_starts_brokering_when_mfp_config_cannot_be_written_it_sits_under_program_files_and_mfp_may_hold_it_open(self, broker_app_module, cfg_path):
         open_ports: list[str] = []
         FakeSerial = make_fake_serial(open_ports)
 
@@ -443,7 +448,7 @@ def _stop_on_first_sleep(_seconds):
 
 
 class TestMainHoldsTheOsr2Slot:
-    def test_the_session_is_handed_a_slot_that_listens_while_the_broker_runs(
+    def test_the_session_is_handed_one_slot_for_the_brokers_whole_run_so_a_sender_stays_connected_across_a_reopened_session(
         self, broker_app_module, cfg_path,
     ):
         built: dict = {}
@@ -468,7 +473,7 @@ class TestMainHoldsTheOsr2Slot:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as nothing_listens_there:
             nothing_listens_there.bind(address)
 
-    def test_a_broker_whose_slot_cannot_listen_still_bridges_the_osr2(
+    def test_a_broker_whose_slot_cannot_listen_still_bridges_the_osr2_udp_and_mfp_still_reach_the_device(
         self, broker_app_module, cfg_path,
     ):
         open_ports: list[str] = []
@@ -486,7 +491,7 @@ class TestMainHoldsTheOsr2Slot:
         assert "COM4" in open_ports
 
 
-class TestMainWatchesForThePowerOn:
+class TestMainSeedsThePowerOnWatchFromTheRxStampATxSeededOneWouldParkOnAnyRestartAfterAQuietMfp:
     @staticmethod
     def _watch_main_builds(broker_app_module, cfg_path):
         FakeSerial = make_fake_serial([])

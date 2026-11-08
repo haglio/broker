@@ -26,12 +26,12 @@ def remove_scratch(path: Path) -> None:
 
 
 def _clear_the_read_only_bit_and_try_again(function, name, refusal) -> None:
-    if function not in (os.unlink, os.rmdir) or not _named_only_here(name):
+    if function not in (os.unlink, os.rmdir) or not _named_only_here_every_link_shares_the_read_only_bit(name):
         raise refusal
     os.chmod(name, stat.S_IWRITE)
     function(name)
 
 
-def _named_only_here(name) -> bool:
+def _named_only_here_every_link_shares_the_read_only_bit(name) -> bool:
     entry = os.lstat(name)
     return not stat.S_ISLNK(entry.st_mode) and entry.st_nlink == 1

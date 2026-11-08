@@ -32,7 +32,7 @@ def test_the_warning_is_shown_by_a_process_of_its_own(cfg_path):
     assert kwargs["cwd"] == PROJECT_DIR
 
 
-def test_the_warnings_process_gets_no_console_and_is_not_told_to_start_hidden(cfg_path):
+def test_the_warnings_process_gets_no_console_and_is_not_told_to_start_hidden_windows_shows_a_first_window_as_startupinfo_says_so_hidden_would_hide_the_dialog(cfg_path):
     config = load_config(str(cfg_path))
     started = []
 

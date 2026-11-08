@@ -12,6 +12,7 @@ from app_support.osr2_slot import Osr2Slot
 from app_support.testing import stand_down_cleared, stand_down_written
 from PyQt6.QtWidgets import QApplication
 
+from osr2_broker import tray as tray_module
 from tests.scratch import scratch_dir
 
 
@@ -42,7 +43,7 @@ def recorded_logger():
     logger.handlers.clear()
 
 
-class FakePowerOn:
+class FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice:
     def __init__(self, *, breaks_silence: bool = False):
         self.breaks_silence = breaks_silence
 
@@ -77,13 +78,14 @@ def _no_test_may_keep_a_piece_of_the_process(request):
             handler.close()
 
     assert not kept, (
-        f"{request.node.name} left {', '.join(kept)} — patch what "
-        "installs it, the way tests/test_app.py does for the broker's main()"
+        f"{request.node.name} left {', '.join(kept)}: every later exception would go there "
+        "instead of to pytest, and Windows cannot delete a scratch tree a handler holds open; "
+        "patch what installs it, the way tests/test_app.py does for the broker's main()"
     )
 
 
 @pytest.fixture(autouse=True)
-def stand_down_marker():
+def stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker():
     with (
         stand_down_written() as wrote,
         stand_down_cleared() as cleared,
@@ -149,3 +151,12 @@ def cfg_factory(tmp_path: Path):
     def factory(overrides: dict | None = None) -> Path:
         return _write_config(tmp_path, overrides)
     return factory
+
+
+@pytest.fixture
+def the_trays_main_kept_from_the_excepthooks_the_log_file_and_a_copy_of_pythonw_into_the_live_venv(
+        monkeypatch):
+    monkeypatch.setattr(tray_module, "configure_logging",
+                        lambda _name, _path: logging.getLogger("test.tray"))
+    monkeypatch.setattr(tray_module, "install_exception_logging", lambda _logger: None)
+    monkeypatch.setattr(tray_module, "_name_this_process", lambda: None)

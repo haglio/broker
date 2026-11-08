@@ -14,7 +14,7 @@ from osr2_broker.session import (
     SessionControls,
     SessionRuntime,
 )
-from tests.conftest import FakePowerOn, idle_slot
+from tests.conftest import FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice, idle_slot
 
 
 class StampSpy:
@@ -46,7 +46,7 @@ def make_session(**given) -> BrokerSerialSession:
                       consume_command=lambda _path: [], stop_event=threading.Event(),
                       broker_paused=threading.Event(), connected_event=threading.Event()),
         watches=part(DeviceWatches, device_on=lambda: True, rx_activity=StampSpy(),
-                     tx_activity=StampSpy(), power_on=FakePowerOn()),
+                     tx_activity=StampSpy(), power_on=FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice()),
         runtime=part(SessionRuntime, logger=logging.getLogger("tests.sessions"),
                      start_thread=lambda **_kw: NotActuallyRunningSoNoThreadIsLeftSpinning(),
                      monotonic=time.monotonic, sleep=time.sleep),

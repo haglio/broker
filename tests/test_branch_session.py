@@ -12,7 +12,7 @@ from osr2_broker.process_names import NAMER
 from osr2_broker.single_instance import MUTEX_TRAY
 
 
-def test_reading_the_flag_keeps_it_from_everything_the_preview_starts(monkeypatch):
+def test_reading_the_flag_keeps_it_from_everything_the_preview_starts_the_broker_and_evolver_would_carry_it_and_evolver_would_hand_it_to_the_next_production_tray(monkeypatch):
     monkeypatch.setenv(branch_session.FLAG, "1")
 
     assert branch_session.take_the_flag() is True
@@ -70,7 +70,7 @@ def test_handing_back_lets_go_of_the_tray_before_starting_the_production_one(cfg
     assert happened == [("let go of", 42), ("started", config)]
 
 
-def test_ending_the_other_trays_spares_this_one_and_its_launcher():
+def test_ending_the_other_trays_spares_this_process_and_its_parent_a_venvs_pythonw_runs_the_real_interpreter_as_its_child_on_the_same_command_line():
     with patch.object(branch_session.subprocess, "run") as run:
         branch_session.end_the_other_trays()
 

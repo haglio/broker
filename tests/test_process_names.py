@@ -23,7 +23,7 @@ class TestWhatTheRowsSay:
         assert NAMER.description(TRAY_ROLE) == f"{APP_NAME} \N{EN DASH} Tray"
         assert NAMER.description(BROKER_ROLE) == APP_NAME
 
-    def test_the_two_cannot_collide_on_one_file_name(self):
+    def test_the_two_cannot_collide_on_one_file_name_both_copies_land_in_the_one_venv(self):
         assert (NAMER.exe_name("pythonw.exe", TRAY_ROLE)
                 != NAMER.exe_name("pythonw.exe", BROKER_ROLE))
 
@@ -33,7 +33,7 @@ class TestWhatTheRowsSay:
 
 
 class TestTheTray:
-    def test_prepares_the_copy_its_launcher_will_use(self, tmp_path: Path):
+    def test_prepares_the_copy_its_next_launch_will_use_the_copy_is_written_by_the_very_interpreter_being_named(self, tmp_path: Path):
         assert_the_process_is_named(
             _name_this_process, tmp_path,
             ProcessName(
