@@ -70,7 +70,7 @@ def test_handing_back_lets_go_of_the_tray_before_starting_the_production_one(cfg
     assert happened == [("let go of", 42), ("started", config)]
 
 
-def test_ending_the_other_trays_spares_this_process_and_its_parent_a_venvs_pythonw_runs_the_real_interpreter_as_its_child_on_the_same_command_line():
+def test_ending_the_other_trays_spares_this_process_and_its_parent_a_venvs_pythonw_runs_the_real_interpreter_as_its_child_on_the_same_command_line_and_ending_it_ends_this_one():
     with patch.object(branch_session.subprocess, "run") as run:
         branch_session.end_the_other_trays()
 

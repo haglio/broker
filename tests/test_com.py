@@ -80,7 +80,7 @@ def _start_real_thread(target, args, name):
 
 
 @contextmanager
-def _running_then_stopped_however_the_test_ends(stack, *, timeout=2.0):
+def _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(stack, *, timeout=2.0):
     runner = threading.Thread(target=stack.session.run, args=(object(), "COM4"),
                               name="broker-session", daemon=True)
     runner.start()
@@ -141,7 +141,7 @@ def _build_stack(tmp_path: Path):
     stop_event = threading.Event()
     broker_paused = threading.Event()
 
-    def _yield_the_core_until_stopped(_seconds: float) -> None:
+    def _yield_the_core_a_millisecond_or_until_stopped(_seconds: float) -> None:
         stop_event.wait(0.001)
 
     session = make_session(
@@ -156,7 +156,7 @@ def _build_stack(tmp_path: Path):
         rx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_rx.txt"),
         tx_activity=ActivityStamp(tmp_path / "state" / "osr2_serial_tx.txt"),
         monotonic=clock,
-        sleep=_yield_the_core_until_stopped,
+        sleep=_yield_the_core_a_millisecond_or_until_stopped,
     )
 
     return _Stack(
@@ -180,7 +180,7 @@ class TestAutoTransitionFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"Auto mode is on!\r\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: s.controller.is_active)
 
         assert s.state_file.read_text(encoding="utf-8") == "1"
@@ -193,7 +193,7 @@ class TestAutoTransitionFromSerial:
         s.udp_messages.clear()
 
         s.real_port.inject(b"Auto mode is off!\r\n")
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: not s.controller.is_active)
 
         assert s.state_file.read_text(encoding="utf-8") == "0"
@@ -203,7 +203,7 @@ class TestAutoTransitionFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"freeMode is on!\r\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: s.controller.is_active)
 
         assert "AUTO 1" in s.udp_messages
@@ -214,7 +214,7 @@ class TestMotionAndBpmFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"StrokeName: Pull, PatternDuration: 2.0\r\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: "SYNC" in s.udp_messages)
 
         assert s.controller.is_active is True
@@ -224,7 +224,7 @@ class TestMotionAndBpmFromSerial:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"bpm 120, beats 4\r\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: "BPM 120" in s.udp_messages)
 
         assert "BPM 120" in s.udp_messages
@@ -234,7 +234,7 @@ class TestMotionAndBpmFromSerial:
         line = b"StrokeName: Twist, PatternDuration: 1.5 bpm 90, beats 2 continue StrokeName:\r\n"
         s.real_port.inject(line)
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: s.udp_messages.count("SYNC") == 2)
 
         assert s.udp_messages == [
@@ -249,7 +249,7 @@ class TestSerialForwarding:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"device says hello\r\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: len(s.virt_port.tx_data) > 0)
 
         assert b"device says hello" in s.virt_port.tx_data
@@ -258,7 +258,7 @@ class TestSerialForwarding:
         s = _build_stack(tmp_path)
         s.virt_port.inject(b"L0100\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: len(s.real_port.tx_data) > 0)
 
         assert b"L0100" in s.real_port.tx_data
@@ -269,7 +269,7 @@ class TestSerialForwarding:
 
         s.virt_port.inject(b"L0100\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: s.virt_port.in_waiting == 0)
 
         assert s.real_port.tx_data == b""
@@ -303,7 +303,7 @@ class TestMultiLineSerialBuffer:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"Auto mode")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until_the_session_has_parsed_what_it_read(s.real_port)
 
             assert s.controller.is_active is False
@@ -320,7 +320,7 @@ class TestMultiLineSerialBuffer:
             b"bpm 60, beats 8\r\n"
         )
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: "BPM 60" in s.udp_messages)
 
         assert "SYNC" in s.udp_messages
@@ -332,7 +332,7 @@ class TestAutoTransitionSequence:
         s = _build_stack(tmp_path)
         s.real_port.inject(b"Auto mode is on!\r\n")
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: s.controller.is_active)
 
             s.real_port.inject(b"Auto mode is off!\r\n")
@@ -355,7 +355,7 @@ class TestAutoTransitionSequence:
             b"bpm 140, beats 4\r\n"
         )
 
-        with _running_then_stopped_however_the_test_ends(s):
+        with _running_then_stopped_however_the_test_ends_or_three_threads_spin_and_the_run_stalls_without_a_traceback(s):
             _wait_until(lambda: "BPM 140" in s.udp_messages)
 
         assert "AUTO 1" in s.udp_messages

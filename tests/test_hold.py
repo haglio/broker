@@ -243,7 +243,7 @@ def test_a_hold_asked_for_again_renews_the_mute_though_its_deadline_and_log_line
     assert holds.suppresses_mfp() is True
 
 
-def test_nothing_that_can_block_runs_under_the_scheduler_s_lock_not_the_log_lines_nor_the_write():
+def test_nothing_that_can_block_runs_under_the_scheduler_s_lock_not_the_log_lines_nor_the_write_which_takes_the_serial_lock_too():
     clock = [10.0]
     holds, logger = _build(clock)
     lock_held: list[bool] = []
@@ -258,8 +258,9 @@ def test_nothing_that_can_block_runs_under_the_scheduler_s_lock_not_the_log_line
     holds.fire_due(FakeReal(), threading.Lock(), _nothing)
     clock[0] = 11.0 + HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS
     holds.suppresses_mfp()
+    holds.schedule_without_muting(RETRACT, "OSR2 powered on: park scheduled")
 
-    assert lock_held == [False] * 4
+    assert lock_held == [False] * 5
 
 
 def test_a_park_arriving_mid_check_keeps_the_mute_it_just_asked_for():

@@ -448,7 +448,7 @@ def _stop_on_first_sleep(_seconds):
 
 
 class TestMainHoldsTheOsr2Slot:
-    def test_the_session_is_handed_one_slot_for_the_brokers_whole_run_so_a_sender_stays_connected_across_a_reopened_session(
+    def test_the_session_is_handed_a_slot_that_listens_while_the_broker_runs(
         self, broker_app_module, cfg_path,
     ):
         built: dict = {}
@@ -472,6 +472,30 @@ class TestMainHoldsTheOsr2Slot:
         [address] = listening
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as nothing_listens_there:
             nothing_listens_there.bind(address)
+
+    def test_one_slot_serves_the_brokers_whole_run_so_a_sender_stays_connected_while_a_session_is_reopened(
+        self, broker_app_module, cfg_path,
+    ):
+        slots_built = []
+        retries = []
+
+        def stop_after_two_sessions(_seconds):
+            retries.append(True)
+            if len(retries) >= 2:
+                raise KeyboardInterrupt
+
+        with (
+            _main_running(broker_app_module,
+                          fake_serial=make_fake_serial(
+                              [], fail_once_on=("COM4", broker_app_module.serial.SerialException)),
+                          sleep=stop_after_two_sessions),
+            patch.object(broker_app_module, "Osr2Slot",
+                         side_effect=lambda **kwargs: slots_built.append(kwargs) or MagicMock()),
+        ):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        assert len(retries) == 2
+        assert len(slots_built) == 1
 
     def test_a_broker_whose_slot_cannot_listen_still_bridges_the_osr2_udp_and_mfp_still_reach_the_device(
         self, broker_app_module, cfg_path,

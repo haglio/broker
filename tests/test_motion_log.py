@@ -225,7 +225,7 @@ def test_writes_closer_together_than_two_seconds_are_one_run():
     assert recorder.said == ["OSR2 driven by MFP"]
 
 
-def test_a_run_outlasts_a_hold_s_settle_so_a_hold_and_its_write_read_as_one_run():
+def test_quiet_outlasts_a_hold_s_settle_delay_so_ordinary_driving_around_a_hold_reads_as_one_run():
     assert QUIET_S > HoldScheduler.DELAY_SECONDS
 
 

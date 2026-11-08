@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from app_support.file_channel import publish_whole
 from app_support.testing import file_channel_clock_at
 
 from osr2_broker.state_files import heartbeat_loop, write_heartbeat, write_mode
@@ -44,6 +46,7 @@ class TestWriteMode:
         write_mode(tmp_path / "broker_mode.txt", "1", LOGGER, publish=publish)
 
         assert published == [(tmp_path / "broker_mode.txt", "1")]
+        assert inspect.signature(write_mode).parameters["publish"].default is publish_whole
 
 
 class TestHeartbeat:

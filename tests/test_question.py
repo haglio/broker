@@ -110,7 +110,8 @@ def test_standing_down_again_writes_nothing_until_the_questions_resume(tmp_path)
     assert answer.exists()
 
 
-def test_a_device_is_reported_only_after_ten_seconds_of_questions_one_still_starting_up_answers_sooner():
+def test_a_device_is_reported_only_after_ten_seconds_of_questions_one_still_starting_up_answers_sooner_and_the_log_still_says_early_what_the_port_answers_instead():
     seconds_of_questions = DeviceQuestion.UNANSWERED_BEFORE_WARNING * DeviceQuestion.EVERY_SECONDS
 
-    assert seconds_of_questions == DeviceQuestion.A_DEVICE_STILL_STARTING_UP_ANSWERS_WITHIN_SECONDS == 10.0
+    assert seconds_of_questions == DeviceQuestion.STARTUP_GRACE_SECONDS
+    assert seconds_of_questions == 10.0

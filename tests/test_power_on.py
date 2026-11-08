@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from osr2_broker.power_on import A_POWERED_OSR2_REPORTS_UNASKED_EVERY_SECONDS, PowerOnWatch
+from osr2_broker.power_on import PowerOnWatch
 
 
 def _build(tmp_path: Path, clock: list[float], *, stamped: float | None = None,
@@ -53,7 +53,7 @@ def test_a_silence_short_of_four_reports_is_not_a_power_on_erring_long_costs_a_p
     assert watch.rx_broke_the_silence() is False
 
 
-def test_a_silence_of_four_missed_reports_a_minute_is_a_power_on(tmp_path):
+def test_a_silence_of_four_report_gaps_a_minute_is_a_power_on(tmp_path):
     clock = [10.0]
     watch = _build(tmp_path, clock)
     watch.rx_broke_the_silence()
@@ -61,8 +61,3 @@ def test_a_silence_of_four_missed_reports_a_minute_is_a_power_on(tmp_path):
     clock[0] += 60.0
 
     assert watch.rx_broke_the_silence() is True
-
-
-def test_the_silence_is_four_of_the_fifteen_second_gaps_a_powered_osr2_leaves_between_its_reports():
-    assert A_POWERED_OSR2_REPORTS_UNASKED_EVERY_SECONDS == 15.0
-    assert PowerOnWatch.SILENCE_SECONDS == 60.0
