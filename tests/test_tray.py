@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from app_support.file_channel import publish_stamp
 from app_support.win32 import mutex_name
-from PyQt6.QtCore import QSize
-from PyQt6.QtGui import QIcon, QImage
+from PySide6.QtCore import QSize
+from PySide6.QtGui import QIcon, QImage
 from shared_ui.colors import BG_TERTIARY, BLUE, TEXT_SECONDARY
 from shared_ui.icons import icon_pixmap
 from shared_ui.palette import PREVIEW_INK

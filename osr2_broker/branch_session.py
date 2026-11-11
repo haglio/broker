@@ -8,7 +8,7 @@ from ctypes import wintypes
 
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import try_acquire_mutex
-from PyQt6.QtCore import QTimer
+from PySide6.QtCore import QTimer
 
 from .process_names import end_the_processes_running
 from .single_instance import MUTEX_TRAY

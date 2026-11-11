@@ -230,7 +230,7 @@ def test_the_broker_process_never_loads_qt_widgets():
     environment = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     done = subprocess.run(
         [sys.executable, "-c",
-         "import sys, osr2_broker.app; print('PyQt6.QtWidgets' in sys.modules)"],
+         "import sys, osr2_broker.app; print('PySide6.QtWidgets' in sys.modules)"],
         cwd=PROJECT_DIR, env=environment, capture_output=True, text=True, check=True,
     )
     assert done.stdout.strip() == "False"

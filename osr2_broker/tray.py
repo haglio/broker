@@ -15,9 +15,9 @@ from app_support.logging_utils import configure_logging, install_exception_loggi
 from app_support.osr2_device import Osr2Mode, Osr2Trouble, mode, trouble
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from shared_ui.chrome import menu_rules
 from shared_ui.colors import TEXT_SECONDARY
 from shared_ui.icons import qt_icon

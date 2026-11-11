@@ -25,7 +25,7 @@ def show_until_closed(config: BrokerConfig, *, run=subprocess.run) -> subprocess
 
 def show_warning(title: str, message: str, *, button_text: str,
                  shown_as: Preview | None) -> None:
-    from PyQt6.QtWidgets import QApplication  # noqa: PLC0415
+    from PySide6.QtWidgets import QApplication  # noqa: PLC0415
     from shared_ui.alert import Level, show_alert  # noqa: PLC0415
     from shared_ui.preview_icon import app_icon  # noqa: PLC0415
 
