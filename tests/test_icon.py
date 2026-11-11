@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtGui import QIcon
+from PySide6.QtGui import QIcon
 
 from osr2_broker.win32 import ICON_PATH
 

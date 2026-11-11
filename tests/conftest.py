@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from app_support.osr2_slot import Osr2Slot
 from app_support.testing import stand_down_cleared, stand_down_written
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 from osr2_broker import tray as tray_module
 from tests.scratch import scratch_dir

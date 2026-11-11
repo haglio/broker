@@ -17,7 +17,7 @@ No integration tests currently.
   what it is on whichever socket it is plugged into, never by a COM name)
 - Auto-mode state machine: parses OSR2 serial output, publishes to Genau via UDP
 - Idle monitor: warns after configurable idle timeout, blocks Windows shutdown when device is on
-- Tray UI: PyQt6 tray icon (`osr2_broker/tray.py`), dark-themed via shared_ui, which supervises and auto-restarts the broker
+- Tray UI: PySide6 tray icon (`osr2_broker/tray.py`), dark-themed via shared_ui, which supervises and auto-restarts the broker
 - Peer watch (`osr2_broker/peer_watch.py`): the tray also keeps Evolver up, and
   Evolver keeps the tray up. Evolver had no supervisor at all and stayed down
   until the next sign-in; this hands it the scheduled task by way of the tray,
