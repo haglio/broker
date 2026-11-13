@@ -22,7 +22,7 @@ requires-python = ">=3.14"
 # one is this repo's own commit, with its own suite to answer for it.
 dependencies = [
     "app-support @ git+https://github.com/haglio/app_support@v0.1.484",
-    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.420",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.421",
     "pyserial>=3,<4",
     "PySide6>=6.12.0,<6.13",
 ]
