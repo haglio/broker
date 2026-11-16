@@ -20,6 +20,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from shared_ui.chrome import menu_rules
 from shared_ui.colors import TEXT_SECONDARY
+from shared_ui.gui_thread_collection import the_application
 from shared_ui.icons import qt_icon
 from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
@@ -360,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
 
     marked = shown_as(preview=preview)
     claim_taskbar_identity(marked)
-    app = QApplication.instance() or QApplication(sys.argv)
+    app = the_application(QApplication, sys.argv)
     app.setQuitOnLastWindowClosed(False)
     loading = Loading.at_the_click(app, logger, lambda: open_the_loading_screen(marked))
     try:

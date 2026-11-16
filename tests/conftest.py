@@ -11,6 +11,7 @@ import pytest
 from app_support.osr2_slot import Osr2Slot
 from app_support.testing import stand_down_cleared, stand_down_written
 from PySide6.QtWidgets import QApplication
+from shared_ui.gui_thread_collection import the_application
 
 from osr2_broker import tray as tray_module
 from tests.scratch import scratch_dir
@@ -19,7 +20,7 @@ from tests.scratch import scratch_dir
 @pytest.fixture(scope="session")
 def qapp():
     """Held for the run: Qt faults at the next QSystemTrayIcon once a QApplication is collected."""
-    return QApplication.instance() or QApplication([])
+    return the_application(QApplication, [])
 
 
 class _Recorder(logging.Handler):
