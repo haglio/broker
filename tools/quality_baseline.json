@@ -4,5 +4,15 @@
   "private_imports": {},
   "private_reaches": {},
   "prose_lines": {},
-  "trailing_comments": {}
+  "trailing_comments": {},
+  "wall_clock_waits": {
+    "tests/heard.py": 2,
+    "tests/sessions.py": 2,
+    "tests/test_app.py": 12,
+    "tests/test_com.py": 2,
+    "tests/test_hold.py": 4,
+    "tests/test_session.py": 3,
+    "tests/test_tcode_udp.py": 3,
+    "tests/test_tray.py": 6
+  }
 }
