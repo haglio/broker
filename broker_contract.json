@@ -5,6 +5,7 @@
   "tray_module": "osr2_broker.tray",
   "tray_launcher": "launch_broker_tray.vbs",
   "stop_request": "broker_stop_request.txt",
+  "turn_off_reminder_request": "osr2_turn_off_reminder_request.txt",
   "state_dir": {
     "checkout": "fun_time",
     "name": "state"

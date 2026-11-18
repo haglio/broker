@@ -99,6 +99,20 @@
       "status": "agreed"
     },
     {
+      "screen": [
+        "and your OSR2 is still on.",
+        "Turn it off."
+      ],
+      "his_word": null,
+      "code_word": "turn-off reminder",
+      "id": "turn_off_reminder",
+      "thing": "the window that tells him to turn the OSR2 off, when Fun Time or Origenerator closes with it still on",
+      "code_today": [
+        "turn-off reminder"
+      ],
+      "status": "agreed"
+    },
+    {
       "screen": null,
       "his_word": "icon (2026-10-13, 2026-10-16, 2026-10-18)",
       "code_word": "icon",

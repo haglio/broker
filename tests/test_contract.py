@@ -43,6 +43,11 @@ def test_the_stop_request_it_names_is_the_file_the_tray_answers(cfg_path):
     assert _document()["stop_request"] == load_config(cfg_path).stop_request_file.name
 
 
+def test_the_turn_off_reminder_request_it_names_is_the_file_the_tray_answers(cfg_path):
+    assert (_document()["turn_off_reminder_request"]
+            == load_config(cfg_path).turn_off_reminder_request_file.name)
+
+
 def test_the_launcher_starts_the_tray_module_the_document_names_which_fun_time_sweeps_the_task_list_by():
     spec = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     launchers = spec["tool"]["haglio"]["launchers"]
