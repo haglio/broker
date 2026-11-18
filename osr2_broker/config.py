@@ -72,6 +72,10 @@ class BrokerConfig:
     def stop_request_file(self) -> Path:
         return self.state_dir / contract.STOP_REQUEST
 
+    @property
+    def turn_off_reminder_request_file(self) -> Path:
+        return self.state_dir / contract.TURN_OFF_REMINDER_REQUEST
+
     def log_file(self, name: str) -> Path:
         return self.state_dir / f"{name}.log"
 

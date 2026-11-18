@@ -85,6 +85,34 @@ def test_the_warning_asks_whether_he_forgot_to_turn_the_osr2_off(cfg_factory):
     )
 
 
+def test_the_reminder_for_a_closed_app_is_shown_by_the_same_process_told_which_app_closed(cfg_path):
+    config = load_config(str(cfg_path))
+    started = []
+
+    idle_warning.show_until_closed(
+        config, closed="Fun Time",
+        run=lambda argv, **kwargs: started.append(argv) or _closed(argv))
+
+    (argv,) = started
+    assert argv == [sys.executable, "-m", "osr2_broker.idle_warning",
+                    "--config", str(config.config_path), "--closed", "Fun Time"]
+
+
+def test_the_reminder_for_a_closed_app_tells_him_to_turn_the_osr2_off(cfg_path):
+    with (
+        patch.object(idle_warning, "try_acquire_mutex", return_value=1),
+        patch.object(idle_warning, "show_warning") as shown,
+    ):
+        assert idle_warning.main(["--config", str(cfg_path), "--closed", "Origenerator"]) == 0
+
+    shown.assert_called_once_with(
+        "Broker",
+        "You closed Origenerator, and your OSR2 is still on.\nTurn it off.",
+        button_text="OK",
+        shown_as=preview_of(PROJECT_DIR),
+    )
+
+
 def test_a_second_warning_does_not_cover_one_still_showing(cfg_path):
     config = load_config(str(cfg_path))
     asked = []

@@ -11,8 +11,9 @@ from pathlib import Path
 
 from app_support import production_update
 from app_support.cli import preparse_config_path
+from app_support.file_channel import read_whole
 from app_support.logging_utils import configure_logging, install_exception_logging
-from app_support.osr2_device import Osr2Mode, Osr2Trouble, mode, trouble
+from app_support.osr2_device import Osr2Mode, Osr2Trouble, mode, switched_on, trouble
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
 from PySide6.QtCore import QTimer
@@ -26,7 +27,7 @@ from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
 
-from . import branch_session, peer_watch
+from . import branch_session, idle_warning, peer_watch
 from .config import PROJECT_DIR, load_config
 from .process_names import APP_NAME, BROKER_ROLE, NAMER, TRAY_ROLE, end_the_processes_running
 from .single_instance import MUTEX_BROKER, MUTEX_TRAY
@@ -155,6 +156,7 @@ class TrayHooks:
     stand_down: Callable[[], None] = peer_watch.stand_broker_down
     hand_back: Callable[[], None] | None = None
     quit_app: Callable[[], None] = QApplication.quit
+    remind_to_turn_off: Callable[[str], None] | None = None
 
 
 class BrokerTrayApp:
@@ -169,8 +171,11 @@ class BrokerTrayApp:
         self._stand_down = hooks.stand_down
         self._hand_back = hooks.hand_back
         self._quit_app = hooks.quit_app
+        self._remind_to_turn_off = hooks.remind_to_turn_off or (
+            lambda closed: _remind_in_a_process_of_its_own(config, closed))
         self._paused = False
         _taken(config.stop_request_file)
+        _what_closed(config.turn_off_reminder_request_file)
 
         tray.start_action.triggered.connect(self.start_or_restart)
         tray.pause_action.triggered.connect(self.pause)
@@ -180,6 +185,9 @@ class BrokerTrayApp:
         if _taken(self._config.stop_request_file):
             self._stop_as_asked()
             return
+        closed = _what_closed(self._config.turn_off_reminder_request_file)
+        if closed and switched_on(self._config.state_dir):
+            self._remind_to_turn_off(closed)
         if not self._paused:
             self._supervisor.start()
         if self._peer is not None:
@@ -232,6 +240,27 @@ class BrokerTrayApp:
         self._supervisor.stop()
         self._tray.hide()
         self._quit_app()
+
+
+def _what_closed(request: Path) -> str | None:
+    try:
+        closed = read_whole(request).strip()
+        request.unlink()
+    except FileNotFoundError:
+        return None
+    return closed or None
+
+
+def _remind_in_a_process_of_its_own(config, closed: str) -> None:
+    logger = logging.getLogger("osr2_broker.tray")
+    logger.info("%s closed with the OSR2 on: reminding him to turn it off", closed)
+
+    def _show() -> None:
+        ended = idle_warning.show_until_closed(config, closed=closed)
+        logger.log(logging.INFO if ended.returncode == 0 else logging.WARNING,
+                   "Turn-off reminder ended: exit code %#x", ended.returncode)
+
+    start_daemon_thread(target=_show, name="turn-off-reminder")
 
 
 def _taken(request: Path) -> bool:

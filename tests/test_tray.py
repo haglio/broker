@@ -391,6 +391,65 @@ def test_a_stop_asked_for_before_the_tray_started_is_dropped_rather_than_answere
     assert not config.stop_request_file.exists()
 
 
+def _a_tray_that_reminds(tray, config):
+    reminded = []
+    app = BrokerTrayApp(config, FakeSupervisor(running=True), tray,
+                        TrayHooks(remind_to_turn_off=reminded.append))
+    return app, reminded
+
+
+def test_an_app_that_closes_while_the_osr2_is_on_has_the_tray_remind_him_to_turn_it_off_naming_that_app(tray, cfg_path):
+    config = load_config(cfg_path)
+    app, reminded = _a_tray_that_reminds(tray, config)
+    publish_stamp(config.osr2_serial_rx_file)
+    config.turn_off_reminder_request_file.write_text("Fun Time", encoding="utf-8")
+
+    app.tick()
+
+    assert reminded == ["Fun Time"]
+    assert not config.turn_off_reminder_request_file.exists()
+
+
+def test_an_app_that_closes_while_the_osr2_is_off_brings_no_reminder(tray, cfg_path):
+    config = load_config(cfg_path)
+    app, reminded = _a_tray_that_reminds(tray, config)
+    config.turn_off_reminder_request_file.write_text("Origenerator", encoding="utf-8")
+
+    app.tick()
+
+    assert reminded == []
+    assert not config.turn_off_reminder_request_file.exists()
+
+
+def test_a_reminder_asked_for_before_the_tray_started_is_dropped_rather_than_shown_late(tray, cfg_path):
+    config = load_config(cfg_path)
+    publish_stamp(config.osr2_serial_rx_file)
+    config.turn_off_reminder_request_file.write_text("Fun Time", encoding="utf-8")
+    app, reminded = _a_tray_that_reminds(tray, config)
+
+    app.tick()
+
+    assert reminded == []
+
+
+def test_the_tray_shows_the_turn_off_reminder_in_a_process_of_its_own_off_its_own_thread_and_logs_how_it_ended(tray, cfg_path, caplog):
+    config = load_config(cfg_path)
+    publish_stamp(config.osr2_serial_rx_file)
+    app = BrokerTrayApp(config, FakeSupervisor(running=True), tray)
+    config.turn_off_reminder_request_file.write_text("Fun Time", encoding="utf-8")
+    ended = MagicMock(returncode=0)
+
+    with (
+        patch.object(tray_module, "start_daemon_thread", side_effect=lambda target, name: target()),
+        patch.object(tray_module.idle_warning, "show_until_closed", return_value=ended) as shown,
+        caplog.at_level(logging.INFO, logger="osr2_broker.tray"),
+    ):
+        app.tick()
+
+    shown.assert_called_once_with(config, closed="Fun Time")
+    assert "Turn-off reminder ended: exit code 0x0" in caplog.messages
+
+
 class FakeUpdateWatch:
     def __init__(self):
         self.ticks = 0

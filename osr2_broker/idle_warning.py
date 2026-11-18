@@ -12,11 +12,15 @@ from .process_names import APP_NAME
 from .single_instance import MUTEX_IDLE_WARNING
 from .win32 import ICON_PATH, claim_taskbar_identity
 
+CLOSED_FLAG = "--closed"
+
 
 # A process of its own: Qt wants its application on its process's main thread.
-def show_until_closed(config: BrokerConfig, *, run=subprocess.run) -> subprocess.CompletedProcess:
+def show_until_closed(config: BrokerConfig, *, closed: str | None = None,
+                      run=subprocess.run) -> subprocess.CompletedProcess:
+    which = [] if closed is None else [CLOSED_FLAG, closed]
     return run(
-        [sys.executable, "-m", __spec__.name, "--config", str(config.config_path)],
+        [sys.executable, "-m", __spec__.name, "--config", str(config.config_path), *which],
         cwd=PROJECT_DIR,
         creationflags=subprocess.CREATE_NO_WINDOW,
         capture_output=True, text=True, errors="replace",
@@ -45,14 +49,23 @@ def main(argv: list[str] | None = None) -> int:
         mutex_name(MUTEX_IDLE_WARNING, config.config_path))
     if _one_on_screen_at_a_time is None:
         return 0
-    show_warning(
-        APP_NAME,
-        f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"
-        "Did you forget to turn it off?",
-        button_text="I don't know, did you?",
-        shown_as=preview_of(PROJECT_DIR),
-    )
+    closed = _the_app_named_after(CLOSED_FLAG, argv)
+    if closed is None:
+        message = (f"Your OSR2 has been idle for {int(config.idle_minutes)} minutes.\n"
+                   "Did you forget to turn it off?")
+        button_text = "I don't know, did you?"
+    else:
+        message = f"You closed {closed}, and your OSR2 is still on.\nTurn it off."
+        button_text = "OK"
+    show_warning(APP_NAME, message, button_text=button_text, shown_as=preview_of(PROJECT_DIR))
     return 0
+
+
+def _the_app_named_after(flag: str, argv: list[str] | None) -> str | None:
+    args = sys.argv[1:] if argv is None else argv
+    if flag not in args[:-1]:
+        return None
+    return args[args.index(flag) + 1]
 
 
 if __name__ == "__main__":
