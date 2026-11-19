@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from app_support import production_update
+from app_support import live_session, production_update
 from app_support.cli import preparse_config_path
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.osr2_device import Osr2Mode, Osr2Trouble, mode, switched_on, trouble
@@ -317,7 +317,7 @@ def _name_this_process() -> None:
 
 
 def start_the_tray(config, logger, *, preview_claim: int | None, shown_as: Preview | None,
-                   quit_app):
+                   quit_app, session_is_live: Callable[[], bool] = live_session.is_live):
     hands_back = preview_claim is not None
     tray = BrokerTray(window_title(APP_NAME, shown_as))
     tray.setIcon(app_icon(ICON_PATH, shown_as))
@@ -330,7 +330,7 @@ def start_the_tray(config, logger, *, preview_claim: int | None, shown_as: Previ
     )
 
     updates = None if hands_back else production_update.UpdateWatch(
-        PROJECT_DIR, a_good_moment=lambda: mode(config.state_dir) is Osr2Mode.OFF,
+        PROJECT_DIR, a_good_moment=lambda: mode(config.state_dir) is Osr2Mode.OFF and not session_is_live(),
         start_again=lambda: tray_app.make_way_for_an_update(
             start_the_next_tray=lambda: production_update.start_again_after(
                 os.getpid(), PROJECT_DIR / "launch_broker_tray.vbs")),
