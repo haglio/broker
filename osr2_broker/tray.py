@@ -11,9 +11,9 @@ from pathlib import Path
 
 from app_support import production_update
 from app_support.cli import preparse_config_path
-from app_support.file_channel import read_whole
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.osr2_device import Osr2Mode, Osr2Trouble, mode, switched_on, trouble
+from app_support.osr2_turn_off_reminder import what_closed
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import is_mutex_held, mutex_name, try_acquire_mutex
 from PySide6.QtCore import QTimer
@@ -175,7 +175,7 @@ class BrokerTrayApp:
             lambda closed: _remind_in_a_process_of_its_own(config, closed))
         self._paused = False
         _taken(config.stop_request_file)
-        _what_closed(config.turn_off_reminder_request_file)
+        what_closed(config.state_dir)
 
         tray.start_action.triggered.connect(self.start_or_restart)
         tray.pause_action.triggered.connect(self.pause)
@@ -185,7 +185,7 @@ class BrokerTrayApp:
         if _taken(self._config.stop_request_file):
             self._stop_as_asked()
             return
-        closed = _what_closed(self._config.turn_off_reminder_request_file)
+        closed = what_closed(self._config.state_dir)
         if closed and switched_on(self._config.state_dir):
             self._remind_to_turn_off(closed)
         if not self._paused:
@@ -240,15 +240,6 @@ class BrokerTrayApp:
         self._supervisor.stop()
         self._tray.hide()
         self._quit_app()
-
-
-def _what_closed(request: Path) -> str | None:
-    try:
-        closed = read_whole(request).strip()
-        request.unlink()
-    except FileNotFoundError:
-        return None
-    return closed or None
 
 
 def _remind_in_a_process_of_its_own(config, closed: str) -> None:
