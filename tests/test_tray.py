@@ -562,7 +562,7 @@ def an_update_waiting(monkeypatch):
 def test_the_production_tray_starts_again_for_an_update_waiting_on_its_checkout(qapp, cfg_path, an_update_waiting):
     _tray, tray_app, _ = tray_module.start_the_tray(
         load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
-        shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+        shown_as=None, quit_app=lambda: an_update_waiting.append("quit"), session_is_live=lambda: False)
 
     tray_app.tick()
 
@@ -576,6 +576,16 @@ def test_the_production_tray_takes_no_update_while_the_osr2_is_on(qapp, cfg_path
     _tray, tray_app, _ = tray_module.start_the_tray(
         config, logging.getLogger("test.tray"), preview_claim=None,
         shown_as=None, quit_app=lambda: an_update_waiting.append("quit"))
+
+    tray_app.tick()
+
+    assert an_update_waiting == []
+
+
+def test_the_production_tray_takes_no_update_while_a_session_of_his_is_live(qapp, cfg_path, an_update_waiting):
+    _tray, tray_app, _ = tray_module.start_the_tray(
+        load_config(cfg_path), logging.getLogger("test.tray"), preview_claim=None,
+        shown_as=None, quit_app=lambda: an_update_waiting.append("quit"), session_is_live=lambda: True)
 
     tray_app.tick()
 
