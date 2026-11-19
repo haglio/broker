@@ -10,18 +10,19 @@ from app_support import osr2_hold
 class Hold:
     tcode: bytes
     fired_message: str
+    wait_seconds: float
 
 
-def _moved_by(verb: str) -> bytes:
-    return f"{osr2_hold.hold_tcode(verb)}\n".encode("ascii")
+def _hold(verb: str, fired_message: str) -> Hold:
+    return Hold(f"{osr2_hold.hold_tcode(verb)}\n".encode("ascii"), fired_message,
+                osr2_hold.HOLD_WAIT_S[verb])
 
 
-PARK = Hold(_moved_by(osr2_hold.PARK), "Parking OSR2 at position 0")
-RETRACT = Hold(_moved_by(osr2_hold.RETRACT), "Retracting OSR2 to position 9999")
+PARK = _hold(osr2_hold.PARK, "Parking OSR2 at position 0")
+RETRACT = _hold(osr2_hold.RETRACT, "Retracting OSR2 to position 9999")
 
 
 class HoldScheduler:
-    DELAY_SECONDS = osr2_hold.HOLD_DELAY_S
     HEAL_WITHOUT_RESUME_SECONDS = 5.0
 
     def __init__(self, *, monotonic, logger):
@@ -49,7 +50,7 @@ class HoldScheduler:
         if self._pending_time is not None and hold == self._pending:
             return False
         self._pending = hold
-        self._pending_time = self._monotonic() + self.DELAY_SECONDS
+        self._pending_time = self._monotonic() + hold.wait_seconds
         return True
 
     def cancel(self) -> None:

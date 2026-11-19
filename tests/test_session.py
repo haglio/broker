@@ -11,7 +11,7 @@ from app_support.state_files import OSR2_SERIAL_RX
 
 from osr2_broker import session as session_module
 from osr2_broker.activity import ActivityStamp
-from osr2_broker.hold import HoldScheduler
+from osr2_broker.hold import PARK, HoldScheduler
 from osr2_broker.motion_log import UDP
 from osr2_broker.question import DeviceQuestion
 from osr2_broker.session import SessionRetryState
@@ -125,12 +125,33 @@ def test_retract_the_emergency_sends_the_device_to_the_far_end_instead_of_home()
     sock = object()
 
     session.handle_broker_command("RETRACT", sock)
-    session.tick(sock, real_port=real_port, serial_write_lock=lock)
-    real_port.write.assert_not_called()
-
     clock[0] = 12.0
     session.tick(sock, real_port=real_port, serial_write_lock=lock)
     real_port.write.assert_called_once_with(b"L09999I500\n")
+
+
+def test_a_retract_reaches_the_osr2_on_the_tick_that_reads_it_and_a_park_only_after_its_second():
+    clock = [10.0]
+    asked = [["RETRACT"], [], [], ["RESUME"], ["PARK"], [], []]
+    session, _auto_mode, _logger = _build_session(
+        monotonic=lambda: clock[0], consume_command=lambda _path: asked.pop(0))
+    lock = threading.Lock()
+    sock = object()
+
+    def written_by_a_tick() -> list:
+        real_port = MagicMock()
+        session.tick(sock, real_port=real_port, serial_write_lock=lock)
+        return [call.args[0] for call in real_port.write.call_args_list
+                if call.args[0] != DeviceQuestion.QUESTION]
+
+    the_retract = [written_by_a_tick() for _tick in range(4)]
+    the_park_before_its_second = [written_by_a_tick() for _tick in range(2)]
+    clock[0] += PARK.wait_seconds
+    the_park_after_it = written_by_a_tick()
+
+    assert the_retract == [[b"L09999I500\n"], [], [], []]
+    assert the_park_before_its_second == [[], []]
+    assert the_park_after_it == [b"L00000I1000\n"]
 
 
 def test_fired_hold_is_logged_as_the_position_it_actually_wrote():
