@@ -28,7 +28,7 @@ def test_a_scheduled_hold_is_not_written_until_the_settle_delay_has_passed():
 
     real_port.write.assert_not_called()
 
-    clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
+    clock[0] = 10.0 + PARK.wait_seconds
     holds.fire_due(real_port, lock, _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I1000\n")
@@ -94,7 +94,7 @@ def test_cancelling_drops_both_the_pending_write_and_the_mute():
 
     holds.schedule(PARK, "OmniPause: park scheduled")
     holds.cancel()
-    clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
+    clock[0] = 10.0 + PARK.wait_seconds
 
     assert holds.fire_due(real_port, threading.Lock(), _nothing) is None
     real_port.write.assert_not_called()
@@ -110,7 +110,7 @@ def test_a_handover_park_leaves_mfp_unmuted_mfp_is_what_takes_the_device_back():
 
     assert holds.suppresses_mfp() is False
 
-    clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
+    clock[0] = 10.0 + PARK.wait_seconds
     holds.fire_due(real_port, threading.Lock(), _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I1000\n")
@@ -121,13 +121,26 @@ def test_a_fired_hold_is_handed_back_to_the_caller():
     holds, _logger = _build(clock)
     lock = threading.Lock()
 
-    holds.schedule(RETRACT, "OmniPause: retract scheduled")
+    holds.schedule(PARK, "OmniPause: park scheduled")
 
     assert holds.fire_due(MagicMock(), lock, _nothing) is None
 
-    clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
+    clock[0] = 10.0 + PARK.wait_seconds
 
-    assert holds.fire_due(MagicMock(), lock, _nothing) is RETRACT
+    assert holds.fire_due(MagicMock(), lock, _nothing) is PARK
+
+
+def test_a_retract_is_written_the_moment_it_is_asked_for_with_no_wait_before_it():
+    clock = [10.0]
+    holds, _logger = _build(clock)
+    real_port = MagicMock()
+    lock = threading.Lock()
+
+    holds.schedule(RETRACT, "OmniPause: retract scheduled")
+    fired = [holds.fire_due(real_port, lock, _nothing) for _tick in range(3)]
+
+    assert fired == [RETRACT, None, None]
+    real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
 def test_a_retract_during_a_park_s_delay_is_the_emergency_and_replaces_it_rather_than_being_dropped():
@@ -139,14 +152,10 @@ def test_a_retract_during_a_park_s_delay_is_the_emergency_and_replaces_it_rather
     holds.schedule(PARK, "OmniPause: park scheduled")
     clock[0] = 10.5
     holds.schedule(RETRACT, "OmniPause: retract scheduled")
-
-    when_the_park_would_have_fired = 10.0 + HoldScheduler.DELAY_SECONDS
-    clock[0] = when_the_park_would_have_fired
     holds.fire_due(real_port, lock, _nothing)
-    real_port.write.assert_not_called()
-
-    clock[0] = 10.5 + HoldScheduler.DELAY_SECONDS
+    clock[0] = 10.0 + PARK.wait_seconds
     holds.fire_due(real_port, lock, _nothing)
+
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
@@ -228,7 +237,7 @@ def test_the_mute_heals_without_a_resume_after_five_literal_seconds_a_lost_resum
 
 
 def test_the_mute_outlasts_the_settle_delay_or_mfp_would_undo_the_hold_it_just_wrote():
-    assert HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS > HoldScheduler.DELAY_SECONDS
+    assert PARK.wait_seconds < HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS
 
 
 def test_a_hold_asked_for_again_renews_the_mute_though_its_deadline_and_log_line_are_absorbed():
@@ -302,7 +311,7 @@ def test_a_hold_fires_once_and_is_not_replayed_on_the_next_tick():
     lock = threading.Lock()
 
     holds.schedule(PARK, "OmniPause: park scheduled")
-    clock[0] = 10.0 + HoldScheduler.DELAY_SECONDS
+    clock[0] = 10.0 + PARK.wait_seconds
     holds.fire_due(real_port, lock, _nothing)
     holds.fire_due(real_port, lock, _nothing)
 
