@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import socket
+import subprocess
 import threading
 import time
 
@@ -14,7 +15,7 @@ from app_support.logging_utils import configure_logging, install_exception_loggi
 from app_support.osr2_slot import Osr2Slot
 from app_support.ports import OSR2_SLOT
 from app_support.threading_utils import start_daemon_thread
-from app_support.win32 import mutex_name, try_acquire_mutex
+from app_support.win32 import mutex_name, put_this_process_at, try_acquire_mutex
 
 from . import idle_warning
 from .activity import ActivityStamp
@@ -75,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
         logger.warning("Another broker instance is already running; exiting")
         return 0
     publish_whole(config.broker_checkout_file, str(PROJECT_DIR))
+    if put_this_process_at(subprocess.ABOVE_NORMAL_PRIORITY_CLASS) is None:
+        logger.warning("Windows would not put the Broker ahead of background work, so a busy computer "
+                       "can make the OSR2's motion uneven")
 
     build_parser().parse_args(argv)
     virtual_port = resolve_virtual_port(config.mfp_config_path, config.virtual_port, logger)
