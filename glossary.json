@@ -17,7 +17,7 @@
         "Start Broker",
         "Pause Broker",
         "Restart Broker",
-        "Open Broker Log"
+        "Open Broker log"
       ],
       "his_word": "Broker",
       "code_word": "broker",
@@ -131,7 +131,7 @@
     },
     {
       "screen": [
-        "Broker Loading",
+        "Broker loading",
         "Loading Broker..."
       ],
       "his_word": "loading screen (2026-10-13)",

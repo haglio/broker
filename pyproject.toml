@@ -119,3 +119,8 @@ every-minutes = 2
 [tool.setuptools.packages.find]
 include = ["osr2_broker*"]
 namespaces = false
+
+# The names the screen capitalizes inside sentence-case text
+# (app_support.sentence_case).
+[tool.haglio.sentence-case]
+names = ["Broker", "Fun Time", "Funestra"]

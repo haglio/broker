@@ -128,7 +128,7 @@ class BrokerTray(QSystemTrayIcon):
         self.pause_action = QAction(_family_icon("pause"), "Pause Broker", self._menu)
         self._menu.addAction(self.pause_action)
 
-        self.log_action = QAction(_family_icon("log"), "Open Broker Log", self._menu)
+        self.log_action = QAction(_family_icon("log"), "Open Broker log", self._menu)
         self._menu.addAction(self.log_action)
 
         self._menu.addSeparator()
@@ -354,7 +354,7 @@ def open_the_loading_screen(shown_as: Preview | None):
     from shared_ui.loading_process import LoadingProcess  # noqa: PLC0415
 
     return LoadingProcess.open(
-        caption="Broker Loading", wordmark=APP_NAME, icon=ICON_PATH, preview=shown_as, steps=STEPS,
+        caption="Broker loading", wordmark=APP_NAME, icon=ICON_PATH, preview=shown_as, steps=STEPS,
         cancel_hint="Press Esc to cancel opening Broker",
         app_id=taskbar_identity(APP_USER_MODEL_ID, shown_as))
 

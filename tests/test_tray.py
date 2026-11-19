@@ -82,7 +82,7 @@ def test_tray_menu_offers_the_broker_controls_laid_out_as_the_evolver_s_are(qapp
         "---",
         "Start Broker",
         "Pause Broker",
-        "Open Broker Log",
+        "Open Broker log",
         "---",
         "Quit",
     ]
