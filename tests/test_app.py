@@ -251,6 +251,7 @@ def _main_running(broker_app_module, *, fake_serial, sleep, mfp_config_error=Non
                      return_value=logging.getLogger("test.broker")),
         patch.object(broker_app_module, "install_exception_logging"),
         patch.object(broker_app_module, "try_acquire_mutex", return_value=42),
+        patch.object(broker_app_module, "put_this_process_at", return_value=subprocess.NORMAL_PRIORITY_CLASS),
         patch.object(broker_app_module, "resolve_virtual_port",
                      side_effect=lambda _config, port, _logger: port),
         patch.object(broker_app_module, "ensure_mfp_serial_port",
@@ -412,6 +413,19 @@ class TestMainPublishesItsStateFiles:
             broker_app_module.main(["--config", str(cfg_path)])
 
         assert (config.state_dir / "broker_mode.txt").read_text(encoding="utf-8") == "0"
+
+    def test_a_started_broker_relays_ahead_of_background_work(self, broker_app_module, cfg_path):
+        asked = []
+
+        def stop_on_first_sleep(_seconds):
+            raise KeyboardInterrupt
+
+        with _main_running(broker_app_module, fake_serial=make_fake_serial([]), sleep=stop_on_first_sleep), \
+             patch.object(broker_app_module, "put_this_process_at",
+                          side_effect=lambda priority: asked.append(priority) or subprocess.NORMAL_PRIORITY_CLASS):
+            broker_app_module.main(["--config", str(cfg_path)])
+
+        assert asked == [subprocess.ABOVE_NORMAL_PRIORITY_CLASS]
 
     def test_a_started_broker_says_which_checkout_it_runs_from(self, broker_app_module, cfg_path):
         config = load_config(str(cfg_path))
