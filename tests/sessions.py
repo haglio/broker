@@ -24,6 +24,9 @@ class StampSpy:
     def mark(self) -> None:
         self.marks += 1
 
+    def publish_what_was_marked(self) -> None:
+        pass
+
 
 class NotActuallyRunningSoThreadsOtherTestsLeftCannotTripThese:
     def join(self, timeout=None) -> None:

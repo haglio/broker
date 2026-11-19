@@ -291,9 +291,13 @@ class BrokerSerialSession:
         return write
 
     def tick(self, udp_sock, *, real_port, serial_write_lock) -> None:
+        auto_mode_was_on_before_the_stamps_were_written = self.auto_mode.is_active
+        self._rx_activity.publish_what_was_marked()
+        self._tx_activity.publish_what_was_marked()
         for cmd in self.consume_command(self.broker_cmd_file):
             self.handle_broker_command(cmd, udp_sock)
-        self.end_auto_mode_once_switched_off(udp_sock)
+        if auto_mode_was_on_before_the_stamps_were_written:
+            self.end_auto_mode_once_switched_off(udp_sock)
         self._motion.tick()
         self._udp_dropped.tick()
         if self._not_answering is not None:
