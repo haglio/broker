@@ -14,7 +14,6 @@ TRAY_MODULE = f"{__package__}.tray"
 TRAY_LAUNCHER = "launch_broker_tray.vbs"
 
 STOP_REQUEST = "broker_stop_request.txt"
-TURN_OFF_REMINDER_REQUEST = "osr2_turn_off_reminder_request.txt"
 
 STATE_DIR_CHECKOUT = "fun_time"
 STATE_DIR_NAME = "state"
@@ -28,7 +27,6 @@ def declaration() -> dict[str, str]:
         "tray_module": TRAY_MODULE,
         "tray_launcher": TRAY_LAUNCHER,
         "stop_request": STOP_REQUEST,
-        "turn_off_reminder_request": TURN_OFF_REMINDER_REQUEST,
         "state_dir": {"checkout": STATE_DIR_CHECKOUT, "name": STATE_DIR_NAME},
     }
 

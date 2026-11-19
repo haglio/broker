@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from app_support.file_channel import publish_stamp
+from app_support.osr2_turn_off_reminder import remind_to_turn_off, what_closed
 from app_support.win32 import mutex_name
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QIcon, QImage
@@ -402,29 +403,29 @@ def test_an_app_that_closes_while_the_osr2_is_on_has_the_tray_remind_him_to_turn
     config = load_config(cfg_path)
     app, reminded = _a_tray_that_reminds(tray, config)
     publish_stamp(config.osr2_serial_rx_file)
-    config.turn_off_reminder_request_file.write_text("Fun Time", encoding="utf-8")
+    remind_to_turn_off(config.state_dir, closed="Fun Time")
 
     app.tick()
 
     assert reminded == ["Fun Time"]
-    assert not config.turn_off_reminder_request_file.exists()
+    assert what_closed(config.state_dir) is None
 
 
 def test_an_app_that_closes_while_the_osr2_is_off_brings_no_reminder(tray, cfg_path):
     config = load_config(cfg_path)
     app, reminded = _a_tray_that_reminds(tray, config)
-    config.turn_off_reminder_request_file.write_text("Origenerator", encoding="utf-8")
+    remind_to_turn_off(config.state_dir, closed="Origenerator")
 
     app.tick()
 
     assert reminded == []
-    assert not config.turn_off_reminder_request_file.exists()
+    assert what_closed(config.state_dir) is None
 
 
 def test_a_reminder_asked_for_before_the_tray_started_is_dropped_rather_than_shown_late(tray, cfg_path):
     config = load_config(cfg_path)
     publish_stamp(config.osr2_serial_rx_file)
-    config.turn_off_reminder_request_file.write_text("Fun Time", encoding="utf-8")
+    remind_to_turn_off(config.state_dir, closed="Fun Time")
     app, reminded = _a_tray_that_reminds(tray, config)
 
     app.tick()
@@ -436,7 +437,7 @@ def test_the_tray_shows_the_turn_off_reminder_in_a_process_of_its_own_off_its_ow
     config = load_config(cfg_path)
     publish_stamp(config.osr2_serial_rx_file)
     app = BrokerTrayApp(config, FakeSupervisor(running=True), tray)
-    config.turn_off_reminder_request_file.write_text("Fun Time", encoding="utf-8")
+    remind_to_turn_off(config.state_dir, closed="Fun Time")
     ended = MagicMock(returncode=0)
 
     with (
