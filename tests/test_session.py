@@ -231,6 +231,23 @@ def test_end_auto_mode_once_switched_off_ignores_an_inactive_auto_mode():
     logger.warning.assert_not_called()
 
 
+def test_auto_mode_switched_on_while_a_tick_is_under_way_is_not_ended_before_the_stamp_of_what_the_device_said_is_written():
+    auto_mode_box = []
+
+    def the_device_speaks_mid_tick(_path):
+        auto_mode_box[0].active = True
+        return []
+
+    session, auto_mode, logger = _build_session(
+        device_on=lambda: False, consume_command=the_device_speaks_mid_tick)
+    auto_mode_box.append(auto_mode)
+
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
+
+    assert auto_mode.set_auto_calls == []
+    logger.warning.assert_not_called()
+
+
 def test_forward_real_to_virtual_updates_timestamp_and_handles_lines():
     rx_activity = StampSpy()
     session, auto_mode, _logger = _build_session(rx_activity=rx_activity)
@@ -568,7 +585,7 @@ def test_session_stays_alive_when_peer_never_connected():
     assert poll_count >= 5
 
 
-def test_forward_real_to_virtual_writes_activity_rx_file(tmp_path):
+def test_what_the_device_said_is_stamped_by_the_session_s_next_tick_and_not_by_the_thread_that_read_it(tmp_path):
     rx_file = tmp_path / "osr2_serial_rx.txt"
     session, _auto_mode, _logger = _build_session(
         monotonic=lambda: 12.5,
@@ -589,11 +606,14 @@ def test_forward_real_to_virtual_writes_activity_rx_file(tmp_path):
 
     session.forward_real_to_virtual(FakeReal(), FakeVirt(), object(), session_stop, retry_state)
 
-    assert rx_file.exists()
+    assert not rx_file.exists()
+
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
+
     assert float(rx_file.read_text()) == 1711900000.0
 
 
-def test_forward_virtual_to_real_writes_activity_tx_file(tmp_path):
+def test_what_mfp_sent_is_stamped_by_the_session_s_next_tick(tmp_path):
     tx_file = tmp_path / "osr2_serial_tx.txt"
     session, _auto_mode, _logger = _build_session(
         tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
@@ -618,7 +638,10 @@ def test_forward_virtual_to_real_writes_activity_tx_file(tmp_path):
     session.forward_virtual_to_real(FakeVirt(), real, session_stop, retry_state, threading.Lock())
 
     assert real.writes == [b"L0500\n"]
-    assert tx_file.exists()
+    assert not tx_file.exists()
+
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
+
     assert float(tx_file.read_text()) == 1711900000.0
 
 
@@ -792,13 +815,16 @@ def test_t_code_is_written_under_the_session_s_serial_lock():
     assert held_during_write == [True]
 
 
-def test_written_t_code_stamps_the_tx_activity_file(tmp_path):
+def test_written_t_code_is_stamped_by_the_session_s_next_tick_and_not_by_the_thread_that_carried_it(tmp_path):
     tx_file = tmp_path / "osr2_serial_tx.txt"
     session, _auto_mode, _logger = _build_session(
         tx_activity=ActivityStamp(tx_file, wall_clock=lambda: 1711900000.0),
     )
 
     _writer(session, _Port())(UDP, "L05000I33")
+    assert not tx_file.exists()
+
+    session.tick(object(), real_port=MagicMock(), serial_write_lock=threading.Lock())
 
     assert float(tx_file.read_text()) == 1711900000.0
 
