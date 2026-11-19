@@ -65,7 +65,7 @@ def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_the_brokers_tas
         tray_module.open_the_loading_screen(None)
 
     opened.assert_called_once_with(
-        caption="Broker Loading", wordmark="Broker", icon=ICON_PATH, preview=None, steps=tray_module.STEPS,
+        caption="Broker loading", wordmark="Broker", icon=ICON_PATH, preview=None, steps=tray_module.STEPS,
         cancel_hint="Press Esc to cancel opening Broker", app_id=taskbar_identity(APP_USER_MODEL_ID, None))
 
 
