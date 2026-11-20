@@ -32,6 +32,24 @@ def test_set_auto_writes_mode_and_sends_udp_messages():
     logger.info.assert_called_once_with("AUTO %s", "ON")
 
 
+def test_a_change_of_auto_mode_is_said_to_the_sound_as_well_once_the_mode_file_says_it():
+    happened: list[object] = []
+    controller = BrokerAutoController(
+        state_file=Path("mode.txt"),
+        udp_target=("127.0.0.1", 9001),
+        sound_target=("127.0.0.1", 9002),
+        logger=MagicMock(),
+        write_mode=lambda _path, value, _logger: happened.append(("mode file", value)),
+        udp_send=lambda _sock, _host, port, msg: happened.append((port, msg)),
+    )
+
+    controller.set_auto(object(), True)
+    controller.set_auto(object(), False)
+
+    assert happened == [("mode file", "1"), (9001, "AUTO 1"), (9001, "BPM 87"), (9002, "AUTO 1"),
+                        ("mode file", "0"), (9001, "AUTO 0"), (9002, "AUTO 0")]
+
+
 def test_auto_mode_is_published_only_when_it_changes():
     writes: list[tuple[Path, str]] = []
     sends: list[str] = []

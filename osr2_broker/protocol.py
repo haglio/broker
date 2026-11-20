@@ -32,9 +32,11 @@ class BrokerAutoController:
         logger,
         write_mode,
         udp_send,
+        sound_target: tuple[str, int] | None = None,
     ):
         self.state_file = state_file
         self.udp_target = udp_target
+        self.sound_target = sound_target
         self.logger = logger
         self.write_mode = write_mode
         self.udp_send = udp_send
@@ -52,9 +54,12 @@ class BrokerAutoController:
     def _publish(self, sock: socket.socket, active: bool) -> None:
         self.write_mode(self.state_file,
                         BrokerMode.AUTO if active else BrokerMode.CONTROL, self.logger)
-        self.udp_send(sock, *self.udp_target, f"AUTO {1 if active else 0}")
+        said = f"AUTO {1 if active else 0}"
+        self.udp_send(sock, *self.udp_target, said)
         if active:
             self.udp_send(sock, *self.udp_target, f"BPM {self._SEED_BPM}")
+        if self.sound_target is not None:
+            self.udp_send(sock, *self.sound_target, said)
 
     def set_auto(self, sock: socket.socket, value: bool) -> None:
         with self._lock:

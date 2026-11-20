@@ -13,7 +13,7 @@ from app_support.cli import preparse_config_path
 from app_support.file_channel import consume_command_file, publish_whole
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.osr2_slot import Osr2Slot
-from app_support.ports import OSR2_SLOT
+from app_support.ports import AUDIO_COMPANION, OSR2_SLOT
 from app_support.threading_utils import start_daemon_thread
 from app_support.win32 import mutex_name, put_this_process_at, try_acquire_mutex
 
@@ -93,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     auto_mode = BrokerAutoController(
         state_file=state_file,
         udp_target=(config.udp_host, config.udp_port),
+        sound_target=(config.udp_host, AUDIO_COMPANION),
         logger=logger,
         write_mode=write_mode,
         udp_send=udp_send,
