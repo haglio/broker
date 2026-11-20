@@ -40,6 +40,7 @@ def show_warning(title: str, message: str, *, button_text: str,
     show_alert(
         window_title(title, shown_as), message,
         level=Level.WARNING, icon=app_icon(ICON_PATH, shown_as), button_text=button_text,
+        copyable=False,
     )
 
 
