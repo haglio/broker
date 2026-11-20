@@ -74,6 +74,33 @@ def test_a_device_that_talks_but_never_answers_is_logged_once_with_what_it_says(
     assert "Example line" in logger.warning.call_args.args
 
 
+def test_questions_asked_while_the_device_was_silent_are_not_held_against_what_it_says_on_waking(tmp_path):
+    logger = MagicMock()
+    clock = [10.0]
+    question = _build(tmp_path, clock, logger=logger)
+    question.heard("TCode v0.3")
+    for _ in range(10 * DeviceQuestion.UNANSWERED_BEFORE_WARNING):
+        clock[0] += DeviceQuestion.EVERY_SECONDS
+        question.asked()
+
+    question.heard("Example line")
+
+    logger.warning.assert_not_called()
+
+
+def test_a_device_that_speaks_unasked_every_fifteen_seconds_but_never_answers_is_still_reported(tmp_path):
+    logger = MagicMock()
+    clock = [10.0]
+    question = _build(tmp_path, clock, logger=logger)
+    for _ in range(3):
+        for _ in range(int(15.0 / DeviceQuestion.EVERY_SECONDS)):
+            clock[0] += DeviceQuestion.EVERY_SECONDS
+            question.asked()
+        question.heard("Example line")
+
+    logger.warning.assert_called_once()
+
+
 def test_a_device_that_answers_is_never_reported_for_what_else_it_says(tmp_path):
     logger = MagicMock()
     question = _build(tmp_path, [10.0], logger=logger)
