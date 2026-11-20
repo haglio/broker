@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from app_support.file_channel import publish_stamp
+from app_support.osr2_device import SILENT_ONCE_OFF_S
 
 _ANSWER = re.compile(r"\btcode\s+v\d", re.IGNORECASE)
 
@@ -27,6 +28,7 @@ class DeviceQuestion:
         self._unanswered = 0
         self._warned = False
         self._standing_down = False
+        self._last_heard_at = monotonic()
 
     def due(self) -> bool:
         return (self._asked_at is None
@@ -44,6 +46,7 @@ class DeviceQuestion:
         publish_stamp(self._answer_file, 0.0)
 
     def heard(self, line: str) -> None:
+        self._forget_questions_asked_while_it_was_silent()
         if _ANSWER.search(line):
             publish_stamp(self._answer_file, self._wall_clock())
             self._unanswered = 0
@@ -56,3 +59,9 @@ class DeviceQuestion:
             self._logger.warning(
                 "The OSR2 has answered none of the broker's last %d questions; it says %r",
                 self._unanswered, line)
+
+    def _forget_questions_asked_while_it_was_silent(self) -> None:
+        now = self._monotonic()
+        if now - self._last_heard_at >= SILENT_ONCE_OFF_S:
+            self._unanswered = 0
+        self._last_heard_at = now
