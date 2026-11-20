@@ -127,14 +127,14 @@ def test_a_second_warning_does_not_cover_one_still_showing(cfg_path):
     assert asked == [mutex_name(MUTEX_IDLE_WARNING, config.config_path)]
 
 
-def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon(qapp):
+def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon_with_nothing_to_copy(qapp):
     with alert_shown() as show_alert:
         idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=None)
 
     show_alert.assert_called_once_with(
         "Broker", "Still going.",
-        level=Level.WARNING, icon=ANY, button_text="Got it",
+        level=Level.WARNING, icon=ANY, button_text="Got it", copyable=False,
     )
     assert _middle_of(show_alert.call_args.kwargs["icon"]) == MAGENTA
 
