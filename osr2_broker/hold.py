@@ -10,12 +10,10 @@ from app_support import osr2_hold
 class Hold:
     tcode: bytes
     fired_message: str
-    wait_seconds: float
 
 
 def _hold(verb: str, fired_message: str) -> Hold:
-    return Hold(f"{osr2_hold.hold_tcode(verb)}\n".encode("ascii"), fired_message,
-                osr2_hold.HOLD_WAIT_S[verb])
+    return Hold(f"{osr2_hold.hold_tcode(verb)}\n".encode("ascii"), fired_message)
 
 
 PARK = _hold(osr2_hold.PARK, "Parking OSR2 at position 0")
@@ -24,6 +22,7 @@ RETRACT = _hold(osr2_hold.RETRACT, "Retracting OSR2 to position 9999")
 
 class HoldScheduler:
     HEAL_WITHOUT_RESUME_SECONDS = 5.0
+    UNMUTED_SETTLE_SECONDS = 1.0
 
     def __init__(self, *, monotonic, logger):
         self._monotonic = monotonic
@@ -35,22 +34,25 @@ class HoldScheduler:
 
     def schedule(self, hold: Hold, message: str) -> None:
         with self._lock:
-            armed = self._arm_with_the_lock_already_held(hold)
+            armed = self._arm_with_the_lock_already_held(hold, wait_seconds=0.0)
             self._suppressed_since = self._monotonic()
         if armed:
             self._logger.info(message)
 
     def schedule_without_muting(self, hold: Hold, message: str) -> None:
         with self._lock:
-            if not self._arm_with_the_lock_already_held(hold):
+            if not self._arm_with_the_lock_already_held(
+                    hold, wait_seconds=self.UNMUTED_SETTLE_SECONDS):
                 return
         self._logger.info(message)
 
-    def _arm_with_the_lock_already_held(self, hold: Hold) -> bool:
+    def _arm_with_the_lock_already_held(self, hold: Hold, *, wait_seconds: float) -> bool:
+        due = self._monotonic() + wait_seconds
         if self._pending_time is not None and hold == self._pending:
+            self._pending_time = min(self._pending_time, due)
             return False
         self._pending = hold
-        self._pending_time = self._monotonic() + hold.wait_seconds
+        self._pending_time = due
         return True
 
     def cancel(self) -> None:

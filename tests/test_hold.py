@@ -17,21 +17,28 @@ def _build(clock: list[float]):
     return HoldScheduler(monotonic=lambda: clock[0], logger=logger), logger
 
 
-def test_a_scheduled_hold_is_not_written_until_the_settle_delay_has_passed():
+def test_a_park_that_mutes_mfp_is_written_the_moment_it_is_asked_for_with_no_wait_before_it():
     clock = [10.0]
     holds, _logger = _build(clock)
     real_port = MagicMock()
     lock = threading.Lock()
 
     holds.schedule(PARK, "OmniPause: park scheduled")
-    holds.fire_due(real_port, lock, _nothing)
+    fired = [holds.fire_due(real_port, lock, _nothing) for _tick in range(3)]
 
-    real_port.write.assert_not_called()
-
-    clock[0] = 10.0 + PARK.wait_seconds
-    holds.fire_due(real_port, lock, _nothing)
-
+    assert fired == [PARK, None, None]
     real_port.write.assert_called_once_with(b"L00000I1000\n")
+
+
+def test_a_park_that_mutes_mfp_is_written_at_once_though_the_same_park_was_already_waiting_unmuted():
+    clock = [10.0]
+    holds, _logger = _build(clock)
+    real_port = MagicMock()
+
+    holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
+    holds.schedule(PARK, "OmniPause: park scheduled")
+
+    assert holds.fire_due(real_port, threading.Lock(), _nothing) is PARK
 
 
 def test_a_park_sets_the_device_down_at_home_over_a_whole_second():
@@ -94,7 +101,6 @@ def test_cancelling_drops_both_the_pending_write_and_the_mute():
 
     holds.schedule(PARK, "OmniPause: park scheduled")
     holds.cancel()
-    clock[0] = 10.0 + PARK.wait_seconds
 
     assert holds.fire_due(real_port, threading.Lock(), _nothing) is None
     real_port.write.assert_not_called()
@@ -110,7 +116,7 @@ def test_a_handover_park_leaves_mfp_unmuted_mfp_is_what_takes_the_device_back():
 
     assert holds.suppresses_mfp() is False
 
-    clock[0] = 10.0 + PARK.wait_seconds
+    clock[0] = 10.0 + HoldScheduler.UNMUTED_SETTLE_SECONDS
     holds.fire_due(real_port, threading.Lock(), _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I1000\n")
@@ -122,10 +128,6 @@ def test_a_fired_hold_is_handed_back_to_the_caller():
     lock = threading.Lock()
 
     holds.schedule(PARK, "OmniPause: park scheduled")
-
-    assert holds.fire_due(MagicMock(), lock, _nothing) is None
-
-    clock[0] = 10.0 + PARK.wait_seconds
 
     assert holds.fire_due(MagicMock(), lock, _nothing) is PARK
 
@@ -143,38 +145,38 @@ def test_a_retract_is_written_the_moment_it_is_asked_for_with_no_wait_before_it(
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
-def test_a_retract_during_a_park_s_delay_is_the_emergency_and_replaces_it_rather_than_being_dropped():
+def test_a_retract_during_an_unmuted_park_s_delay_is_the_emergency_and_replaces_it_rather_than_being_dropped():
     clock = [10.0]
     holds, _logger = _build(clock)
     real_port = MagicMock()
     lock = threading.Lock()
 
-    holds.schedule(PARK, "OmniPause: park scheduled")
+    holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
     clock[0] = 10.5
     holds.schedule(RETRACT, "OmniPause: retract scheduled")
     holds.fire_due(real_port, lock, _nothing)
-    clock[0] = 10.0 + PARK.wait_seconds
+    clock[0] = 10.0 + HoldScheduler.UNMUTED_SETTLE_SECONDS
     holds.fire_due(real_port, lock, _nothing)
 
     real_port.write.assert_called_once_with(b"L09999I500\n")
 
 
-def test_a_hold_asked_for_every_tick_keeps_its_first_deadline_so_the_write_is_never_pushed_out():
+def test_an_unmuted_park_asked_for_every_tick_keeps_its_first_deadline_so_the_write_is_never_pushed_out():
     clock = [10.0]
     holds, logger = _build(clock)
     real_port = MagicMock()
     lock = threading.Lock()
 
-    holds.schedule(PARK, "OmniPause: park scheduled")
+    holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
     clock[0] = 10.5
-    holds.schedule(PARK, "OmniPause: park scheduled")
+    holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
 
     clock[0] = 11.0
     holds.fire_due(real_port, lock, _nothing)
 
     real_port.write.assert_called_once_with(b"L00000I1000\n")
     scheduled = [c.args[0] for c in logger.info.call_args_list]
-    assert scheduled.count("OmniPause: park scheduled") == 1
+    assert scheduled.count("Auto mode deactivated: park scheduled") == 1
 
 
 def test_the_hold_is_written_under_the_caller_s_serial_lock():
@@ -208,13 +210,13 @@ def test_the_direct_write_is_recorded_before_the_slow_log_line_mfp_s_thread_runs
     assert order == ["recorded", "logged"]
 
 
-def test_the_settle_delay_is_a_literal_second_shorter_would_write_the_hold_into_the_script_tail():
+def test_an_unmuted_park_waits_a_literal_second_shorter_would_write_it_into_the_script_tail_mfp_still_sends():
     clock = [10.0]
     holds, _logger = _build(clock)
     real_port = MagicMock()
     lock = threading.Lock()
 
-    holds.schedule(PARK, "OmniPause: park scheduled")
+    holds.schedule_without_muting(PARK, "Auto mode deactivated: park scheduled")
 
     clock[0] = 10.9
     assert holds.fire_due(real_port, lock, _nothing) is None
@@ -234,10 +236,6 @@ def test_the_mute_heals_without_a_resume_after_five_literal_seconds_a_lost_resum
 
     clock[0] = 15.0
     assert holds.suppresses_mfp() is False
-
-
-def test_the_mute_outlasts_the_settle_delay_or_mfp_would_undo_the_hold_it_just_wrote():
-    assert PARK.wait_seconds < HoldScheduler.HEAL_WITHOUT_RESUME_SECONDS
 
 
 def test_a_hold_asked_for_again_renews_the_mute_though_its_deadline_and_log_line_are_absorbed():
@@ -311,7 +309,6 @@ def test_a_hold_fires_once_and_is_not_replayed_on_the_next_tick():
     lock = threading.Lock()
 
     holds.schedule(PARK, "OmniPause: park scheduled")
-    clock[0] = 10.0 + PARK.wait_seconds
     holds.fire_due(real_port, lock, _nothing)
     holds.fire_due(real_port, lock, _nothing)
 
