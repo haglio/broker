@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from osr2_broker.hold import PARK
+from osr2_broker.hold import HoldScheduler
 from osr2_broker.motion_log import (
     HOLD,
     MFP,
@@ -225,8 +225,8 @@ def test_writes_closer_together_than_two_seconds_are_one_run():
     assert recorder.said == ["OSR2 driven by MFP"]
 
 
-def test_quiet_outlasts_a_hold_s_settle_delay_so_ordinary_driving_around_a_hold_reads_as_one_run():
-    assert PARK.wait_seconds < QUIET_S
+def test_quiet_outlasts_an_unmuted_park_s_settle_delay_so_ordinary_driving_around_it_reads_as_one_run():
+    assert HoldScheduler.UNMUTED_SETTLE_SECONDS < QUIET_S
 
 
 def test_the_lines_go_out_after_the_lock_is_let_go_the_logger_takes_one_of_its_own():
