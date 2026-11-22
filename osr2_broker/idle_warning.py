@@ -30,17 +30,16 @@ def show_until_closed(config: BrokerConfig, *, closed: str | None = None,
 def show_warning(title: str, message: str, *, button_text: str,
                  shown_as: Preview | None) -> None:
     from PySide6.QtWidgets import QApplication  # noqa: PLC0415
-    from shared_ui.alert import Level, show_alert  # noqa: PLC0415
+    from shared_ui.alert import Level, show_warning  # noqa: PLC0415
     from shared_ui.gui_thread_collection import the_application  # noqa: PLC0415
     from shared_ui.preview_icon import app_icon  # noqa: PLC0415
 
     # Windows reads the identity when a window of this process first appears.
     claim_taskbar_identity(shown_as)
     _the_app_its_icon_is_drawn_in = the_application(QApplication, [])
-    show_alert(
+    show_warning(
         window_title(title, shown_as), message,
         level=Level.WARNING, icon=app_icon(ICON_PATH, shown_as), button_text=button_text,
-        copyable=False,
     )
 
 

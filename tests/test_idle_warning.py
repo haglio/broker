@@ -134,7 +134,7 @@ def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon_with_nothing
 
     show_alert.assert_called_once_with(
         "Broker", "Still going.",
-        level=Level.WARNING, icon=ANY, button_text="Got it", copyable=False,
+        level=Level.WARNING, icon=ANY, button_text="Got it", copyable=False, links=(), dismissible=False,
     )
     assert _middle_of(show_alert.call_args.kwargs["icon"]) == MAGENTA
 
