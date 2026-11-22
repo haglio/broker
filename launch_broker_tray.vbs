@@ -46,6 +46,9 @@ Sub Launch()
   End If
   CatchUp
   HoldGates
+  On Error Resume Next
+  shell.Environment("Process").Remove "PYTHONPATH"
+  On Error GoTo 0
   shell.CurrentDirectory = directory
   shell.Run Command(), 0, False
   ReleaseGates
