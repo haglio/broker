@@ -45,6 +45,9 @@ class DeviceQuestion:
         self._standing_down = True
         publish_stamp(self._answer_file, 0.0)
 
+    def switched_on(self) -> None:
+        self._unanswered = 0
+
     def heard(self, line: str) -> None:
         self._forget_questions_asked_while_it_was_silent()
         if _ANSWER.search(line):

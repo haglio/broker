@@ -972,6 +972,30 @@ def test_the_park_when_the_osr2_is_switched_on_takes_nothing_from_the_slot_nobod
     assert events == ["OSR2 powered on: park scheduled"]
 
 
+def test_questions_asked_before_the_osr2_was_switched_on_are_not_held_against_what_it_says_as_it_starts(tmp_path):
+    question_logger = MagicMock()
+    question = DeviceQuestion(answer_file=tmp_path / "osr2_serial_answer.txt",
+                              monotonic=lambda: 10.0, logger=question_logger)
+    for _ in range(DeviceQuestion.UNANSWERED_BEFORE_WARNING + 3):
+        question.asked()
+    session, _auto_mode, _logger = _build_session(
+        question=question,
+        power_on=FakePowerOnSayingNoUnlessToldSoNoStrayTestParksTheDevice(breaks_silence=True))
+    session_stop = threading.Event()
+
+    class FakeReal:
+        in_waiting = 1
+
+        def read(self, _size):
+            session_stop.set()
+            return b"Bluetooth name is Example\n"
+
+    session.forward_real_to_virtual(FakeReal(), MagicMock(), object(), session_stop,
+                                    SessionRetryState())
+
+    question_logger.warning.assert_not_called()
+
+
 def test_the_park_when_auto_mode_ends_takes_nothing_from_the_slot():
     events: list = []
     session = _a_session_telling(events, auto_active=True, device_on=lambda: False)

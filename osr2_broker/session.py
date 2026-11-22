@@ -219,6 +219,8 @@ class BrokerSerialSession:
         if self._not_answering is not None:
             self._not_answering.heard()
         if self._power_on.rx_broke_the_silence():
+            if self._question is not None:
+                self._question.switched_on()
             self._holds.schedule_without_muting(PARK, "OSR2 powered on: park scheduled")
 
     def forward_real_to_virtual(self, real, virt, udp_sock, session_stop, retry_state: SessionRetryState) -> None:
