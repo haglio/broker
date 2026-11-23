@@ -26,6 +26,7 @@ from shared_ui.icons import qt_icon
 from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
+from shared_ui.preview_taskbar import preview_on_the_taskbar
 
 from . import branch_session, idle_warning, peer_watch
 from .config import PROJECT_DIR, load_config
@@ -356,7 +357,8 @@ def open_the_loading_screen(shown_as: Preview | None):
     return LoadingProcess.open(
         caption="Broker loading", wordmark=APP_NAME, icon=ICON_PATH, preview=shown_as, steps=STEPS,
         cancel_hint="Press Esc to cancel opening Broker",
-        app_id=taskbar_identity(APP_USER_MODEL_ID, shown_as))
+        app_id=taskbar_identity(APP_USER_MODEL_ID, shown_as),
+        taskbar=preview_on_the_taskbar(APP_NAME, ICON_PATH, shown_as, PROJECT_DIR, PROJECT_DIR / "state"))
 
 
 def main(argv: list[str] | None = None) -> int:

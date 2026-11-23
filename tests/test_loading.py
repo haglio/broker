@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from shared_ui.loading_window import LoadingCanceled
-from shared_ui.preview import taskbar_identity
+from shared_ui.preview import Preview, taskbar_identity, window_title
 from shared_ui.testing import loading_at_the_click, loading_process_opened
 
 from osr2_broker import tray as tray_module
@@ -66,7 +66,8 @@ def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_the_brokers_tas
 
     opened.assert_called_once_with(
         caption="Broker loading", wordmark="Broker", icon=ICON_PATH, preview=None, steps=tray_module.STEPS,
-        cancel_hint="Press Esc to cancel opening Broker", app_id=taskbar_identity(APP_USER_MODEL_ID, None))
+        cancel_hint="Press Esc to cancel opening Broker", app_id=taskbar_identity(APP_USER_MODEL_ID, None),
+        taskbar=None)
 
 
 def test_starting_the_tray_forgets_an_earlier_stand_down_being_started_is_the_user_asking_for_the_broker(
@@ -76,3 +77,12 @@ def test_starting_the_tray_forgets_an_earlier_stand_down_being_started_is_the_us
 
     _, cleared = stand_down_marker_kept_off_the_real_one_that_governs_the_production_broker
     cleared.assert_called_once()
+
+
+def test_a_previews_loading_screen_wears_its_own_letter_on_its_taskbar_button():
+    with loading_process_opened() as opened:
+        tray_module.open_the_loading_screen(Preview("the example"))
+
+    button = opened.call_args.kwargs["taskbar"]
+    assert button.name == window_title("Broker", Preview("the example"))
+    assert button.icon.is_file()
