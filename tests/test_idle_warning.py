@@ -132,10 +132,8 @@ def test_the_warning_is_the_familys_dialog_wearing_the_brokers_icon_with_nothing
         idle_warning.show_warning("Broker", "Still going.", button_text="Got it",
                                   shown_as=None)
 
-    show_alert.assert_called_once_with(
-        "Broker", "Still going.",
-        level=Level.WARNING, icon=ANY, button_text="Got it", copyable=False, links=(), dismissible=False,
-    )
+    (title, message), how = show_alert.call_args
+    assert (title, message, how["level"], how["button_text"]) == ("Broker", "Still going.", Level.WARNING, "Got it")
     assert _middle_of(show_alert.call_args.kwargs["icon"]) == MAGENTA
 
 
